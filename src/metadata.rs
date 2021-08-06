@@ -37,33 +37,47 @@ impl KnownMetadata {
     }
 }
 
+pub struct ChdMetadata {
+    pub metatag: u32,
+    pub value: Vec<u8>,
+    pub flags: u8,
+    pub index: u32,
+    pub length: u64,
+}
+
 #[repr(C)]
 #[derive(Clone)]
-pub struct MetadataEntry {
+pub(crate) struct MetadataEntry {
     offset: u64,
     next: u64,
     prev: u64,
-    pub length: u64,
-    pub metatag: u32,
-    flags: u8,
-    index: u32,
+    pub(crate) length: u64,
+    pub(crate) metatag: u32,
+    pub(crate) flags: u8,
+    pub(crate) index: u32,
 }
 
 impl MetadataEntry {
-    pub fn read_into<F: Read + Seek>(&self, file: &mut F, buf: &mut [u8]) -> Result<()> {
+    fn read_into<F: Read + Seek>(&self, file: &mut F, buf: &mut [u8]) -> Result<()> {
         file.seek(SeekFrom::Start(self.offset + METADATA_HEADER_SIZE as u64))?;
         file.read_exact(buf)?;
         Ok(())
     }
 
-    pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<Vec<u8>> {
+    pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<ChdMetadata> {
         let mut buf = vec![0u8; self.length as usize];
         self.read_into(file, &mut buf)?;
-        Ok(buf)
+        Ok(ChdMetadata {
+            metatag: self.metatag,
+            value: buf,
+            flags: self.flags,
+            index: self.index,
+            length: self.length
+        })
     }
 }
 
-pub struct MetadataIter<'a, F: Read + Seek + 'a> {
+pub(crate) struct MetadataIter<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
     curr_offset: u64,
     curr: Option<MetadataEntry>,
@@ -72,7 +86,7 @@ pub struct MetadataIter<'a, F: Read + Seek + 'a> {
 }
 
 impl <'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
-    pub fn new(file: &'a mut F, initial_offset: u64) -> Self {
+    pub(crate) fn new_from_raw_file(file: &'a mut F, initial_offset: u64) -> Self {
         MetadataIter {
             file,
             curr_offset: initial_offset,

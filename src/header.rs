@@ -2,19 +2,113 @@ use std::io::{Read, Seek, SeekFrom, Cursor};
 use std::ffi::CStr;
 use byteorder::{ReadBytesExt, BigEndian};
 use crate::error::{ChdError, Result};
-use std::fs::read;
 use crate::metadata::{MetadataIter, KnownMetadata};
 use crate::make_tag;
 use lazy_static::lazy_static;
 use regex::bytes::{Regex, Captures};
+use crate::header::Version::ChdV5;
+use std::convert::{TryInto, TryFrom};
 
 #[repr(u32)]
-pub enum Codec {
+pub enum CodecType {
     None = 0,
-    ZLib = make_tag(b"zlib"),
-    ZLibCd = make_tag(b"cdzl"),
-    LzmaCd = make_tag(b"cdlz"),
-    FlacCd = make_tag(b"cdfl")
+    Zlib = 1,
+    ZlibPlus = 2,
+    AV = 3,
+    ZLibV5 = make_tag(b"zlib"),
+    ZLibCdV5 = make_tag(b"cdzl"),
+    LzmaCdV5 = make_tag(b"cdlz"),
+    FlacCdV5 = make_tag(b"cdfl")
+}
+
+#[repr(u32)]
+pub enum Version {
+    ChdV1 = 1,
+    ChdV2 = 2,
+    ChdV3 = 3,
+    ChdV4 = 4,
+    ChdV5 = 5,
+}
+
+#[repr(C)]
+pub struct HeaderV1 {
+    pub version: Version,
+    pub length: u32,
+    pub flags: u32,
+    pub compression: u32,
+    pub hunk_size: u32,
+    pub total_hunks: u32,
+    pub cylinders: u32,
+    pub sectors: u32,
+    pub heads: u32,
+    pub hunk_bytes: u32,
+    pub md5: [u8; MD5_BYTES],
+    pub parent_md5: [u8; MD5_BYTES],
+    pub unit_bytes: u32,
+    pub unit_count: u64,
+    pub logical_bytes: u64,
+}
+
+#[repr(C)]
+pub struct HeaderV3 {
+    pub version: Version,
+    pub length: u32,
+    pub flags: u32,
+    pub compression: u32,
+    pub total_hunks: u32,
+    pub logical_bytes: u64,
+    pub meta_offset: u64,
+    pub md5: [u8; MD5_BYTES],
+    pub parent_md5: [u8; MD5_BYTES],
+    pub hunk_bytes: u32,
+    pub sha1: [u8; SHA1_BYTES],
+    pub parent_sha1: [u8; SHA1_BYTES],
+    pub unit_bytes: u32,
+    pub unit_count: u64,
+}
+
+#[repr(C)]
+pub struct HeaderV4 {
+    pub version: Version,
+    pub length: u32,
+    pub flags: u32,
+    pub compression: u32,
+    pub total_hunks: u32,
+    pub logical_bytes: u64,
+    pub meta_offset: u64,
+    pub hunk_bytes: u32,
+    pub sha1: [u8; SHA1_BYTES],
+    pub parent_sha1: [u8; SHA1_BYTES],
+    pub raw_sha1: [u8; SHA1_BYTES],
+    pub unit_bytes: u32,
+    pub unit_count: u64,
+}
+
+#[repr(C)]
+pub struct HeaderV5 {
+    pub version: Version,
+    pub length: u32,
+    pub compression: [u32; 4],
+    pub logical_bytes: u64,
+    pub map_offset: u64,
+    pub meta_offset: u64,
+    pub hunk_bytes: u32,
+    pub unit_bytes: u32,
+    pub sha1: [u8; SHA1_BYTES],
+    pub parent_sha1: [u8; SHA1_BYTES],
+    pub raw_sha1: [u8; SHA1_BYTES],
+    pub unit_count: u64,
+    pub hunk_count: u32,
+    pub map_entry_bytes: i32,
+}
+
+#[repr(C)]
+pub enum ChdHeader {
+    V1Header(HeaderV1),
+    V2Header(HeaderV1),
+    V3Header(HeaderV3),
+    V4Header(HeaderV4),
+    V5Header(HeaderV5)
 }
 
 const MD5_BYTES: usize = 16;
@@ -31,51 +125,142 @@ const CHD_V5_HEADER_SIZE: u32 = 124;
 pub const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
 pub const COOKIE_VALUE: u32 = 0xbaadf00d;
 
-#[repr(C)]
-pub struct Header {
-    pub length: u32,
-    pub version: u32,
-    pub flags: Option<u32>,
-    pub compression: [u32; 4],
-    pub hunk_bytes: u32,
-    pub total_hunks: u32,
-    pub logical_bytes: u64,
-    pub meta_offset: u64,
-    pub map_offset: Option<u64>,
-    pub md5:  Option<[u8; MD5_BYTES]>,
-    pub parent_md5:  Option<[u8; MD5_BYTES]>,
-    pub sha1: Option<[u8; SHA1_BYTES]>,
-    pub raw_sha1: Option<[u8; SHA1_BYTES]>,
-    pub parent_sha1: Option<[u8; SHA1_BYTES]>,
-    pub unit_bytes: u32,
-    pub unit_count: u64,
-    pub hunk_count: Option<u32>,
-    pub map_entry_bytes: Option<u32>,
-    pub raw_map: Option<Vec<u8>>,
-    #[deprecated]
-    pub cylinders: Option<u32>,
-    #[deprecated]
-    pub sectors: Option<u32>,
-    #[deprecated]
-    pub heads: Option<u32>,
-    #[deprecated]
-    pub hunk_size: Option<u32>,
+impl ChdHeader {
+    pub fn try_from_file<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
+        read_header(file)
+    }
+
+    pub const fn is_compressed(&self) -> bool {
+        match self {
+            ChdHeader::V1Header(c) => c.compression != CodecType::None as u32,
+            ChdHeader::V2Header(c) =>  c.compression != CodecType::None as u32,
+            ChdHeader::V3Header(c) =>  c.compression != CodecType::None as u32,
+            ChdHeader::V4Header(c) =>  c.compression != CodecType::None as u32,
+            ChdHeader::V5Header(c) => c.compression[0] != CodecType::None as u32,
+        }
+    }
+
+    pub const fn meta_offset(&self) -> Option<u64> {
+        match self {
+            ChdHeader::V1Header(c) => None,
+            ChdHeader::V2Header(c) => None,
+            ChdHeader::V3Header(c) => Some(c.meta_offset),
+            ChdHeader::V4Header(c) => Some(c.meta_offset),
+            ChdHeader::V5Header(c) => Some(c.meta_offset)
+        }
+    }
+
+    pub const fn flags(&self) -> Option<u32> {
+        match self {
+            ChdHeader::V1Header(c) => Some(c.flags),
+            ChdHeader::V2Header(c) => Some(c.flags),
+            ChdHeader::V3Header(c) => Some(c.flags),
+            ChdHeader::V4Header(c) => Some(c.flags),
+            ChdHeader::V5Header(c) => None
+        }
+    }
+
+    pub const fn hunk_count(&self) -> u32 {
+        match self {
+            ChdHeader::V1Header(c) => c.total_hunks,
+            ChdHeader::V2Header(c) => c.total_hunks,
+            ChdHeader::V3Header(c) => c.total_hunks,
+            ChdHeader::V4Header(c) => c.total_hunks,
+            ChdHeader::V5Header(c) => c.hunk_count,
+        }
+    }
+
+    pub const fn hunk_bytes(&self) -> u32 {
+        match self {
+            ChdHeader::V1Header(c) => c.hunk_size,
+            ChdHeader::V2Header(c) => c.hunk_size,
+            ChdHeader::V3Header(c) => c.hunk_bytes,
+            ChdHeader::V4Header(c) => c.hunk_bytes,
+            ChdHeader::V5Header(c) => c.hunk_bytes,
+        }
+    }
+
+    pub fn has_parent(&self) -> bool {
+        match self {
+            ChdHeader::V5Header(c) => c.parent_sha1 == [0u8; SHA1_BYTES],
+            _ => self.flags().map(|f| (f & Flags::HasParent as u32) != 0).unwrap_or(false)
+        }
+    }
+
+    pub fn validate(&self) -> bool {
+        // todo: validate compressio
+        let length_valid = match self {
+            ChdHeader::V1Header(c) => c.length == CHD_V1_HEADER_SIZE,
+            ChdHeader::V2Header(c) => c.length == CHD_V2_HEADER_SIZE,
+            ChdHeader::V3Header(c) => c.length == CHD_V3_HEADER_SIZE,
+            ChdHeader::V4Header(c) => c.length == CHD_V4_HEADER_SIZE,
+            ChdHeader::V5Header(c) => c.length == CHD_V5_HEADER_SIZE,
+        };
+
+        if !length_valid {
+            return false;
+        }
+
+        // Do not validate V5 header
+        if let ChdHeader::V5Header(_) = self {
+            return true;
+        }
+
+        // Require valid flags
+        if let Some(flags) = self.flags() {
+            if flags & Flags::Undefined as u32 != 0 {
+                return false
+            }
+        }
+
+        // require valid hunk size
+        if self.hunk_bytes() == 0 || self.hunk_bytes() >= 65536 * 256 {
+            return false
+        }
+
+        // require valid hunk count
+        if self.hunk_count() == 0 {
+            return false
+        }
+
+        // if we use a parent make sure we have valid md5
+        let parent_ok = if self.has_parent() {
+            match self {
+                ChdHeader::V1Header(c) => {
+                    c.parent_md5 != [0u8; MD5_BYTES]
+                }
+                ChdHeader::V2Header(c) => {
+                    c.parent_md5 != [0u8; MD5_BYTES]
+                }
+                ChdHeader::V3Header(c) => {
+                    c.parent_md5 != [0u8; MD5_BYTES] && c.parent_sha1 != [0u8; SHA1_BYTES]
+                }
+                ChdHeader::V4Header(c) => {
+                    c.parent_sha1 != [0u8; SHA1_BYTES]
+                }
+                ChdHeader::V5Header(_) => true
+            }
+        } else {
+            true
+        };
+
+        if !parent_ok {
+            return false;
+        }
+
+        // obsolete field checks are done by type system
+        return true
+    }
 }
 
 #[repr(u32)]
-pub enum Compression {
-    None = 0,
-    Zlib = 1,
-    ZlibPlus = 2,
-    AV = 3
+pub enum Flags {
+    HasParent = 0x00000001,
+    IsWritable = 0x00000002,
+    Undefined = 0xfffffffc
 }
 
-#[inline]
-const fn chd_compressed(compression: &[u32; 4]) -> bool {
-    compression[0] != Codec::None as u32
-}
-
-pub fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
+fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
     let mut raw_header: [u8; CHD_MAX_HEADER_SIZE] = [0; CHD_MAX_HEADER_SIZE];
 
     chd.seek(SeekFrom::Start(0))?;
@@ -92,17 +277,17 @@ pub fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
 
     // ensure version is known and header size match up
     return match (version, length) {
-        (1, CHD_V1_HEADER_SIZE) | (2, CHD_V2_HEADER_SIZE) => read_v1_header(&mut reader, version, length),
-        (3, CHD_V3_HEADER_SIZE) => read_v3_header(&mut reader, version, length, chd),
-        (4, CHD_V4_HEADER_SIZE) => read_v4_header(&mut reader, version, length, chd),
-        (5, CHD_V5_HEADER_SIZE) => read_v5_header(&mut reader, version, length),
+        (1, CHD_V1_HEADER_SIZE) => Ok(ChdHeader::V1Header(read_v1_header(&mut reader, version, length)?)),
+        (2, CHD_V2_HEADER_SIZE) => Ok(ChdHeader::V2Header(read_v1_header(&mut reader, version, length)?)),
+        (3, CHD_V3_HEADER_SIZE) => Ok(ChdHeader::V3Header(read_v3_header(&mut reader, version, length, chd)?)),
+        (4, CHD_V4_HEADER_SIZE) => Ok(ChdHeader::V4Header(read_v4_header(&mut reader, version, length, chd)?)),
+        (5, CHD_V5_HEADER_SIZE) => Ok(ChdHeader::V5Header(read_v5_header(&mut reader, version, length)?)),
         (1 | 2 | 3 | 4 | 5, _) => Err(ChdError::InvalidData),
         _ => Err(ChdError::UnsupportedVersion)
     }
 }
 
-#[allow(deprecated)]
-fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<Header> {
+fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<HeaderV1> {
     // get sector size
     const CHD_V1_SECTOR_SIZE: u32 = 512;
     header.seek(SeekFrom::Start(76))?;
@@ -127,36 +312,30 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
     let hunk_bytes = sector_length * hunk_size;
     let unit_bytes = hunk_bytes / hunk_size;
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
-    let meta_offset = 0;
-    Ok(Header {
-        version,
+    Ok(HeaderV1 {
+        version: match version {
+            1 => Version::ChdV1,
+            2 => Version::ChdV2,
+            _ => return Err(ChdError::UnsupportedVersion)
+        },
         length,
-        flags: Some(flags),
-        compression: [compression, 0, 0, 0],
+        flags,
+        compression,
         hunk_bytes,
+        md5,
         total_hunks,
-        logical_bytes,
-        meta_offset,
-        map_offset: None,
-        md5: Some(md5),
-        parent_md5: Some(md5),
-        sha1: None,
-        raw_sha1: None,
-        parent_sha1: None,
         unit_bytes,
         unit_count,
-        hunk_count: None,
-        map_entry_bytes: None,
-        raw_map: None,
-        cylinders: Some(cylinders),
-        sectors: Some(sectors),
-        heads: Some(heads),
-        hunk_size: Some(hunk_size)
+        cylinders,
+        sectors,
+        heads,
+        hunk_size,
+        parent_md5,
+        logical_bytes
     })
 }
 
-#[allow(deprecated)]
-fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<Header> {
+fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<HeaderV3> {
     header.seek(SeekFrom::Start(16))?;
     let mut md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
     let mut parent_md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
@@ -176,35 +355,25 @@ fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, 
     header.read_exact(&mut parent_sha1)?;
     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
     let unit_count =  (logical_bytes + (unit_bytes as u64) - 1) / unit_bytes as u64;
-    Ok(Header {
-        version,
+    Ok(HeaderV3 {
+        version: Version::ChdV3,
         length,
-        flags: Some(flags),
-        compression: [compression, 0, 0, 0],
+        flags,
+        compression,
         hunk_bytes,
+        sha1,
         total_hunks,
         logical_bytes,
         meta_offset,
-        map_offset: None,
-        md5: Some(md5),
-        parent_md5: Some(md5),
-        sha1: None,
-        raw_sha1: None,
-        parent_sha1: None,
+        md5,
+        parent_md5,
         unit_bytes,
         unit_count,
-        hunk_count: None,
-        map_entry_bytes: None,
-        raw_map: None,
-        cylinders: None,
-        sectors: None,
-        heads: None,
-        hunk_size: None
+        parent_sha1
     })
 }
 
-#[allow(deprecated)]
-fn read_v4_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<Header> {
+fn read_v4_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<HeaderV4> {
     header.seek(SeekFrom::Start(16))?;
     let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
     let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
@@ -224,30 +393,20 @@ fn read_v4_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, 
 
     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
-    Ok(Header {
-        version,
+    Ok(HeaderV4 {
+        version: Version::ChdV4,
         length,
-        flags: Some(flags),
-        compression: [compression, 0, 0, 0],
+        flags,
+        compression,
         hunk_bytes,
         total_hunks,
         logical_bytes,
         meta_offset,
-        map_offset: None,
-        md5: None,
-        parent_md5: None,
-        sha1: Some(sha1),
-        raw_sha1: Some(raw_sha1),
-        parent_sha1: Some(parent_sha1),
+        sha1,
+        raw_sha1,
+        parent_sha1,
         unit_bytes,
         unit_count,
-        hunk_count: None,
-        map_entry_bytes: None,
-        raw_map: None,
-        cylinders: None,
-        sectors: None,
-        heads: None,
-        hunk_size: None
     })
 }
 
@@ -256,10 +415,10 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         static ref RE_BPS: Regex = Regex::new(r"(?-u)(BPS:)(\d+)").unwrap();
     }
 
-    let metas: Vec<_> = MetadataIter::new(chd, off).collect();
+    let metas: Vec<_> = MetadataIter::new_from_raw_file(chd, off).collect();
     if let Some(hard_disk) = metas.iter().find(|&e| e.metatag == KnownMetadata::HardDisk as u32) {
         if let Ok(text) = hard_disk.read(chd) {
-            let caps = RE_BPS.captures(&text)
+            let caps = RE_BPS.captures(&text.value)
                 .and_then(|c| c.get(1))
                 .and_then(|c| Some(c.as_bytes()))
                 .and_then(|c| std::str::from_utf8(c).ok())
@@ -277,9 +436,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     None
 }
 
-
-#[allow(deprecated)]
-fn read_v5_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<Header> {
+fn read_v5_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<HeaderV5> {
     header.seek(SeekFrom::Start(16))?;
     let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
     let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
@@ -298,33 +455,24 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
     header.read_exact(&mut parent_sha1)?;
     header.seek(SeekFrom::Start(64))?;
     header.read_exact(&mut raw_sha1)?;
-    let map_entry_bytes = match chd_compressed(&compression) {
+    let map_entry_bytes = match compression[0] != CodecType::None as u32 {
         true => 12,
         false => 4
     };
-    Ok(Header {
-        version,
+    Ok(HeaderV5 {
+        version: ChdV5,
         length,
-        flags: None,
         compression,
         hunk_bytes,
-        total_hunks: hunk_count,
         logical_bytes,
         meta_offset,
-        map_offset: Some(map_offset),
-        md5: None,
-        parent_md5: None,
-        sha1: Some(sha1),
-        raw_sha1: Some(raw_sha1),
-        parent_sha1: Some(parent_sha1),
+        map_offset,
+        sha1,
+        raw_sha1,
+        parent_sha1,
         unit_bytes,
         unit_count,
-        hunk_count: Some(hunk_count),
-        map_entry_bytes: Some(map_entry_bytes),
-        raw_map: None,
-        cylinders: None,
-        sectors: None,
-        heads: None,
-        hunk_size: None
+        hunk_count,
+        map_entry_bytes,
     })
 }
