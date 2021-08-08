@@ -1,5 +1,3 @@
-mod lzma;
-
 use crate::header::CodecType;
 use crate::error::{Result, ChdError};
 use std::io::{Read, Seek, Write};
@@ -116,7 +114,7 @@ impl CompressionCodec for LzmaCodec {
 
         Ok(LzmaCodec {
             // todo: may have to go much more low level and use raw_decoder
-            engine: xz2::stream::Stream::new_lzma_decoder(64)?.map_err(|_| ChdError::CodecError)?
+            engine: xz2::stream::Stream::new_lzma_decoder(64).map_err(|_| ChdError::CodecError)?
         })
     }
 
