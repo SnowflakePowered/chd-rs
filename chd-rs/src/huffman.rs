@@ -3,8 +3,37 @@ use std::rc::Rc;
 use bitreader::BitReader;
 use std::marker::PhantomData;
 use std::cmp::Ordering;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 type LookupValue = u16;
+
+#[derive(Debug)]
+pub enum HuffmanError {
+    None,
+    TooManyBits,
+    InvalidData,
+    InputBufferTooSmall,
+    OutputBufferTooSmall,
+    InternalInconsistency,
+    TooManyContexts
+}
+
+impl Error for HuffmanError {}
+
+impl Display for HuffmanError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HuffmanError::None => f.write_str("None"),
+            HuffmanError::TooManyBits => f.write_str("Too many bits"),
+            HuffmanError::InvalidData => f.write_str("Invalid data"),
+            HuffmanError::InputBufferTooSmall =>  f.write_str("Input buffer too small"),
+            HuffmanError::OutputBufferTooSmall =>  f.write_str("Output buffer too small"),
+            HuffmanError::InternalInconsistency =>  f.write_str("Internal inconsistency"),
+            HuffmanError::TooManyContexts => f.write_str("Too many contexts"),
+        }
+    }
+}
 
 #[derive(Default, Clone)]
 pub struct HuffmanNode<'a> {
