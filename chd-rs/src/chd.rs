@@ -23,18 +23,21 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
 
         // No point in checking writable because we are read only so far.
 
-        // We need a parent
+        // Make sure we have a parent if we have one
         if parent.is_some() && !header.has_parent() {
             return Err(ChdError::RequiresParent)
         }
 
-
+        // todo: read hunk map
+        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L1415
         // todo: find codec
         Ok(ChdFile {
             file,
             header,
             parent
         })
+
+
     }
 
     pub fn header(&self) -> &ChdHeader {

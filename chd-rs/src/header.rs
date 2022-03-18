@@ -188,7 +188,7 @@ impl ChdHeader {
     }
 
     pub fn validate(&self) -> bool {
-        // todo: validate compressio
+        // todo: validate compression
         let length_valid = match self {
             ChdHeader::V1Header(c) => c.length == CHD_V1_HEADER_SIZE,
             ChdHeader::V2Header(c) => c.length == CHD_V2_HEADER_SIZE,

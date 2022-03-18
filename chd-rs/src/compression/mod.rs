@@ -1,8 +1,11 @@
 use crate::header::CodecType;
 use crate::error::{Result, ChdError};
-use std::io::{Read, Seek, Write};
+use std::io::{BufRead, BufReader, Read, Seek, Write};
 use flate2::{Decompress, FlushDecompress};
-use xz2::stream::LzmaOptions;
+use lzma_rs::decode::lzma::LzmaParams;
+use lzma_rs::decompress::UnpackedSize;
+use lzma_rs::lzma_decompress_with_params;
+
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 
 trait CompressionCodec {
@@ -67,7 +70,7 @@ impl CompressionCodec for ZlibCodec {
 }
 
 struct LzmaCodec {
-    engine: xz2::stream::Stream,
+    params: LzmaParams,
 }
 
 impl CompressionCodec for LzmaCodec {
@@ -77,14 +80,14 @@ impl CompressionCodec for LzmaCodec {
     }
 
     fn is_lossy() -> bool {
-        todo!()
+        false
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
         // LzmaEnc.c LzmaEncProps_Normalize
         fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32
         {
-            let mut dict_size: u32 = if level <= 5 {
+            let mut dict_size = if level <= 5 {
                 1 << (level * 2 + 14)
             } else if level <= 7 {
                 1 << 25
@@ -109,28 +112,36 @@ impl CompressionCodec for LzmaCodec {
             dict_size
         }
 
-        let mut options = LzmaOptions::new_preset(9).map_err(|_| ChdError::CodecError)?;
-        options.dict_size(get_lzma_dict_size(9, hunk_size));
+        // LZMA 19.0 uses lc = 3, lp = 0, pb = 2
+        let params = LzmaParams::new(3, 0, 2,
+                                     get_lzma_dict_size(9, hunk_size),
+                                                            None);
 
         Ok(LzmaCodec {
-            // todo: may have to go much more low level and use raw_decoder
-            engine: xz2::stream::Stream::new_lzma_decoder(64).map_err(|_| ChdError::CodecError)?
+            params
         })
     }
 
+    // not sure if this works but
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
-        todo!();
+        let mut read = BufReader::new(input);
+        if let Ok(_) = lzma_decompress_with_params(&mut read, output, None,
+                                                   self.params.with_size(output.len() as u64)) {
+            Ok(output.len() as u64)
+        } else {
+            Err(ChdError::DecompressionError)
+        }
     }
 }
 
 struct CdLzCodec {
     engine: LzmaCodec,
     sub_engine: ZlibCodec,
+    buffer: Vec<u8>,
 }
 
 impl CompressionCodec for CdLzCodec {
     fn codec_type() -> CodecType {
-        // LZMA codec is
         CodecType::LzmaCdV5
     }
 
@@ -143,14 +154,34 @@ impl CompressionCodec for CdLzCodec {
             return Err(ChdError::CodecError)
         }
 
+        let mut buffer = Vec::new();
+        buffer.reserve(hunk_size as usize);
         Ok(CdLzCodec {
             engine: LzmaCodec::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA)?,
             sub_engine: ZlibCodec::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SUBCODE_DATA)?,
+            buffer
         })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
-        todo!()
+        let frames = input.len() / CD_FRAME_SIZE;
+        let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
+        let ecc_bytes = (frames + 7) / 8;
+        let header_bytes = ecc_bytes + complen_bytes;
+
+        let mut complen_base = (input[ecc_bytes + 0] << 8) | input[ecc_bytes] + 1;
+        if complen_base > 2 {
+            complen_base = (complen_base << 8) | input[ecc_bytes + 2];
+        }
+
+        self.engine.decompress(&input[header_bytes..(header_bytes+complen_base)],
+                               &mut self.buffer[..frames * CD_MAX_SECTOR_DATA])?;
+
+        self.engine.decompress(&input[header_bytes + complen_base..],
+            &mut self.buffer[frames * CD_MAX_SECTOR_DATA..frames * CD_MAX_SUBCODE_DATA])?;
+
+        // todo: https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
+        Ok(0)
     }
 }
 
