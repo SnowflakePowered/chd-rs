@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::ffi::FromBytesWithNulError;
 use std::io::ErrorKind;
 use std::str::Utf8Error;
+use crate::huffman::HuffmanError;
 
 #[derive(Debug)]
 pub enum ChdError {
@@ -70,7 +71,7 @@ impl Display for ChdError {
             ChdError::OperationPending => f.write_str("operation pending"),
             ChdError::NoAsyncOperation => f.write_str("no async operation in progress"),
             ChdError::UnsupportedFormat => f.write_str("unsupported format"),
-            ChdError::Unknown => f.write_str("undocumented error")
+            ChdError::Unknown => f.write_str("undocumented error"),
         }
     }
 }
@@ -114,4 +115,11 @@ impl From<std::io::Error> for ChdError {
         }
     }
 }
+
+impl From<HuffmanError> for ChdError {
+    fn from(_: HuffmanError) -> Self {
+        ChdError::DecompressionError
+    }
+}
+
 pub type Result<T> = std::result::Result<T, ChdError>;

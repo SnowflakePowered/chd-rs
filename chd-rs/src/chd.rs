@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use std::fs::metadata;
 use std::borrow::Borrow;
 use std::slice::Iter;
+use crate::map;
 
 pub struct ChdFile<'a, F: Read + Seek> {
     file: F,
@@ -30,14 +31,20 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
 
         // todo: read hunk map
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L1415
+        match &header {
+            ChdHeader::V5Header(v5) => {
+                map::read_v5(v5, &mut file)?;
+            }
+            _ => unimplemented!()
+        }
+
+
         // todo: find codec
         Ok(ChdFile {
             file,
             header,
             parent
         })
-
-
     }
 
     pub fn header(&self) -> &ChdHeader {

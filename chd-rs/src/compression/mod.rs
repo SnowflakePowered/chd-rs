@@ -1,3 +1,6 @@
+mod rel_range;
+mod ecc;
+
 use crate::header::CodecType;
 use crate::error::{Result, ChdError};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
@@ -5,6 +8,8 @@ use flate2::{Decompress, FlushDecompress};
 use lzma_rs::decode::lzma::LzmaParams;
 use lzma_rs::decompress::UnpackedSize;
 use lzma_rs::lzma_decompress_with_params;
+
+use rel_range::RelativeRange as R;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 
@@ -123,11 +128,12 @@ impl CompressionCodec for LzmaCodec {
     }
 
     // not sure if this works but
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
+    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<u64> {
         let mut read = BufReader::new(input);
-        if let Ok(_) = lzma_decompress_with_params(&mut read, output, None,
-                                                   self.params.with_size(output.len() as u64)) {
-            Ok(output.len() as u64)
+        let len = output.len();
+        if let Ok(_) = lzma_decompress_with_params(&mut read, &mut output, None,
+                                                   self.params.with_size( len as u64)) {
+            Ok( len as u64)
         } else {
             Err(ChdError::DecompressionError)
         }
@@ -139,6 +145,8 @@ struct CdLzCodec {
     sub_engine: ZlibCodec,
     buffer: Vec<u8>,
 }
+
+const CD_SYNC_HEADER: [u8; 12] = [0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,0xff, 0xff, 0xff, 0xff, 0x00];
 
 impl CompressionCodec for CdLzCodec {
     fn codec_type() -> CodecType {
@@ -154,8 +162,7 @@ impl CompressionCodec for CdLzCodec {
             return Err(ChdError::CodecError)
         }
 
-        let mut buffer = Vec::new();
-        buffer.reserve(hunk_size as usize);
+        let mut buffer = vec![0u8; hunk_size as usize];
         Ok(CdLzCodec {
             engine: LzmaCodec::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA)?,
             sub_engine: ZlibCodec::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SUBCODE_DATA)?,
@@ -164,22 +171,41 @@ impl CompressionCodec for CdLzCodec {
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
-        let frames = input.len() / CD_FRAME_SIZE;
+        let frames = input.len() / CD_FRAME_SIZE as usize;
         let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
         let ecc_bytes = (frames + 7) / 8;
         let header_bytes = ecc_bytes + complen_bytes;
 
-        let mut complen_base = (input[ecc_bytes + 0] << 8) | input[ecc_bytes] + 1;
+        let mut complen_base = (input[ecc_bytes + 0].checked_shl(8).unwrap_or(0)) | input[ecc_bytes] + 1;
         if complen_base > 2 {
-            complen_base = (complen_base << 8) | input[ecc_bytes + 2];
+            complen_base = complen_base.checked_shl(8).unwrap_or(0) | input[ecc_bytes + 2];
         }
 
-        self.engine.decompress(&input[header_bytes..(header_bytes+complen_base)],
-                               &mut self.buffer[..frames * CD_MAX_SECTOR_DATA])?;
+        // decode frame data
+        self.engine.decompress(&input[R::from(header_bytes).to(complen_base as usize)],
+                               &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize])?;
 
-        self.engine.decompress(&input[header_bytes + complen_base..],
-            &mut self.buffer[frames * CD_MAX_SECTOR_DATA..frames * CD_MAX_SUBCODE_DATA])?;
+        // WANT_SUBCODE
+        self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
+            &mut self.buffer[R::from(frames * CD_MAX_SECTOR_DATA as usize).to(CD_MAX_SUBCODE_DATA as usize)])?;
 
+        for frame_num in 0..frames {
+            output[R::from(frame_num * CD_FRAME_SIZE as usize).to(CD_MAX_SECTOR_DATA as usize)]
+                .copy_from_slice(&self.buffer[R::from(frame_num * CD_MAX_SECTOR_DATA as usize)
+                    .to(CD_MAX_SECTOR_DATA as usize)]);
+
+            // WANT_SUBCODE
+            output[R::from(frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize).to(CD_MAX_SUBCODE_DATA as usize)]
+                .copy_from_slice(&self.buffer[R::from(frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_FRAME_SIZE as usize)
+                    .to(CD_MAX_SUBCODE_DATA as usize)]);
+
+            // WANT_RAW_DATA_SECTOR
+            let sector_slice = &mut output[R::from(frame_num * CD_FRAME_SIZE as usize).to(CD_MAX_SECTOR_DATA as usize)];
+            if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
+                sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
+                ecc::ecc_generate(sector_slice);
+            }
+        }
         // todo: https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
         Ok(0)
     }

@@ -185,7 +185,7 @@ impl <'a> HuffmanDecoder<'a> {
     }
 
     const fn make_lookup(code: u16, bits: u8) -> LookupValue {
-        (((code) << 5) | ((bits as u16) & 0x1f))
+        ((code) << 5) | ((bits as u16) & 0x1f)
     }
 
     fn build_lookup_table(&mut self) {

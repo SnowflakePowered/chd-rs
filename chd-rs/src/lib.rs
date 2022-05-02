@@ -41,5 +41,6 @@ mod tests {
             .map(|s| unsafe { String::from_utf8_unchecked(s.value ) })
                 .collect();
         println!("debug");
+        println!("{:?}", meta_datas)
     }
 }
