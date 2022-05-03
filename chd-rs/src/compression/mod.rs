@@ -3,10 +3,9 @@ mod ecc;
 
 use crate::header::CodecType;
 use crate::error::{Result, ChdError};
-use std::io::{BufRead, BufReader, Read, Seek, Write};
+use std::io::{BufReader, Write};
 use flate2::{Decompress, FlushDecompress};
 use lzma_rs::decode::lzma::LzmaParams;
-use lzma_rs::decompress::UnpackedSize;
 use lzma_rs::lzma_decompress_with_params;
 
 use rel_range::RelativeRange as R;
@@ -104,11 +103,11 @@ impl CompressionCodec for LzmaCodec {
             if dict_size > reduce_size {
                 for i in 11..=30 {
                     if reduce_size <= (2u32 << i) {
-                        dict_size = (2u32 << i);
+                        dict_size = 2u32 << i;
                         break;
                     }
                     if reduce_size <= (3u32 << i) {
-                        dict_size = (3u32 << i);
+                        dict_size = 3u32 << i;
                         break;
                     }
                 }

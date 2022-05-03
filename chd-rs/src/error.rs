@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::ffi::FromBytesWithNulError;
 use std::io::ErrorKind;
 use std::str::Utf8Error;
+use bitreader::BitReaderError;
 use crate::huffman::HuffmanError;
 
 #[derive(Debug)]
@@ -73,6 +74,12 @@ impl Display for ChdError {
             ChdError::UnsupportedFormat => f.write_str("unsupported format"),
             ChdError::Unknown => f.write_str("undocumented error"),
         }
+    }
+}
+
+impl From<BitReaderError> for ChdError {
+    fn from(_: BitReaderError) -> Self {
+        return ChdError::ReadError
     }
 }
 

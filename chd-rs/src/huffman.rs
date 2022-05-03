@@ -75,7 +75,6 @@ pub struct HuffmanDecoder<'a> {
     max_bits: u8,
     lookup_array: Vec<LookupValue>,
     huffnode_array: Vec<HuffmanNode<'a>>,
-    histogram: Vec<u32>,
 }
 
 impl <'a> HuffmanDecoder<'a> {
@@ -90,7 +89,6 @@ impl <'a> HuffmanDecoder<'a> {
             max_bits,
             lookup_array: vec![0u16; 1 << max_bits],
             huffnode_array: vec![HuffmanNode::default(); num_codes],
-            histogram: Vec::new()
         })
     }
 

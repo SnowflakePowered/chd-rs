@@ -1,12 +1,7 @@
-use std::io::{Seek, Read, BufReader};
+use std::io::{Seek, Read};
 use crate::header::ChdHeader;
 use crate::error::{Result, ChdError};
 use crate::metadata::{MetadataIter, ChdMetadata};
-use std::convert::TryInto;
-use std::marker::PhantomData;
-use std::fs::metadata;
-use std::borrow::Borrow;
-use std::slice::Iter;
 use crate::map;
 
 pub struct ChdFile<'a, F: Read + Seek> {

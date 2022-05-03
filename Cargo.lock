@@ -68,6 +68,7 @@ dependencies = [
  "bitreader",
  "byteorder",
  "claxon",
+ "crc16",
  "flate2",
  "lazy_static",
  "lzma-rs",
@@ -90,6 +91,12 @@ checksum = "d663548de7f5cca343f1e0a48d14dcfb0e9eb4e079ec58883b7251539fa10aeb"
 dependencies = [
  "build_const",
 ]
+
+[[package]]
+name = "crc16"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "338089f42c427b86394a5ee60ff321da23a5c89c9d89514c829687b26359fcff"
 
 [[package]]
 name = "crc32fast"

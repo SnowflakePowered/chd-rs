@@ -5,9 +5,10 @@ use crate::error::{ChdError, Result};
 use crate::metadata::{MetadataIter, KnownMetadata};
 use crate::make_tag;
 use lazy_static::lazy_static;
-use regex::bytes::{Regex, Captures};
+use regex::bytes::Regex;
 use crate::header::Version::ChdV5;
-use std::convert::{TryInto, TryFrom};
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 
 #[repr(u32)]
 pub enum CodecType {
@@ -28,6 +29,25 @@ pub enum Version {
     ChdV3 = 3,
     ChdV4 = 4,
     ChdV5 = 5,
+}
+
+#[repr(u8)]
+#[derive(FromPrimitive, ToPrimitive)]
+pub enum V5CompressionType {
+    CompressionType0 = 0,
+    CompressionType1 = 1,
+    CompressionType2 = 2,
+    CompressionType3 = 3,
+    CompressionNone = 4,
+    CompressionSelf = 5,
+    CompressionParent = 6,
+    CompressionRleSmall = 7,
+    CompressionRleLarge = 8,
+    CompressionSelf0 = 9,
+    CompressionSelf1 = 10,
+    CompressionParentSelf = 11,
+    CompressionParent0 = 12,
+    CompressionParent1 = 13
 }
 
 #[repr(C)]
