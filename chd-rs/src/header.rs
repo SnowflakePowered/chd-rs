@@ -1,3 +1,4 @@
+use std::char::from_u32;
 use std::io::{Read, Seek, SeekFrom, Cursor};
 use std::ffi::CStr;
 use byteorder::{ReadBytesExt, BigEndian};
@@ -5,12 +6,14 @@ use crate::error::{ChdError, Result};
 use crate::metadata::{MetadataIter, KnownMetadata};
 use crate::make_tag;
 use lazy_static::lazy_static;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use regex::bytes::Regex;
 use crate::header::Version::ChdV5;
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::FromPrimitive;
+
 
 #[repr(u32)]
+#[derive(FromPrimitive, Debug)]
 pub enum CodecType {
     None = 0,
     Zlib = 1,
@@ -22,6 +25,16 @@ pub enum CodecType {
     FlacCdV5 = make_tag(b"cdfl")
 }
 
+impl CodecType {
+    pub const fn is_legacy(&self) -> bool {
+        match self {
+            CodecType::None => false,
+            CodecType::Zlib | CodecType:: ZlibPlus | CodecType::AV => true,
+            _ => false
+        }
+    }
+}
+
 #[repr(u32)]
 pub enum Version {
     ChdV1 = 1,
@@ -29,25 +42,6 @@ pub enum Version {
     ChdV3 = 3,
     ChdV4 = 4,
     ChdV5 = 5,
-}
-
-#[repr(u8)]
-#[derive(FromPrimitive, ToPrimitive)]
-pub enum V5CompressionType {
-    CompressionType0 = 0,
-    CompressionType1 = 1,
-    CompressionType2 = 2,
-    CompressionType3 = 3,
-    CompressionNone = 4,
-    CompressionSelf = 5,
-    CompressionParent = 6,
-    CompressionRleSmall = 7,
-    CompressionRleLarge = 8,
-    CompressionSelf0 = 9,
-    CompressionSelf1 = 10,
-    CompressionParentSelf = 11,
-    CompressionParent0 = 12,
-    CompressionParent1 = 13
 }
 
 #[repr(C)]
@@ -200,10 +194,50 @@ impl ChdHeader {
         }
     }
 
+    pub const fn logical_bytes(&self) -> u64 {
+        match self {
+            ChdHeader::V1Header(c) => c.logical_bytes,
+            ChdHeader::V2Header(c) => c.logical_bytes,
+            ChdHeader::V3Header(c) => c.logical_bytes,
+            ChdHeader::V4Header(c) => c.logical_bytes,
+            ChdHeader::V5Header(c) => c.logical_bytes,
+        }
+    }
+
+    pub const fn unit_bytes(&self) -> u32 {
+        match self {
+            ChdHeader::V1Header(c) => c.unit_bytes,
+            ChdHeader::V2Header(c) => c.unit_bytes,
+            ChdHeader::V3Header(c) => c.unit_bytes,
+            ChdHeader::V4Header(c) => c.unit_bytes,
+            ChdHeader::V5Header(c) => c.unit_bytes,
+        }
+    }
+
+    pub const fn unit_count(&self) -> u64 {
+        match self {
+            ChdHeader::V1Header(c) => c.unit_count,
+            ChdHeader::V2Header(c) => c.unit_count,
+            ChdHeader::V3Header(c) => c.unit_count,
+            ChdHeader::V4Header(c) => c.unit_count,
+            ChdHeader::V5Header(c) => c.unit_count,
+        }
+    }
+
     pub fn has_parent(&self) -> bool {
         match self {
-            ChdHeader::V5Header(c) => c.parent_sha1 == [0u8; SHA1_BYTES],
+            ChdHeader::V5Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
             _ => self.flags().map(|f| (f & Flags::HasParent as u32) != 0).unwrap_or(false)
+        }
+    }
+
+    pub const fn length(&self) -> u32 {
+        match self {
+            ChdHeader::V1Header(c) => c.length,
+            ChdHeader::V2Header(c) => c.length,
+            ChdHeader::V3Header(c) => c.length,
+            ChdHeader::V4Header(c) => c.length,
+            ChdHeader::V5Header(c) => c.length,
         }
     }
 
@@ -267,11 +301,43 @@ impl ChdHeader {
         if !parent_ok {
             return false;
         }
-
         // obsolete field checks are done by type system
         return true
     }
+
+    pub fn validate_compression(&self) -> bool {
+        match self {
+            ChdHeader::V1Header(c) => {
+                ChdHeader::validate_legacy_compression(c.compression)
+            }
+            ChdHeader::V2Header(c) => {
+                ChdHeader::validate_legacy_compression(c.compression)
+            }
+            ChdHeader::V3Header(c) => {
+                ChdHeader::validate_legacy_compression(c.compression)
+            }
+            ChdHeader::V4Header(c) => {
+                ChdHeader::validate_legacy_compression(c.compression)
+            }
+            ChdHeader::V5Header(c) => {
+                c.compression.map(ChdHeader::validate_v5_compression).iter().all(|&x| x)
+            }
+        }
+    }
+
+    fn validate_legacy_compression(value: u32) -> bool {
+        CodecType::from_u32(value).map(|e| e.is_legacy())
+            .unwrap_or(false)
+    }
+
+    fn validate_v5_compression(value: u32) -> bool {
+        // v5 can not be legacy.
+        CodecType::from_u32(value).map(|e| !e.is_legacy())
+            .unwrap_or(false)
+    }
 }
+
+
 
 #[repr(u32)]
 pub enum Flags {

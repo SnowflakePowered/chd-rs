@@ -3,11 +3,13 @@ use crate::header::ChdHeader;
 use crate::error::{Result, ChdError};
 use crate::metadata::{MetadataIter, ChdMetadata};
 use crate::map;
+use crate::map::ChdMap;
 
 pub struct ChdFile<'a, F: Read + Seek> {
     file: F,
     header: ChdHeader,
-    parent: Option<&'a mut ChdFile<'a, F>>
+    parent: Option<&'a mut ChdFile<'a, F>>,
+    map: ChdMap
 }
 
 impl<'a, F: Read + Seek> ChdFile<'a, F> {
@@ -24,21 +26,20 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
             return Err(ChdError::RequiresParent)
         }
 
-        // todo: read hunk map
-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L1415
-        match &header {
-            ChdHeader::V5Header(v5) => {
-                map::read_v5(v5, &mut file)?;
-            }
-            _ => unimplemented!()
+        if !header.validate_compression() {
+            return Err(ChdError::UnsupportedFormat)
         }
 
+        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L1415
+        let map = map::read_map(&header, &mut file)?;
 
-        // todo: find codec
+        // todo: hunk cache, not important right now but will need for C compat.
+
         Ok(ChdFile {
             file,
             header,
-            parent
+            parent,
+            map
         })
     }
 
@@ -54,5 +55,9 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
             return metas.iter().map(|e| e.read(&mut self.file).ok()).collect()
         }
         return None
+    }
+
+    pub fn map(&self) -> &ChdMap {
+        &self.map
     }
 }

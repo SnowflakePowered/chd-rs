@@ -1,12 +1,14 @@
 
-mod header;
-mod error;
-mod metadata;
+pub mod header;
+pub mod error;
+pub mod metadata;
+pub mod chd;
+
 mod cdrom;
-mod chd;
 mod compression;
 mod huffman;
 mod map;
+mod rel_range;
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
@@ -14,7 +16,7 @@ const fn make_tag(a: &[u8; 4]) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{File};
+    use std::fs::File;
     use crate::header;
     use crate::metadata;
     use std::convert::TryInto;
@@ -40,7 +42,14 @@ mod tests {
         let meta_datas: Vec<_> = chd.metadata().unwrap().into_iter()
             .map(|s| unsafe { String::from_utf8_unchecked(s.value ) })
                 .collect();
-        println!("debug");
-        println!("{:?}", meta_datas)
+        println!("{:?}", meta_datas);
+
+        println!("{}, {}", chd.map().len(), chd.header().hunk_count());
+
+        for i in 0..chd.header().hunk_count() as usize {
+            if let Some(map) = chd.map().get_entry(i) {
+
+            }
+        }
     }
 }

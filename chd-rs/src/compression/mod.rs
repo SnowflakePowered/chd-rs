@@ -1,14 +1,13 @@
-mod rel_range;
 mod ecc;
 
 use crate::header::CodecType;
-use crate::error::{Result, ChdError};
+use crate::error::{ChdError, Result};
 use std::io::{BufReader, Write};
 use flate2::{Decompress, FlushDecompress};
 use lzma_rs::decode::lzma::LzmaParams;
 use lzma_rs::lzma_decompress_with_params;
 
-use rel_range::RelativeRange as R;
+use crate::rel_range::RelativeRange as R;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 
@@ -181,25 +180,25 @@ impl CompressionCodec for CdLzCodec {
         }
 
         // decode frame data
-        self.engine.decompress(&input[R::from(header_bytes).to(complen_base as usize)],
+        self.engine.decompress(&input[R::from(header_bytes).len(complen_base as usize)],
                                &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize])?;
 
         // WANT_SUBCODE
         self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
-            &mut self.buffer[R::from(frames * CD_MAX_SECTOR_DATA as usize).to(CD_MAX_SUBCODE_DATA as usize)])?;
+            &mut self.buffer[R::from(frames * CD_MAX_SECTOR_DATA as usize).len(CD_MAX_SUBCODE_DATA as usize)])?;
 
         for frame_num in 0..frames {
-            output[R::from(frame_num * CD_FRAME_SIZE as usize).to(CD_MAX_SECTOR_DATA as usize)]
+            output[R::from(frame_num * CD_FRAME_SIZE as usize).len(CD_MAX_SECTOR_DATA as usize)]
                 .copy_from_slice(&self.buffer[R::from(frame_num * CD_MAX_SECTOR_DATA as usize)
-                    .to(CD_MAX_SECTOR_DATA as usize)]);
+                    .len(CD_MAX_SECTOR_DATA as usize)]);
 
             // WANT_SUBCODE
-            output[R::from(frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize).to(CD_MAX_SUBCODE_DATA as usize)]
+            output[R::from(frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize).len(CD_MAX_SUBCODE_DATA as usize)]
                 .copy_from_slice(&self.buffer[R::from(frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_FRAME_SIZE as usize)
-                    .to(CD_MAX_SUBCODE_DATA as usize)]);
+                    .len(CD_MAX_SUBCODE_DATA as usize)]);
 
             // WANT_RAW_DATA_SECTOR
-            let sector_slice = &mut output[R::from(frame_num * CD_FRAME_SIZE as usize).to(CD_MAX_SECTOR_DATA as usize)];
+            let sector_slice = &mut output[R::from(frame_num * CD_FRAME_SIZE as usize).len(CD_MAX_SECTOR_DATA as usize)];
             if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
                 sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
                 ecc::ecc_generate(sector_slice);

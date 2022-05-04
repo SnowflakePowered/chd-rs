@@ -1,0 +1,14 @@
+[package]
+name = "rchdman"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chd = { path = "../chd-rs" }
+clap = { version = "3", features = ["derive"] }
+anyhow = "1"
+thousands = "0.2.0"
+hex = "0.4"
+num-traits = "0.2"

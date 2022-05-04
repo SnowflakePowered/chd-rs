@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "chd-rs",
-    "lzma-rs"
+    "lzma-rs",
+    "rchdman"
 ]

@@ -9,7 +9,7 @@ impl RelativeRange<usize> {
         RelativeRange { start }
     }
 
-    pub const fn to(self, len: usize) -> Range<usize> {
+    pub const fn len(self, len: usize) -> Range<usize> {
         self.start..(self.start + len)
     }
 }
