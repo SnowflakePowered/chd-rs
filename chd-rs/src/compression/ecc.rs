@@ -217,7 +217,7 @@ fn ecc_compute_bytes<const ROWLEN: usize>(sector: &[u8; CD_MAX_SECTOR_DATA as us
     (val1, val2)
 }
 
-pub trait ErrorCorrectedSector {
+pub(crate) trait ErrorCorrectedSector {
     fn clear_ecc(&mut self);
     fn generate_ecc(&mut self);
     fn verify_ecc(&self) -> bool;
