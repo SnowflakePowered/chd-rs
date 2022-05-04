@@ -1,4 +1,3 @@
-use std::char::from_u32;
 use std::io::{Read, Seek, SeekFrom, Cursor};
 use std::ffi::CStr;
 use byteorder::{ReadBytesExt, BigEndian};
@@ -140,7 +139,7 @@ pub const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
 pub const COOKIE_VALUE: u32 = 0xbaadf00d;
 
 impl ChdHeader {
-    pub fn try_from_file<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
+    pub fn try_read_header<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
         read_header(file)
     }
 
@@ -501,7 +500,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         static ref RE_BPS: Regex = Regex::new(r"(?-u)(BPS:)(\d+)").unwrap();
     }
 
-    let metas: Vec<_> = MetadataIter::new_from_raw_file(chd, off).collect();
+    let metas: Vec<_> = MetadataIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas.iter().find(|&e| e.metatag == KnownMetadata::HardDisk as u32) {
         if let Ok(text) = hard_disk.read(chd) {
             let caps = RE_BPS.captures(&text.value)
@@ -517,7 +516,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     }
 
     if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag)) {
-        return Some(crate::cdrom::CD_FRAME_SIZE)
+        return Some(crate::cdrom::CD_FRAME_SIZE as u32)
     }
     None
 }

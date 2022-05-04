@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::io::{Read, Seek, SeekFrom, Cursor};
 use crate::error::{Result, ChdError};
 use byteorder::{ReadBytesExt, BigEndian};
@@ -47,7 +48,7 @@ pub struct ChdMetadata {
 
 #[repr(C)]
 #[derive(Clone)]
-pub(crate) struct MetadataEntry {
+pub struct MetadataEntry {
     offset: u64,
     next: u64,
     prev: u64,
@@ -77,7 +78,7 @@ impl MetadataEntry {
     }
 }
 
-pub(crate) struct MetadataIter<'a, F: Read + Seek + 'a> {
+pub struct MetadataIter<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
     curr_offset: u64,
     curr: Option<MetadataEntry>,
@@ -86,7 +87,7 @@ pub(crate) struct MetadataIter<'a, F: Read + Seek + 'a> {
 }
 
 impl <'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
-    pub(crate) fn new_from_raw_file(file: &'a mut F, initial_offset: u64) -> Self {
+    pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
         MetadataIter {
             file,
             curr_offset: initial_offset,
@@ -94,9 +95,25 @@ impl <'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
             indices: Vec::new()
         }
     }
+
+    pub fn try_into_vec(mut self) -> Result<Vec<ChdMetadata>> {
+        self.try_into()
+    }
+}
+
+impl <'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for MetadataIter<'a, F> {
+    type Error = ChdError;
+
+    fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
+        let metas = &mut self;
+        let metas : Vec<_> = metas.collect();
+        metas.iter().map(|e| e.read(&mut self.file))
+            .collect()
+    }
 }
 
 impl <'a, F: Read + Seek + 'a> Iterator for MetadataIter<'a, F> {
+    // really need GATs to do this properly...
     type Item = MetadataEntry;
 
     fn next(&mut self) -> Option<Self::Item> {

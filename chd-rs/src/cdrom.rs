@@ -5,3 +5,4 @@ pub const CD_MAX_SUBCODE_DATA: u32 = 96;
 pub const CD_FRAME_SIZE: u32 = CD_MAX_SECTOR_DATA + CD_MAX_SUBCODE_DATA;
 pub const CD_FRAMES_PER_HUNK: u32 = 8;
 pub const CD_METADATA_WORDS: u32 = 1 + (CD_MAX_TRACKS * 6);
+pub const CD_SYNC_HEADER: [u8; 12] = [0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,0xff, 0xff, 0xff, 0xff, 0x00];

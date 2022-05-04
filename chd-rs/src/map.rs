@@ -11,7 +11,6 @@ use crc16::{CCITT_FALSE, State};
 use crate::huffman::HuffmanDecoder;
 use crate::map;
 use crate::map::MapEntry::V5Compressed;
-use crate::rel_range::RelativeRange as R;
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk
@@ -173,9 +172,7 @@ impl ChdMap {
             ChdMap::V5(m) => {
                 let map_entry_bytes = if m.1 { 12 } else { 4 };
 
-                let entry_slice = &m.0.get(
-                    R::from(map_entry_bytes * hunk_num)
-                                .len(map_entry_bytes));
+                let entry_slice = &m.0.get(hunk_num * map_entry_bytes..(hunk_num + 1) * map_entry_bytes);
                 if let &Some(entry_slice) = entry_slice {
                     return if m.1 {
                         <&[u8; 12]>::try_from(entry_slice).map(MapEntry::V5Compressed).ok()
@@ -188,21 +185,23 @@ impl ChdMap {
             ChdMap::Legacy(m) => m.get(hunk_num).map(MapEntry::LegacyEntry)
         }
     }
-}
 
-pub fn read_map<F: Read + Seek>(header: &ChdHeader, mut file: F) -> Result<ChdMap> {
-    match header {
-        ChdHeader::V5Header(v5) => {
-            Ok(ChdMap::V5(map::read_map_v5(v5, &mut file, header.is_compressed())?))
-        }
-        ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => {
-            Ok(ChdMap::Legacy(map::read_map_legacy::<_, V3_MAP_ENTRY_SIZE>(header, file)?))
-        }
-        ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => {
-            Ok(ChdMap::Legacy(map::read_map_legacy::<_, V1_MAP_ENTRY_SIZE>(header, file)?))
+    pub fn try_read_map<F: Read + Seek>(header: &ChdHeader, mut file: F) -> Result<ChdMap> {
+        match header {
+            ChdHeader::V5Header(v5) => {
+                Ok(ChdMap::V5(map::read_map_v5(v5, &mut file, header.is_compressed())?))
+            }
+            ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => {
+                Ok(ChdMap::Legacy(map::read_map_legacy::<_, V3_MAP_ENTRY_SIZE>(header, file)?))
+            }
+            ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => {
+                Ok(ChdMap::Legacy(map::read_map_legacy::<_, V1_MAP_ENTRY_SIZE>(header, file)?))
+            }
         }
     }
 }
+
+
 
 macro_rules! const_assert {
     ($($list:ident : $ty:ty),* => $expr:expr) => {{
@@ -333,8 +332,8 @@ fn read_map_v5<F: Read + Seek>(header: &HeaderV5, mut file: F, is_compressed: bo
 
     let mut rep_count = 0;
     let mut last_cmp = 0;
-    for hunk in 0..header.hunk_count as usize {
-        let map_slice = &mut raw_map[R::from(hunk * 12).len(12)];
+
+    for map_slice in raw_map.chunks_exact_mut(12) {
         if rep_count > 0 {
             map_slice[0] = last_cmp;
             rep_count -= 1;

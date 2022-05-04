@@ -152,7 +152,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Info { input, verbose } => {
             let mut f = File::open(input)?;
             let fsize = f.metadata()?.len();
-            let mut chd = ChdFile::try_from_file(&mut f, None)?;
+            let mut chd = ChdFile::open_stream(&mut f, None)?;
             println!("Input file:\t{}", input.display());
             println!("File Version:\t{}", get_file_version(chd.header()));
             println!("Logical size:\t{} bytes", chd.header().logical_bytes().separate_with_commas());
@@ -170,7 +170,7 @@ fn main() -> anyhow::Result<()> {
             // hash
             print_hash(chd.header());
 
-            if let Some(metadata) = chd.metadata() {
+            if let Some(Ok(metadata)) = chd.metadata().map(|f| f.try_into_vec()) {
                 for meta in metadata {
                     let tag = to_fourcc(meta.metatag);
                     if let Ok(tag) = tag {

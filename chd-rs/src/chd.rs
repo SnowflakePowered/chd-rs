@@ -1,4 +1,6 @@
+use std::fs::File;
 use std::io::{Seek, Read};
+use std::path::Path;
 use crate::header::ChdHeader;
 use crate::error::{Result, ChdError};
 use crate::metadata::{MetadataIter, ChdMetadata};
@@ -13,13 +15,19 @@ pub struct ChdFile<'a, F: Read + Seek> {
 }
 
 impl<'a, F: Read + Seek> ChdFile<'a, F> {
-    pub fn try_from_file(mut file: F, parent: Option<&'a mut ChdFile<'a, F>>) -> Result<ChdFile<'a, F>> {
-        let header = ChdHeader::try_from_file(&mut file)?;
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<ChdFile<'a, File>> {
+        let file = File::open(path)?;
+        ChdFile::open_stream(file, None)
+    }
+
+    pub fn open_stream(mut file: F, parent: Option<&'a mut ChdFile<'a, F>>) -> Result<ChdFile<'a, F>> {
+        let header = ChdHeader::try_read_header(&mut file)?;
         if !header.validate() {
             return Err(ChdError::InvalidParameter)
         }
 
-        // No point in checking writable because we are read only so far.
+        // No point in checking writable because traits are read only.
+        // In the future if we want to support a Write feature, will need to ensure writable.
 
         // Make sure we have a parent if we have one
         if parent.is_some() && !header.has_parent() {
@@ -30,8 +38,7 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
             return Err(ChdError::UnsupportedFormat)
         }
 
-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L1415
-        let map = map::read_map(&header, &mut file)?;
+        let map = ChdMap::try_read_map(&header, &mut file)?;
 
         // todo: hunk cache, not important right now but will need for C compat.
 
@@ -47,17 +54,22 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
         &self.header
     }
 
-    pub fn metadata(&mut self) -> Option<Vec<ChdMetadata>> {
+    pub fn metadata(&mut self) -> Option<MetadataIter<F>>{
         let offset = self.header().meta_offset();
         if let Some(offset) = offset {
-            let m_iter = MetadataIter::new_from_raw_file(&mut self.file, offset);
-            let metas: Vec<_> = m_iter.collect();
-            return metas.iter().map(|e| e.read(&mut self.file).ok()).collect()
+            Some(MetadataIter::from_stream(&mut self.file, offset))
+        } else {
+            None
         }
-        return None
     }
 
     pub fn map(&self) -> &ChdMap {
         &self.map
+    }
+}
+
+impl <'a, F: Read + Seek> Read for ChdFile<'a, F> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        todo!()
     }
 }

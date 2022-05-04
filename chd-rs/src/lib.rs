@@ -8,7 +8,6 @@ mod cdrom;
 mod compression;
 mod huffman;
 mod map;
-mod rel_range;
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
@@ -23,6 +22,7 @@ mod tests {
     use std::borrow::Borrow;
     use crate::header::ChdHeader;
     use crate::chd::ChdFile;
+    use crate::metadata::ChdMetadata;
 
     #[test]
     fn it_works() {
@@ -36,10 +36,12 @@ mod tests {
     #[test]
     fn test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
-        let mut chd = ChdFile::try_from_file(&mut f, None).expect("file");
+        let mut chd = ChdFile::open_stream(&mut f, None).expect("file");
         let res = chd.header();
 
-        let meta_datas: Vec<_> = chd.metadata().unwrap().into_iter()
+        let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
+
+        let meta_datas: Vec<_> = metadatas.into_iter()
             .map(|s| unsafe { String::from_utf8_unchecked(s.value ) })
                 .collect();
         println!("{:?}", meta_datas);
