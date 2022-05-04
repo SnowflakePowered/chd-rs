@@ -201,8 +201,6 @@ impl ChdMap {
     }
 }
 
-
-
 macro_rules! const_assert {
     ($($list:ident : $ty:ty),* => $expr:expr) => {{
         struct Assert<$(const $list: usize,)*>;
@@ -216,7 +214,7 @@ macro_rules! const_assert {
     };
 }
 
-pub fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(header: &ChdHeader, mut file: F) -> Result<Vec<LegacyMapEntry>> {
+fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(header: &ChdHeader, mut file: F) -> Result<Vec<LegacyMapEntry>> {
     // Probably can express this better in the type system.
     const_assert!(MAP_ENTRY_SIZE: usize => V3_MAP_ENTRY_SIZE >=
         MAP_ENTRY_SIZE && (MAP_ENTRY_SIZE == V3_MAP_ENTRY_SIZE || MAP_ENTRY_SIZE == V1_MAP_ENTRY_SIZE));
@@ -269,7 +267,7 @@ pub fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(header: &Chd
 }
 
 #[inline]
-pub fn read_map_entry_v1(val: u64, hunk_bytes: u32) -> LegacyMapEntry {
+fn read_map_entry_v1(val: u64, hunk_bytes: u32) -> LegacyMapEntry {
     let length = (val >> 44) as u32;
     let flags = MAP_ENTRY_FLAG_NO_CRC |
         if length == hunk_bytes {
@@ -287,7 +285,7 @@ pub fn read_map_entry_v1(val: u64, hunk_bytes: u32) -> LegacyMapEntry {
 }
 
 #[inline]
-pub fn read_map_entry_v3(buf: &[u8; V3_MAP_ENTRY_SIZE]) -> Result<LegacyMapEntry> {
+fn read_map_entry_v3(buf: &[u8; V3_MAP_ENTRY_SIZE]) -> Result<LegacyMapEntry> {
     let mut read = Cursor::new(buf);
     let offset = read.read_u64::<BigEndian>()?;
     let crc = read.read_u32::<BigEndian>()?;

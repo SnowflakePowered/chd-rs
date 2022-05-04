@@ -1,3 +1,4 @@
+use std::array::TryFromSliceError;
 use std::error::Error;
 use std::fmt::Display;
 use std::ffi::FromBytesWithNulError;
@@ -74,6 +75,12 @@ impl Display for ChdError {
             ChdError::UnsupportedFormat => f.write_str("unsupported format"),
             ChdError::Unknown => f.write_str("undocumented error"),
         }
+    }
+}
+
+impl From<TryFromSliceError> for ChdError {
+    fn from(_: TryFromSliceError) -> Self {
+        return ChdError::InvalidFile
     }
 }
 

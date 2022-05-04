@@ -1,11 +1,13 @@
 mod ecc;
 
+use std::convert::TryFrom;
 use crate::header::CodecType;
 use crate::error::{ChdError, Result};
 use std::io::{BufReader, Write};
 use flate2::{Decompress, FlushDecompress};
 use lzma_rs::decode::lzma::LzmaParams;
 use lzma_rs::lzma_decompress_with_params;
+use crate::compression::ecc::ErrorCorrectedSector;
 
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
@@ -166,6 +168,7 @@ impl CompressionCodec for CdLzCodec {
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
+        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
         let frames = input.len() / CD_FRAME_SIZE as usize;
         let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
         let ecc_bytes = (frames + 7) / 8;
@@ -184,6 +187,8 @@ impl CompressionCodec for CdLzCodec {
         self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
             &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize])?;
 
+
+        // reassemble data
         for frame_num in 0..frames {
             output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
                 .copy_from_slice(&self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SECTOR_DATA as usize]);
@@ -193,13 +198,15 @@ impl CompressionCodec for CdLzCodec {
                 .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SUBCODE_DATA as usize]);
 
             // WANT_RAW_DATA_SECTOR
-            let sector_slice = &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize];
+
+            // this may be a bit overkill..
+            let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>
+                ::try_from(&mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize])?;
             if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
                 sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
-                ecc::ecc_generate(sector_slice);
+                sector_slice.generate_ecc();
             }
         }
-        // todo: https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
         Ok(0)
     }
 }
