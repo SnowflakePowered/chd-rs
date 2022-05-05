@@ -6,7 +6,8 @@ mod none;
 mod zlib;
 mod lzma;
 mod cdrom;
-mod flac;
+pub mod flac;
+
 
 pub mod codecs {
     pub use crate::compression::none::NoneCodec;

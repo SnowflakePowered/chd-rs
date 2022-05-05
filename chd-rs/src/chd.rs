@@ -4,7 +4,6 @@ use std::path::Path;
 use crate::header::ChdHeader;
 use crate::error::{Result, ChdError};
 use crate::metadata::{MetadataIter, ChdMetadata};
-use crate::map;
 use crate::map::ChdMap;
 
 pub struct ChdFile<'a, F: Read + Seek> {

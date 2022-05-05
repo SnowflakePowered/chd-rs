@@ -4,7 +4,7 @@ const ECC_P_OFFSET: usize = 0x81c;
 const ECC_P_NUM_BYTES: usize = 86;
 const ECC_P_COMP: usize = 24;
 
-const ECC_Q_OFFSET: usize = (ECC_P_OFFSET + 2 * ECC_P_NUM_BYTES);
+const ECC_Q_OFFSET: usize = ECC_P_OFFSET + 2 * ECC_P_NUM_BYTES;
 const ECC_Q_NUM_BYTES: usize = 52;
 const ECC_Q_COMP: usize = 43;
 

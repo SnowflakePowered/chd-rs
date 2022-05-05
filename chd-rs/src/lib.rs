@@ -20,9 +20,11 @@ mod tests {
     use crate::metadata;
     use std::convert::TryInto;
     use std::borrow::Borrow;
+    use std::io::Read;
     use crate::header::ChdHeader;
     use crate::chd::ChdFile;
     use crate::metadata::ChdMetadata;
+    use crate::compression::flac::ChdFlacHeader;
 
     #[test]
     fn it_works() {
@@ -53,5 +55,14 @@ mod tests {
 
             }
         }
+    }
+
+    #[test]
+    fn flac_buf_test() {
+        let b = [1, 2, 3, 4];
+        let mut fb = ChdFlacHeader::new(44100, 2, 2352);
+        let mut n = vec![0u8; 100];
+        fb.as_read(&b).read(&mut n).expect("read");
+        assert_eq!(&n[0x2a..][..4], &b);
     }
 }
