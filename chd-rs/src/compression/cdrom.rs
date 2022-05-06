@@ -34,7 +34,7 @@ pub struct CdBlockCodec<Engine: BlockCodec, SubEngine: BlockCodec> {
 
 impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
     fn is_lossy() -> bool {
-        false
+        Engine::is_lossy() && SubEngine::is_lossy()
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
