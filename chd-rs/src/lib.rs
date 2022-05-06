@@ -19,7 +19,6 @@ mod tests {
     use crate::header;
     use crate::metadata;
     use std::convert::TryInto;
-    use std::borrow::Borrow;
     use std::io::Read;
     use crate::header::ChdHeader;
     use crate::chd::ChdFile;

@@ -27,12 +27,12 @@ pub trait BlockCodec: InternalCodec {}
 
 /// A codec that has a externally known type.
 pub trait CompressionCodecType {
-    fn codec_type() -> CodecType;
+    fn codec_type(&self) -> CodecType where Self: Sized;
 }
 
 /// A compression codec used to decompress.
 pub trait InternalCodec {
-    fn is_lossy() -> bool;
+    fn is_lossy(&self) -> bool where Self: Sized;
     fn new(hunk_bytes: u32) -> Result<Self> where Self: Sized;
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength>;
 }

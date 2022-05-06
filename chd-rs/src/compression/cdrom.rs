@@ -11,13 +11,13 @@ pub type CdLzCodec = CdBlockCodec<LzmaCodec, ZlibCodec>;
 pub type CdZlCodec = CdBlockCodec<ZlibCodec, ZlibCodec>;
 
 impl CompressionCodecType for CdLzCodec {
-    fn codec_type() -> CodecType {
+    fn codec_type(&self) -> CodecType {
         CodecType::LzmaCdV5
     }
 }
 
 impl CompressionCodecType for CdZlCodec {
-    fn codec_type() -> CodecType {
+    fn codec_type(&self) -> CodecType {
         CodecType::ZLibCdV5
     }
 }
@@ -33,8 +33,8 @@ pub struct CdBlockCodec<Engine: BlockCodec, SubEngine: BlockCodec> {
 }
 
 impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
-    fn is_lossy() -> bool {
-        Engine::is_lossy() && SubEngine::is_lossy()
+    fn is_lossy(&self) -> bool {
+        self.engine.is_lossy() && self.sub_engine.is_lossy()
     }
 
     fn new(hunk_size: u32) -> Result<Self> {

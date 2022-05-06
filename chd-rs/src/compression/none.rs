@@ -5,7 +5,7 @@ use crate::error::Result;
 
 pub struct NoneCodec;
 impl InternalCodec for NoneCodec {
-    fn is_lossy() -> bool {
+    fn is_lossy(&self) -> bool {
         false
     }
 
@@ -19,7 +19,7 @@ impl InternalCodec for NoneCodec {
 }
 
 impl CompressionCodecType for NoneCodec {
-    fn codec_type() -> CodecType {
+    fn codec_type(&self) -> CodecType {
         CodecType::None
     }
 }

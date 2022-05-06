@@ -10,7 +10,7 @@ pub struct ZlibCodec {
 impl BlockCodec for ZlibCodec {}
 
 impl InternalCodec for ZlibCodec {
-    fn is_lossy() -> bool {
+    fn is_lossy(&self) -> bool {
         false
     }
 
@@ -39,7 +39,7 @@ impl InternalCodec for ZlibCodec {
 }
 
 impl CompressionCodecType for ZlibCodec {
-    fn codec_type() -> CodecType {
+    fn codec_type(&self) -> CodecType {
         CodecType::Zlib
     }
 }

@@ -41,7 +41,7 @@ fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
 }
 
 impl InternalCodec for LzmaCodec {
-    fn is_lossy() -> bool {
+    fn is_lossy(&self) -> bool {
         false
     }
 

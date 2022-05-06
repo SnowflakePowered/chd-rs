@@ -112,7 +112,7 @@ const fn flac_optimal_size(bytes: u32) -> u32 {
 }
 
 impl InternalCodec for FlacCodec {
-    fn is_lossy() -> bool {
+    fn is_lossy(&self) -> bool {
         false
     }
 
@@ -138,7 +138,7 @@ impl InternalCodec for FlacCodec {
         let mut flac_header = ChdFlacHeader::new(44100, 2,
                                              flac_optimal_size(frames as u32 * CD_MAX_SECTOR_DATA));
 
-        let mut flac_buf = BufferedReader::new(CountingReader::new(flac_header.as_read(input)));
+        let flac_buf = BufferedReader::new(CountingReader::new(flac_header.as_read(input)));
         let mut frame_read = FrameReader::new(flac_buf);
         let mut buf = Vec::new();
 
@@ -182,13 +182,13 @@ pub struct CdFlCodec {
 impl CompressionCodec for CdFlCodec {}
 
 impl CompressionCodecType for CdFlCodec {
-    fn codec_type() -> CodecType {
+    fn codec_type(&self) -> CodecType {
         CodecType::FlacCdV5
     }
 }
 
 impl InternalCodec for CdFlCodec {
-    fn is_lossy() -> bool {
+    fn is_lossy(&self) -> bool {
         false
     }
 

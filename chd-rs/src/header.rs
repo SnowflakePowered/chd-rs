@@ -8,8 +8,8 @@ use lazy_static::lazy_static;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use regex::bytes::Regex;
-use crate::header::Version::ChdV5;
-
+use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, NoneCodec, ZlibCodec};
+use crate::compression::{CompressionCodec, InternalCodec};
 
 #[repr(u32)]
 #[derive(FromPrimitive, Debug)]
@@ -30,6 +30,22 @@ impl CodecType {
             CodecType::None => false,
             CodecType::Zlib | CodecType:: ZlibPlus | CodecType::AV => true,
             _ => false
+        }
+    }
+
+    pub fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
+        match self {
+            CodecType::None => NoneCodec::new(hunk_size)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => ZlibCodec::new(hunk_size)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::ZLibCdV5 => CdZlCodec::new(hunk_size)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::LzmaCdV5 => CdLzCodec::new(hunk_size)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::FlacCdV5 => CdFlCodec::new(hunk_size)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::AV => return Err(ChdError::UnsupportedFormat)
         }
     }
 }
@@ -129,14 +145,13 @@ const SHA1_BYTES: usize = 20;
 
 pub const CHD_MAGIC: &'static str = "MComprHD";
 
-const CHD_HEADER_VERSION: u32 = 5;
 const CHD_V1_HEADER_SIZE: u32 = 76;
 const CHD_V2_HEADER_SIZE: u32 = 80;
 const CHD_V3_HEADER_SIZE: u32 =  120;
 const CHD_V4_HEADER_SIZE: u32 = 108;
 const CHD_V5_HEADER_SIZE: u32 = 124;
 pub const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
-pub const COOKIE_VALUE: u32 = 0xbaadf00d;
+// pub const COOKIE_VALUE: u32 = 0xbaadf00d;
 
 impl ChdHeader {
     pub fn try_read_header<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
@@ -320,6 +335,38 @@ impl ChdHeader {
             }
             ChdHeader::V5Header(c) => {
                 c.compression.map(ChdHeader::validate_v5_compression).iter().all(|&x| x)
+            }
+        }
+    }
+
+    pub fn create_compression_codecs(&self) -> Result<Vec<Box<dyn CompressionCodec>>> {
+        match self {
+            ChdHeader::V1Header(c) => {
+                CodecType::from_u32(c.compression)
+                    .map(|e| e.init(self.hunk_bytes()))
+                    .ok_or(ChdError::UnsupportedFormat)?
+                    .map(|e| vec![e])
+            }
+            ChdHeader::V2Header(c) => {
+                CodecType::from_u32(c.compression)
+                    .map(|e| e.init(self.hunk_bytes()))
+                    .ok_or(ChdError::UnsupportedFormat)?
+                    .map(|e| vec![e])            }
+            ChdHeader::V3Header(c) => {
+                CodecType::from_u32(c.compression)
+                    .map(|e| e.init(self.hunk_bytes()))
+                    .ok_or(ChdError::UnsupportedFormat)?
+                    .map(|e| vec![e])            }
+            ChdHeader::V4Header(c) => {
+                CodecType::from_u32(c.compression)
+                    .map(|e| e.init(self.hunk_bytes()))
+                    .ok_or(ChdError::UnsupportedFormat)?
+                    .map(|e| vec![e])            }
+            ChdHeader::V5Header(c) => {
+                c.compression.map(CodecType::from_u32)
+                    .map(|f| f.ok_or(ChdError::UnsupportedFormat))
+                    .map(|f| f.and_then(|f| f.init(self.hunk_bytes())))
+                    .into_iter().collect()
             }
         }
     }
@@ -545,7 +592,7 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
         false => 4
     };
     Ok(HeaderV5 {
-        version: ChdV5,
+        version: Version::ChdV5,
         length,
         compression,
         hunk_bytes,

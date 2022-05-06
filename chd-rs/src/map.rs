@@ -1,16 +1,14 @@
 use std::convert::TryFrom;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
-use std::os;
 use bitreader::BitReader;
 use crate::error::{Result, ChdError};
-use crate::header::{ChdHeader, CodecType, HeaderV5};
+use crate::header::{ChdHeader, HeaderV5};
 use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 use crc16::{CCITT_FALSE, State};
 use crate::huffman::HuffmanDecoder;
 use crate::map;
-use crate::map::MapEntry::V5Compressed;
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk
@@ -326,7 +324,7 @@ fn read_map_v5<F: Read + Seek>(header: &HeaderV5, mut file: F, is_compressed: bo
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let mut decoder = HuffmanDecoder::from_tree_rle(16, 8, &mut bitstream)?;
+    let decoder = HuffmanDecoder::from_tree_rle(16, 8, &mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;
