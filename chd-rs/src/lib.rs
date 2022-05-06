@@ -27,15 +27,6 @@ mod tests {
     use crate::compression::flac::ChdFlacHeader;
 
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-
-    fn make_tag_test() {
-        assert_eq!(2 + 2, 4);
-    }
-
-    #[test]
     fn test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
         let mut chd = ChdFile::open_stream(&mut f, None).expect("file");

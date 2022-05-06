@@ -1,5 +1,5 @@
 use std::io::Write;
-use crate::compression::{CompressionCodec, CompressionCodecType, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::header::CodecType;
 use crate::error::Result;
 
@@ -13,8 +13,8 @@ impl InternalCodec for NoneCodec {
         Ok(NoneCodec)
     }
 
-    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<u64> {
-        Ok(output.write(input)? as u64)
+    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressLength> {
+        Ok(DecompressLength::new(output.write(&input)?, input.len()))
     }
 }
 

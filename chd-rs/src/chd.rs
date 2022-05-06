@@ -3,7 +3,7 @@ use std::io::{Seek, Read};
 use std::path::Path;
 use crate::header::ChdHeader;
 use crate::error::{Result, ChdError};
-use crate::metadata::{MetadataIter, ChdMetadata};
+use crate::metadata::IterMetadataEntry;
 use crate::map::ChdMap;
 
 pub struct ChdFile<'a, F: Read + Seek> {
@@ -53,10 +53,10 @@ impl<'a, F: Read + Seek> ChdFile<'a, F> {
         &self.header
     }
 
-    pub fn metadata(&mut self) -> Option<MetadataIter<F>>{
+    pub fn metadata(&mut self) -> Option<IterMetadataEntry<F>>{
         let offset = self.header().meta_offset();
         if let Some(offset) = offset {
-            Some(MetadataIter::from_stream(&mut self.file, offset))
+            Some(IterMetadataEntry::from_stream(&mut self.file, offset))
         } else {
             None
         }

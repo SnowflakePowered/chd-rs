@@ -78,7 +78,7 @@ impl MetadataEntry {
     }
 }
 
-pub struct MetadataIter<'a, F: Read + Seek + 'a> {
+pub struct IterMetadataEntry<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
     curr_offset: u64,
     curr: Option<MetadataEntry>,
@@ -86,9 +86,9 @@ pub struct MetadataIter<'a, F: Read + Seek + 'a> {
     indices: Vec<(u32, u32)>
 }
 
-impl <'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
+impl <'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
     pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
-        MetadataIter {
+        IterMetadataEntry {
             file,
             curr_offset: initial_offset,
             curr: None,
@@ -96,12 +96,12 @@ impl <'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
         }
     }
 
-    pub fn try_into_vec(mut self) -> Result<Vec<ChdMetadata>> {
+    pub fn try_into_vec(self) -> Result<Vec<ChdMetadata>> {
         self.try_into()
     }
 }
 
-impl <'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for MetadataIter<'a, F> {
+impl <'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for IterMetadataEntry<'a, F> {
     type Error = ChdError;
 
     fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
@@ -112,7 +112,7 @@ impl <'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for MetadataIter<'a, F>
     }
 }
 
-impl <'a, F: Read + Seek + 'a> Iterator for MetadataIter<'a, F> {
+impl <'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
     // really need GATs to do this properly...
     type Item = MetadataEntry;
 
@@ -121,7 +121,7 @@ impl <'a, F: Read + Seek + 'a> Iterator for MetadataIter<'a, F> {
             return None
         }
 
-        fn next_inner<'a, F: Read + Seek + 'a>(s: &mut MetadataIter<'a, F>) -> Result<MetadataEntry> {
+        fn next_inner<'a, F: Read + Seek + 'a>(s: &mut IterMetadataEntry<'a, F>) -> Result<MetadataEntry> {
             let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
             let count = s.file.read(&mut raw_header)?;

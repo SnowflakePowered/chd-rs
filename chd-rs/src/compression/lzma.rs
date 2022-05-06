@@ -1,7 +1,8 @@
 use std::io::BufReader;
 use lzma_rs::decode::lzma::LzmaParams;
 use lzma_rs::lzma_decompress_with_params;
-use crate::compression::{BlockCodec, InternalCodec};
+use crate::compression::{BlockCodec, DecompressLength, InternalCodec};
+use crate::compression::io::CountingReader;
 use crate::error::{Result, ChdError};
 
 pub struct LzmaCodec {
@@ -57,12 +58,14 @@ impl InternalCodec for LzmaCodec {
     }
 
     // not sure if this works but
-    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<u64> {
-        let mut read = BufReader::new(input);
+    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressLength> {
+        let mut read = BufReader::new(CountingReader::new(input));
         let len = output.len();
         if let Ok(_) = lzma_decompress_with_params(&mut read, &mut output, None,
                                                    self.params.with_size( len as u64)) {
-            Ok(len as u64)
+
+
+            Ok(DecompressLength::new(len, read.into_inner().total_read()))
         } else {
             Err(ChdError::DecompressionError)
         }

@@ -1,5 +1,5 @@
 use flate2::{Decompress, FlushDecompress};
-use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, InternalCodec};
+use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{Result, ChdError};
 use crate::header::CodecType;
 
@@ -20,7 +20,7 @@ impl InternalCodec for ZlibCodec {
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
         self.engine.reset(false);
         let status = self.engine.decompress(input, output, FlushDecompress::Finish)
             .map_err(|_| ChdError::DecompressionError)?;
@@ -33,7 +33,8 @@ impl InternalCodec for ZlibCodec {
         if self.engine.total_out() != output.len() as u64 {
             return Err(ChdError::DecompressionError);
         }
-        return Ok(total_out);
+
+        return Ok(DecompressLength::new(total_out as usize, self.engine.total_in() as usize));
     }
 }
 

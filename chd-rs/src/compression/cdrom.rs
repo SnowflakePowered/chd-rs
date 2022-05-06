@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
-use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, InternalCodec};
+use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
 use crate::error::{Result, ChdError};
@@ -42,7 +42,7 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
             return Err(ChdError::CodecError)
         }
 
-        let mut buffer = vec![0u8; hunk_size as usize];
+        let buffer = vec![0u8; hunk_size as usize];
         Ok(CdBlockCodec {
             engine: Engine::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA)?,
             sub_engine: SubEngine::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SUBCODE_DATA)?,
@@ -50,9 +50,9 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<u64> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
-        let frames = input.len() / CD_FRAME_SIZE as usize;
+        let frames = output.len() / CD_FRAME_SIZE as usize;
         let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
         let ecc_bytes = (frames + 7) / 8;
         let header_bytes = ecc_bytes + complen_bytes;
@@ -64,11 +64,11 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
         }
 
         // decode frame data
-        self.engine.decompress(&input[header_bytes..][..complen_base as usize],
+        let frame_res = self.engine.decompress(&input[header_bytes..][..complen_base as usize],
                                &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize])?;
 
         // WANT_SUBCODE
-        self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
+        let sub_res = self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
                                    &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize])?;
 
 
@@ -91,6 +91,6 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
                 sector_slice.generate_ecc();
             }
         }
-        Ok(0)
+        Ok(frame_res + sub_res)
     }
 }

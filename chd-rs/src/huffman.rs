@@ -41,8 +41,13 @@ impl From<bitreader::BitReaderError> for HuffmanError {
 }
 #[derive(Default, Clone)]
 pub struct HuffmanNode<'a> {
+    // Parent and count are needed for write but not for read only.
+    #[cfg(feature = "write")]
     parent: usize,
+    #[cfg(feature = "write")]
     count: u32,
+    #[cfg(feature = "write")]
+    histogram: Vec<u8>,
     weight: u32,
     bits: u32,
     num_bits: u8,
@@ -148,6 +153,8 @@ impl <'a> HuffmanDecoder<'a> {
     fn assign_canonical_codes(&mut self) -> Result<(), HuffmanError> {
         // todo: use iterators
         let mut curr_start = 0;
+
+        // technically we need the histogram but not if we're read only
         let mut histogram = [0u32; 33];
 
         // Fill in histogram of bit lengths

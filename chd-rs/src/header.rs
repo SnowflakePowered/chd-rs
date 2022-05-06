@@ -2,7 +2,7 @@ use std::io::{Read, Seek, SeekFrom, Cursor};
 use std::ffi::CStr;
 use byteorder::{ReadBytesExt, BigEndian};
 use crate::error::{ChdError, Result};
-use crate::metadata::{MetadataIter, KnownMetadata};
+use crate::metadata::{IterMetadataEntry, KnownMetadata};
 use crate::make_tag;
 use lazy_static::lazy_static;
 use num_derive::FromPrimitive;
@@ -155,8 +155,8 @@ impl ChdHeader {
 
     pub const fn meta_offset(&self) -> Option<u64> {
         match self {
-            ChdHeader::V1Header(c) => None,
-            ChdHeader::V2Header(c) => None,
+            ChdHeader::V1Header(_c) => None,
+            ChdHeader::V2Header(_c) => None,
             ChdHeader::V3Header(c) => Some(c.meta_offset),
             ChdHeader::V4Header(c) => Some(c.meta_offset),
             ChdHeader::V5Header(c) => Some(c.meta_offset)
@@ -169,7 +169,7 @@ impl ChdHeader {
             ChdHeader::V2Header(c) => Some(c.flags),
             ChdHeader::V3Header(c) => Some(c.flags),
             ChdHeader::V4Header(c) => Some(c.flags),
-            ChdHeader::V5Header(c) => None
+            ChdHeader::V5Header(_c) => None
         }
     }
 
@@ -364,9 +364,9 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
     return match (version, length) {
         (1, CHD_V1_HEADER_SIZE) => Ok(ChdHeader::V1Header(read_v1_header(&mut reader, version, length)?)),
         (2, CHD_V2_HEADER_SIZE) => Ok(ChdHeader::V2Header(read_v1_header(&mut reader, version, length)?)),
-        (3, CHD_V3_HEADER_SIZE) => Ok(ChdHeader::V3Header(read_v3_header(&mut reader, version, length, chd)?)),
-        (4, CHD_V4_HEADER_SIZE) => Ok(ChdHeader::V4Header(read_v4_header(&mut reader, version, length, chd)?)),
-        (5, CHD_V5_HEADER_SIZE) => Ok(ChdHeader::V5Header(read_v5_header(&mut reader, version, length)?)),
+        (3, CHD_V3_HEADER_SIZE) => Ok(ChdHeader::V3Header(read_v3_header(&mut reader, length, chd)?)),
+        (4, CHD_V4_HEADER_SIZE) => Ok(ChdHeader::V4Header(read_v4_header(&mut reader, length, chd)?)),
+        (5, CHD_V5_HEADER_SIZE) => Ok(ChdHeader::V5Header(read_v5_header(&mut reader, length)?)),
         (1 | 2 | 3 | 4 | 5, _) => Err(ChdError::InvalidData),
         _ => Err(ChdError::UnsupportedVersion)
     }
@@ -420,7 +420,7 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
     })
 }
 
-fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<HeaderV3> {
+fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, length: u32, chd: &mut F) -> Result<HeaderV3> {
     header.seek(SeekFrom::Start(16))?;
     let mut md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
     let mut parent_md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
@@ -458,7 +458,7 @@ fn read_v3_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, 
     })
 }
 
-fn read_v4_header<T: Read + Seek, F: Read + Seek>(header: &mut T, version: u32, length: u32, chd: &mut F) -> Result<HeaderV4> {
+fn read_v4_header<T: Read + Seek, F: Read + Seek>(header: &mut T, length: u32, chd: &mut F) -> Result<HeaderV4> {
     header.seek(SeekFrom::Start(16))?;
     let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
     let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
@@ -500,7 +500,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         static ref RE_BPS: Regex = Regex::new(r"(?-u)(BPS:)(\d+)").unwrap();
     }
 
-    let metas: Vec<_> = MetadataIter::from_stream(chd, off).collect();
+    let metas: Vec<_> = IterMetadataEntry::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas.iter().find(|&e| e.metatag == KnownMetadata::HardDisk as u32) {
         if let Ok(text) = hard_disk.read(chd) {
             let caps = RE_BPS.captures(&text.value)
@@ -521,7 +521,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     None
 }
 
-fn read_v5_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<HeaderV5> {
+fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV5> {
     header.seek(SeekFrom::Start(16))?;
     let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
     let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
