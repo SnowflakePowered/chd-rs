@@ -8,6 +8,7 @@ use bitreader::BitReaderError;
 use crate::huffman::HuffmanError;
 
 #[derive(Debug)]
+#[repr(C)]
 pub enum ChdError {
     None,
     NoInterface,

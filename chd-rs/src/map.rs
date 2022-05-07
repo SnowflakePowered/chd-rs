@@ -6,13 +6,17 @@ use crate::header::{ChdHeader, HeaderV5};
 use byteorder::{ReadBytesExt, BigEndian, WriteBytesExt};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
-use crc16::{CCITT_FALSE, State};
 use crate::huffman::HuffmanDecoder;
 use crate::map;
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk
 const MAP_ENTRY_FLAG_NO_CRC: u8 = 0x10; // no crc is present
+
+use crc::{Crc, CRC_16_IBM_3740};
+// CRC16 table in hashing.cpp indicates CRC16/CCITT, but constants
+// are consistent with CRC16/CCITT-FALSE, which is CRC-16/IBM-3740
+const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
 
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
@@ -35,7 +39,7 @@ pub enum V5CompressionType {
 
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
-pub enum V34EntryType {
+pub enum LegacyEntryType {
     Invalid = 0, // invalid
     Compressed = 1, // standard compression
     Uncompressed = 2, // uncompressed
@@ -58,6 +62,25 @@ pub struct LegacyMapEntry {
     flags: u8, // flags
 }
 
+impl LegacyMapEntry {
+    pub fn entry_type(&self) -> Result<LegacyEntryType> {
+        LegacyEntryType::from_u8(self.flags & MAP_ENTRY_FLAG_TYPE_MASK)
+            .ok_or(ChdError::UnsupportedFormat)
+    }
+
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+
+    pub fn length(&self) -> u32 {
+        self.length
+    }
+
+    pub fn crc(&self) -> Option<u32> {
+        self.crc
+    }
+}
+
 pub enum ChdMap {
     V5(RawMap), // compressed
     Legacy(MapList)
@@ -75,8 +98,8 @@ impl <'a> MapEntry<'a> {
             MapEntry::V5Compressed(_) => true,
             MapEntry::V5Uncompressed(_, _) => false,
             MapEntry::LegacyEntry(e) => {
-                if let Some(V34EntryType::Uncompressed) =
-                    V34EntryType::from_u8(e.flags & MAP_ENTRY_FLAG_TYPE_MASK) {
+                if let Some(LegacyEntryType::Uncompressed) =
+                    LegacyEntryType::from_u8(e.flags & MAP_ENTRY_FLAG_TYPE_MASK) {
                     false
                 } else {
                     true
@@ -92,6 +115,10 @@ impl <'a> MapEntry<'a> {
         }
     }
 
+    /// Get the size of this compressed/uncompressed block.
+    ///
+    /// For uncompressed case, this will be the same size as the
+    /// hunk size of the CHD.
     pub fn block_size(&self) -> Result<u32> {
         match self {
             MapEntry::V5Compressed(r) => {
@@ -242,8 +269,8 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(header: &ChdHead
             _ => unreachable!()
         };
 
-        if let Some(V34EntryType::Compressed) | Some(V34EntryType::Uncompressed) =
-            V34EntryType::from_u8(entry.flags & MAP_ENTRY_FLAG_TYPE_MASK) {
+        if let Some(LegacyEntryType::Compressed) | Some(LegacyEntryType::Uncompressed) =
+            LegacyEntryType::from_u8(entry.flags & MAP_ENTRY_FLAG_TYPE_MASK) {
             max_off = std::cmp::max(max_off, entry.offset + entry.length as u64);
         }
         map.push(entry);
@@ -269,9 +296,9 @@ fn read_map_entry_v1(val: u64, hunk_bytes: u32) -> LegacyMapEntry {
     let length = (val >> 44) as u32;
     let flags = MAP_ENTRY_FLAG_NO_CRC |
         if length == hunk_bytes {
-            V34EntryType::Uncompressed as u8
+            LegacyEntryType::Uncompressed as u8
         } else {
-            V34EntryType::Compressed as u8
+            LegacyEntryType::Compressed as u8
         };
     let offset = (val << 20) >> 20;
     LegacyMapEntry {
@@ -413,7 +440,7 @@ fn read_map_v5<F: Read + Seek>(header: &HeaderV5, mut file: F, is_compressed: bo
         cursor.write_u16::<BigEndian>(crc)?;
     }
 
-    if State::<CCITT_FALSE>::calculate(&raw_map[0..header.hunk_count as usize * 12]) != map_crc {
+    if CRC16.checksum(&raw_map[0..header.hunk_count as usize * 12]) != map_crc {
         return Err(ChdError::DecompressionError)
     }
 

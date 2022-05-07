@@ -85,7 +85,7 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
 
             // this may be a bit overkill..
             let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>
-            ::try_from(&mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize])?;
+                ::try_from(&mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize])?;
             if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
                 sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
                 sector_slice.generate_ecc();
