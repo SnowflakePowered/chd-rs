@@ -9,7 +9,7 @@ use crate::metadata::IterMetadataEntry;
 use crate::map::{ChdMap, MapEntry, LegacyEntryType, V5CompressionType};
 
 use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 
 // CRC16 table in hashing.cpp indicates CRC16/CCITT, but constants
 // are consistent with CRC16/CCITT-FALSE, which is CRC-16/IBM-3740
@@ -334,20 +334,102 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
         } else {
             // compressed case
             match map_entry.block_type().map(V5CompressionType::from_u8).flatten() {
-                Some(V5CompressionType::CompressionType0
-                     | V5CompressionType::CompressionType1
-                     | V5CompressionType::CompressionType2
-                     | V5CompressionType::CompressionType3) => {
-                    todo!()
+                Some(comptype @ V5CompressionType::CompressionType0
+                     | comptype @ V5CompressionType::CompressionType1
+                     | comptype @ V5CompressionType::CompressionType2
+                     | comptype @ V5CompressionType::CompressionType3) => {
+                    // buffer the compressed data
+                    self.buffer_compressed()?;
+
+                    // ensure output_buffer can hold hunk_bytes output
+                    self.output_buffer.resize(self.inner.header().hunk_bytes() as usize, 0);
+                    return if let Some(codec) = self.inner.codecs
+                            .get_mut(comptype.to_usize().unwrap()) {
+                        if let Some(buffer) = self.compressed_buffer.as_deref_mut() {
+                            let res = codec.decompress(buffer, &mut self.output_buffer)?;
+
+                            match block_crc.and_then(|f| f.to_u16()) {
+                                Some(crc) if CRC16.checksum(&self.output_buffer) != crc => {
+                                    return Err(ChdError::DecompressionError)
+                                }
+                                _ => {}
+                            }
+
+                            Ok(res.total_out())
+                        } else {
+                            Err(ChdError::OutOfMemory)
+                        }
+                    } else {
+                        Err(ChdError::UnsupportedFormat)
+                    }
                 }
                 Some(V5CompressionType::CompressionNone) => {
-                    todo!()
+                    // ensure output_buffer can hold hunk_bytes output
+                    self.output_buffer.resize(self.inner.header().hunk_bytes() as usize, 0);
+
+                    let res = self.read_uncompressed()?;
+
+                    match block_crc.and_then(|f| f.to_u16()) {
+                        Some(crc) if CRC16.checksum(&self.output_buffer) != crc => {
+                            return Err(ChdError::DecompressionError)
+                        }
+                        _ => {
+                            Ok(res)
+                        }
+                    }
                 }
                 Some(V5CompressionType::CompressionSelf) => {
-                    todo!()
+                    // todo: optimize to reuse buffer
+                    let mut self_hunk = self.inner.hunk(block_off as u32)?;
+                    let res = self_hunk.buffer_hunk()?;
+                    let (c, o) = self_hunk.into_buffer();
+                    self.compressed_buffer = c;
+                    self.output_buffer = o;
+                    Ok(res)
                 }
                 Some(V5CompressionType::CompressionParent) => {
-                    todo!()
+                    // todo: optimize to reuse internal buffers
+                    let units_in_hunk =
+                        self.inner.header().hunk_bytes() / self.inner.header().unit_bytes();
+                    match self.inner.parent.as_deref_mut() {
+                        None => Err(ChdError::RequiresParent),
+                        Some(parent) => {
+                            let mut parent_hunk = parent.hunk(block_off as u32 / units_in_hunk)?;
+                            let res_1 = parent_hunk.buffer_hunk()?;
+                            let (c_1, o_1) = parent_hunk.into_buffer();
+
+                            if block_off % units_in_hunk as u64 == 0 {
+                                self.compressed_buffer = c_1;
+                                self.output_buffer = o_1;
+                                return Ok(res_1)
+                            }
+
+                            let remainder_in_hunk = block_off as usize % units_in_hunk as usize;
+
+                            let mut parent_hunk = parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
+                            let res_2 = parent_hunk.buffer_hunk()?;
+                            let (_c_2, o_2) = parent_hunk.into_buffer();
+
+                            let hunk_split = (units_in_hunk as usize - remainder_in_hunk) *
+                                self.inner.header().unit_bytes() as usize;
+
+                            self.output_buffer.resize(self.inner.header().hunk_bytes() as usize, 0);
+                            self.output_buffer[..hunk_split].copy_from_slice(
+                                &o_1[remainder_in_hunk * self.inner.header().hunk_bytes() as usize..][..hunk_split]);
+                            self.output_buffer[hunk_split..].copy_from_slice(
+                                &o_1[..remainder_in_hunk * self.inner.header().unit_bytes() as usize]);
+                            self.compressed_buffer = None;
+
+                            match block_crc.and_then(|f| f.to_u16()) {
+                                Some(crc) if CRC16.checksum(&self.output_buffer) != crc => {
+                                    return Err(ChdError::DecompressionError)
+                                }
+                                _ => {
+                                    Ok(hunk_split + remainder_in_hunk * self.inner.header().unit_bytes() as usize)
+                                }
+                            }
+                        }
+                    }
                 }
                 _ => Err(ChdError::UnsupportedFormat)
             }
@@ -358,6 +440,8 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
     /// This is necessary because CHD is not streaming and can only read at a granularity of
     /// hunk_size, in order to support `Read`.
     fn buffer_hunk(&mut self) -> Result<usize> {
+        // todo: lift output_buffer borrow out of buffer_hunk.
+
         // https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/src/libchdr_chd.c#L2233
         match self.inner.header() {
             ChdHeader::V5Header(_) => self.buffer_hunk_v5(),

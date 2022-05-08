@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 
 pub mod header;
 pub mod error;
@@ -34,7 +35,7 @@ mod tests {
         let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
 
         let meta_datas: Vec<_> = metadatas.into_iter()
-            .map(|s| unsafe { String::from_utf8_unchecked(s.value ) })
+            .map(|s| String::from_utf8(s.value ).unwrap() )
                 .collect();
         println!("{:?}", meta_datas);
 
