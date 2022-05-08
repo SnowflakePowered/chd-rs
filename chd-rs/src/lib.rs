@@ -9,6 +9,7 @@ mod cdrom;
 mod compression;
 mod huffman;
 mod map;
+mod block_hash;
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32);
@@ -17,19 +18,14 @@ const fn make_tag(a: &[u8; 4]) -> u32 {
 #[cfg(test)]
 mod tests {
     use crate::chd::ChdFile;
-    use crate::header;
-    use crate::header::ChdHeader;
-    use crate::metadata;
     use crate::metadata::ChdMetadata;
     use std::convert::TryInto;
     use std::fs::File;
-    use std::io::Read;
 
     #[test]
     fn read_metas_test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
         let mut chd = ChdFile::open_stream(&mut f, None).expect("file");
-        let res = chd.header();
 
         let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
         let meta_datas: Vec<_> = metadatas

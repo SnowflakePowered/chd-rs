@@ -1,11 +1,17 @@
 [package]
 name = "chd"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
 license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["verify_block_crc", "want_subcode", "want_raw_data_sector"]
+verify_block_crc = []
+want_subcode = []
+want_raw_data_sector = []
 
 [dependencies]
 byteorder = "1"
@@ -18,3 +24,4 @@ lzma-rs = { path = "../lzma-rs" }
 claxon = "0.4"
 bitreader = "0.3.4"
 crc = "3"
+cfg-if = "1"

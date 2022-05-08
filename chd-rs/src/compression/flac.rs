@@ -1,9 +1,9 @@
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::mem;
 
-use byteorder::{BigEndian, LittleEndian, NativeEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
+use cfg_if::cfg_if;
 use claxon::frame::FrameReader;
-use claxon::input::BufferedReader;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 use crate::compression::zlib::ZlibCodec;
@@ -14,12 +14,6 @@ use crate::header::CodecType;
 struct FlacCodec {
     buffer: Vec<i32>,
 }
-
-// #[cfg(target_endian = "big")]
-// const IS_LITTLE_ENDIAN: bool = false;
-//
-// #[cfg(target_endian = "little")]
-// const IS_LITTLE_ENDIAN: bool = true;
 
 impl InternalCodec for FlacCodec {
     fn is_lossy(&self) -> bool {
@@ -124,11 +118,17 @@ impl InternalCodec for CdFlCodec {
             &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
         )?;
 
-        let sub_res = self.sub_engine.decompress(
-            &input[frame_res.total_in()..],
-            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
-                [..frames * CD_MAX_SUBCODE_DATA as usize],
-        )?;
+        cfg_if! {
+            if #[cfg(feature = "want_subcode")] {
+                let sub_res = self.sub_engine.decompress(
+                    &input[frame_res.total_in()..],
+                    &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+                        [..frames * CD_MAX_SUBCODE_DATA as usize],
+                )?;
+            } else {
+              let sub_res =  DecompressLength::default();
+            }
+        };
 
         // reassemble the data into the buffer
         for frame_num in 0..frames {
@@ -138,7 +138,7 @@ impl InternalCodec for CdFlCodec {
                         [..CD_MAX_SECTOR_DATA as usize],
                 );
 
-            // WANT_SUBCODE
+            #[cfg(feature = "want_subcode")]
             output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
                 [..CD_MAX_SUBCODE_DATA as usize]
                 .copy_from_slice(
@@ -147,6 +147,7 @@ impl InternalCodec for CdFlCodec {
                         [..CD_MAX_SUBCODE_DATA as usize],
                 );
         }
+
         Ok(frame_res + sub_res)
     }
 }

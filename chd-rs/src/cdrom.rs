@@ -7,6 +7,7 @@ pub const CD_MAX_SECTOR_DATA: u32 = 2352;
 pub const CD_MAX_SUBCODE_DATA: u32 = 96;
 pub const CD_FRAME_SIZE: u32 = CD_MAX_SECTOR_DATA + CD_MAX_SUBCODE_DATA;
 pub const CD_SYNC_NUM_BYTES: usize = 12;
+
 pub const CD_SYNC_HEADER: [u8; CD_SYNC_NUM_BYTES] = [
     0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
 ];

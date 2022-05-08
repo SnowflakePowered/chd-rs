@@ -1,24 +1,16 @@
 use crate::compression::CompressionCodec;
 use crate::error::{ChdError, Result};
+use crate::block_hash::ChdBlockChecksum;
 use crate::header::ChdHeader;
 use crate::map::{ChdMap, LegacyEntryType, MapEntry, V5CompressionType};
 use crate::metadata::IterMetadataEntry;
+
 use byteorder::{BigEndian, WriteBytesExt};
+use crc::Crc;
+use num_traits::{FromPrimitive, ToPrimitive};
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
-
-use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
-use num_traits::{FromPrimitive, ToPrimitive};
-
-// CRC16 table in hashing.cpp indicates CRC16/CCITT, but constants
-// are consistent with CRC16/CCITT-FALSE, which is CRC-16/IBM-3740
-const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
-
-// The polynomial matches up (0x04c11db7 reflected = 0xedb88320), and
-// checking with zlib crc32.c matches the check 0xcbf43926 for
-// "12345678".
-const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 pub struct ChdFile<F: Read + Seek> {
     file: F,
@@ -32,7 +24,6 @@ pub struct ChdHunk<'a, F: Read + Seek> {
     inner: &'a mut ChdFile<F>,
     hunk_num: u32,
     compressed_buffer: Option<Vec<u8>>,
-    cached: bool,
 }
 
 impl<F: Read + Seek> ChdFile<F> {
@@ -99,7 +90,6 @@ impl<F: Read + Seek> ChdFile<F> {
             inner: self,
             hunk_num,
             compressed_buffer: None,
-            cached: false,
         })
     }
 
@@ -107,7 +97,6 @@ impl<F: Read + Seek> ChdFile<F> {
         &mut self,
         hunk_num: u32,
         compressed_buffer: Option<Vec<u8>>,
-        output_buffer: Vec<u8>,
     ) -> Result<ChdHunk<F>> {
         if hunk_num >= self.header.hunk_count() {
             return Err(ChdError::HunkOutOfRange);
@@ -117,7 +106,6 @@ impl<F: Read + Seek> ChdFile<F> {
             inner: self,
             hunk_num,
             compressed_buffer,
-            cached: false,
         })
     }
 }
@@ -202,7 +190,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         let block_crc = map_entry.block_crc()?;
         let block_off = map_entry.block_offset()?;
 
-        let value = match map_entry {
+        match map_entry {
             MapEntry::LegacyEntry(entry) => {
                 match entry.entry_type()? {
                     LegacyEntryType::Compressed => {
@@ -213,28 +201,14 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                             let res =
                                 &self.inner.codecs[0].decompress(&buffer[..block_len], dest)?;
 
-                            // #[cfg(feature = "checksum")]
-                            match block_crc {
-                                Some(crc) if CRC32.checksum(dest) != crc => {
-                                    return Err(ChdError::DecompressionError)
-                                }
-                                _ => (),
-                            };
-                            Ok(res.total_out())
+                            Crc::<u32>::verify_block_checksum(block_crc, dest, res.total_out())
                         } else {
                             Err(ChdError::OutOfMemory)
                         };
                     }
                     LegacyEntryType::Uncompressed => {
                         let res = self.read_uncompressed(dest)?;
-
-                        match block_crc {
-                            Some(crc) if CRC32.checksum(&dest) != crc => {
-                                return Err(ChdError::DecompressionError)
-                            }
-                            _ => (),
-                        };
-                        Ok(res)
+                        Crc::<u32>::verify_block_checksum(block_crc, dest, res)
                     }
                     LegacyEntryType::Mini => {
                         let mut cursor = Cursor::new(dest);
@@ -250,13 +224,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                             bytes_read_into += 1;
                         }
 
-                        match block_crc {
-                            Some(crc) if CRC32.checksum(dest) != crc => {
-                                return Err(ChdError::DecompressionError)
-                            }
-                            _ => (),
-                        };
-                        Ok(bytes_read_into)
+                        Crc::<u32>::verify_block_checksum(block_crc, dest, bytes_read_into)
                     }
                     LegacyEntryType::SelfHunk => {
                         // todo: optimize to reuse internal buffers
@@ -284,9 +252,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                 }
             }
             _ => Err(ChdError::InvalidParameter),
-        }?;
-        self.cached = true;
-        Ok(value)
+        }
     }
 
     fn buffer_hunk_v5(&mut self, dest: &mut [u8]) -> Result<usize> {
@@ -302,7 +268,6 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
 
         // block_off is already accurate for uncompressed case
         let block_off = map_entry.block_offset()?;
-        let block_len = map_entry.block_size()? as usize;
         let block_crc = map_entry.block_crc()?;
 
         let has_parent = self.inner.header.has_parent();
@@ -350,13 +315,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                     if let Some(codec) = self.inner.codecs.get_mut(comptype.to_usize().unwrap()) {
                         if let Some(buffer) = self.compressed_buffer.as_deref_mut() {
                             let res = codec.decompress(buffer, dest)?;
-
-                            match block_crc.and_then(|f| f.to_u16()) {
-                                Some(crc) if CRC16.checksum(dest) != crc => {
-                                    Err(ChdError::DecompressionError)
-                                }
-                                _ => Ok(res.total_out()),
-                            }
+                            Crc::<u16>::verify_block_checksum(block_crc, dest, res.total_out())
                         } else {
                             Err(ChdError::OutOfMemory)
                         }
@@ -366,13 +325,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                 }
                 Some(V5CompressionType::CompressionNone) => {
                     let res = self.read_uncompressed(dest)?;
-
-                    match block_crc.and_then(|f| f.to_u16()) {
-                        Some(crc) if CRC16.checksum(dest) != crc => {
-                            return Err(ChdError::DecompressionError)
-                        }
-                        _ => Ok(res),
-                    }
+                    Crc::<u16>::verify_block_checksum(block_crc, dest, res)
                 }
                 Some(V5CompressionType::CompressionSelf) => {
                     // todo: optimize to reuse buffer
@@ -413,7 +366,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
 
                             let mut parent_hunk =
                                 parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
-                            let res_2 = parent_hunk.read_hunk(&mut buf)?;
+                            let _res_2 = parent_hunk.read_hunk(&mut buf)?;
                             let _c = parent_hunk.into_buffer();
 
                             dest[hunk_split..].copy_from_slice(
@@ -421,13 +374,11 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                                     * self.inner.header().unit_bytes() as usize],
                             );
                             self.compressed_buffer = None;
-
-                            match block_crc.and_then(|f| f.to_u16()) {
-                                Some(crc) if CRC16.checksum(&dest) != crc => {
-                                    return Err(ChdError::DecompressionError)
-                                }
-                                _ => Ok(hunk_split + remainder_in_hunk * unit_bytes as usize),
-                            }
+                            Crc::<u16>::verify_block_checksum(
+                                block_crc,
+                                dest,
+                                hunk_split + remainder_in_hunk * unit_bytes as usize,
+                            )
                         }
                     }
                 }

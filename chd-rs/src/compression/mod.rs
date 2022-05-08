@@ -45,7 +45,7 @@ pub trait InternalCodec {
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength>;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct DecompressLength {
     bytes_out: usize,
     bytes_read: usize,
