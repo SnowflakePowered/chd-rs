@@ -314,8 +314,8 @@ fn read_map_entry_v3(buf: &[u8; V3_MAP_ENTRY_SIZE]) -> Result<LegacyMapEntry> {
     let mut read = Cursor::new(buf);
     let offset = read.read_u64::<BigEndian>()?;
     let crc = read.read_u32::<BigEndian>()?;
-    // this widening shift is likely wrong... what we really want is bottom out to 0.
-    let length: u32 = read.read_u16::<BigEndian>()? as u32 | buf[14].checked_shl(16).unwrap_or(0) as u32;
+    // confirm widening shift.
+    let length: u32 = read.read_u16::<BigEndian>()? as u32 | (buf[14] as u32) << 16;
     let flags = buf[15];
     Ok(LegacyMapEntry {
         offset,

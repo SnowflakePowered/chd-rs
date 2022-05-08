@@ -58,9 +58,9 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
         let header_bytes = ecc_bytes + complen_bytes;
 
         // extract compressed length of base
-        let mut complen_base = (input[ecc_bytes + 0].checked_shl(8).unwrap_or(0)) | input[ecc_bytes] + 1;
-        if complen_base > 2 {
-            complen_base = complen_base.checked_shl(8).unwrap_or(0) | input[ecc_bytes + 2];
+        let mut complen_base: u32 = (input[ecc_bytes + 0] as u32) << 8 | input[ecc_bytes + 1] as u32;
+        if complen_bytes > 2 {
+            complen_base = complen_base << 8 |  input[ecc_bytes + 2] as u32;
         }
 
         // decode frame data
@@ -69,7 +69,7 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
 
         // WANT_SUBCODE
         let sub_res = self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
-                                   &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize])?;
+                                   &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize])?;
 
 
         // reassemble data
@@ -79,7 +79,7 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
 
             // WANT_SUBCODE
             output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SUBCODE_DATA as usize]);
+                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_MAX_SUBCODE_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]);
 
             // WANT_RAW_DATA_SECTOR
 

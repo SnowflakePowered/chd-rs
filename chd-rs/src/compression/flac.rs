@@ -130,16 +130,18 @@ impl InternalCodec for FlacCodec {
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
         // should do the equivalent of flac_decoder_decode_interleaved
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_flac.c#L158
-        let frames = output.len() / CD_FRAME_SIZE as usize;
+        let frames = output.len() / CD_MAX_SECTOR_DATA as usize;
 
-        // let num_samples = frames * CD_MAX_SECTOR_DATA as usize / 4;
+        let num_samples = frames * CD_MAX_SECTOR_DATA as usize / 4;
 
+        let block_size = flac_optimal_size(frames as u32 * CD_MAX_SECTOR_DATA);
         // let mut samples_read = num_samples;
         let mut flac_header = ChdFlacHeader::new(44100, 2,
-                                             flac_optimal_size(frames as u32 * CD_MAX_SECTOR_DATA));
+                                             block_size);
 
-        let flac_buf = BufferedReader::new(CountingReader::new(flac_header.as_read(input)));
+        let flac_buf = CountingReader::new(BufferedReader::new(input));
         let mut frame_read = FrameReader::new(flac_buf);
+
         let mut buf = Vec::new();
 
         // todo: fix this so we write up to the end of the output buffer
@@ -151,25 +153,35 @@ impl InternalCodec for FlacCodec {
         let mut cursor = Cursor::new(output);
         // lt? lte?
 
-        let mut bytes_written = 0;
-        while bytes_written <= output_len {
-            if let Ok(Some(block)) = frame_read.read_next_or_eof(buf) {
-                // always the interleaved case.
-                for sample in 0..block.len() {
-                    for channel in 0..block.channels() {
-                        let sample_data = block.sample(channel, sample) as u16;
-                        cursor.write_i16::<NativeEndian>(sample_data as i16)?;
-                        bytes_written += 2;
+        let mut samples_written = 0;
+
+        loop {
+            match frame_read.read_next_or_eof(buf) {
+                Ok(Some(block)) => {
+                    if samples_written >= num_samples {
+                        break;
                     }
+                    for sample in 0..block.len() / block.channels() {
+                        for channel in 0..block.channels() {
+                            let sample_data = block.sample(channel, sample) as u16;
+                            cursor.write_i16::<NativeEndian>(sample_data as i16)?;
+                        }
+                        samples_written += 2;
+                    }
+                    buf = block.into_buffer();
                 }
-                buf = block.into_buffer();
-            } else {
-                return Err(ChdError::DecompressionError)
+                Err(e) => {
+
+                    return Err(ChdError::DecompressionError);
+                }
+                _ => {
+                    return Err(ChdError::DecompressionError);
+                }
             }
         }
 
-        let bytes_in = frame_read.into_inner().into_inner().total_read();
-        Ok(DecompressLength::new(bytes_written, bytes_in - ChdFlacHeader::len()))
+        let bytes_in = frame_read.into_inner().total_read();
+        Ok(DecompressLength::new(samples_written * 4, bytes_in))
     }
 }
 
@@ -213,7 +225,7 @@ impl InternalCodec for CdFlCodec {
 
         let sub_res =
             self.sub_engine.decompress(&input[frame_res.total_in()..],
-                                       &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize])?;
+                                       &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize])?;
 
         // reassemble the data into the buffer
         for frame_num in 0..frames {
@@ -222,7 +234,8 @@ impl InternalCodec for CdFlCodec {
 
             // WANT_SUBCODE
             output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SUBCODE_DATA as usize]);
+                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_MAX_SUBCODE_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]);
+
         }
         Ok(frame_res + sub_res)
     }
