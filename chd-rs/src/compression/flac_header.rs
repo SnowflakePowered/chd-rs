@@ -1,3 +1,12 @@
+/// Determine FLAC block size from 16-65535, and clamped to 2048 for sweet spot
+const fn flac_optimal_size(bytes: u32) -> u32 {
+    let mut hunkbytes = bytes / 4;
+    while hunkbytes > 2048 {
+        hunkbytes /= 2;
+    }
+    return hunkbytes;
+}
+
 const CHD_FLAC_HEADER_TEMPLATE: [u8; 0x2a] =
     [
         0x66, 0x4C, 0x61, 0x43,                         /* +00: 'fLaC' stream header */

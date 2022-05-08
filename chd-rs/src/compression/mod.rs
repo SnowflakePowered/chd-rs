@@ -7,7 +7,10 @@ mod none;
 mod zlib;
 mod lzma;
 mod cdrom;
-pub mod flac;
+mod flac;
+
+#[cfg(feature = "flac_header")]
+mod flac_header;
 
 pub mod codecs {
     pub use crate::compression::none::NoneCodec;

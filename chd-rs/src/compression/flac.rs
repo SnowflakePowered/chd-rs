@@ -1,5 +1,6 @@
 use std::io::{Cursor, Read};
-use byteorder::{NativeEndian, WriteBytesExt};
+use std::mem;
+use byteorder::{BigEndian, LittleEndian, NativeEndian, WriteBytesExt};
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use claxon::frame::FrameReader;
@@ -8,7 +9,9 @@ use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 use crate::compression::zlib::ZlibCodec;
 use crate::header::CodecType;
 
-struct FlacCodec;
+struct FlacCodec {
+    buffer: Vec<i32>
+}
 
 
 // #[cfg(target_endian = "big")]
@@ -17,14 +20,6 @@ struct FlacCodec;
 // #[cfg(target_endian = "little")]
 // const IS_LITTLE_ENDIAN: bool = true;
 
-/// Determine FLAC block size from 16-65535, and clamped to 2048 for sweet spot
-const fn flac_optimal_size(bytes: u32) -> u32 {
-    let mut hunkbytes = bytes / 4;
-    while hunkbytes > 2048 {
-        hunkbytes /= 2;
-    }
-    return hunkbytes;
-}
 
 impl InternalCodec for FlacCodec {
     fn is_lossy(&self) -> bool {
@@ -32,7 +27,9 @@ impl InternalCodec for FlacCodec {
     }
 
     fn new(_: u32) -> Result<Self> {
-        Ok(FlacCodec)
+        Ok(FlacCodec {
+            buffer: Vec::new()
+        })
     }
 
     /// Decompress FLAC data from raw input.
@@ -53,41 +50,31 @@ impl InternalCodec for FlacCodec {
 
         // We don't need to create a fake header since claxon will read raw FLAC frames just fine.
         let mut frame_read = FrameReader::new(flac_buf);
-
-        let mut buf = Vec::new();
-
-        // todo: fix this so we write up to the end of the output buffer
-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_flac.c
-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c
-        // https://github.com/mamedev/mame/blob/master/src/lib/util/flac.cpp#L614
-
-        let output_len = output.len();
         let mut cursor = Cursor::new(output);
-        // lt? lte?
 
         let mut samples_written = 0;
 
-        loop {
+        let mut buf = mem::take(&mut self.buffer);
+        while samples_written < num_samples {
             match frame_read.read_next_or_eof(buf) {
                 Ok(Some(block)) => {
-                    if samples_written >= num_samples {
-                        break;
-                    }
                     for sample in 0..block.len() / block.channels() {
                         for channel in 0..block.channels() {
                             let sample_data = block.sample(channel, sample) as u16;
-                            cursor.write_i16::<NativeEndian>(sample_data as i16)?;
+                            cursor.write_i16::<BigEndian>(sample_data as i16)?;
                         }
-                        samples_written += 2;
+                        samples_written += 1;
                     }
                     buf = block.into_buffer();
                 }
                 _ => {
+                    // if frame_read dies our buffer just gets eaten. The Error return for a failed
+                    // read does not expose the inner buffer.
                     return Err(ChdError::DecompressionError);
                 }
             }
         }
-
+        self.buffer = buf;
         let bytes_in = frame_read.into_inner().position();
         Ok(DecompressLength::new(samples_written * 4, bytes_in as usize))
     }
