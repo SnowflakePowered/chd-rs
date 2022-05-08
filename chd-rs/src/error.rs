@@ -1,11 +1,11 @@
+use crate::huffman::HuffmanError;
+use bitreader::BitReaderError;
 use std::array::TryFromSliceError;
 use std::error::Error;
-use std::fmt::Display;
 use std::ffi::FromBytesWithNulError;
+use std::fmt::Display;
 use std::io::ErrorKind;
 use std::str::Utf8Error;
-use bitreader::BitReaderError;
-use crate::huffman::HuffmanError;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -81,25 +81,25 @@ impl Display for ChdError {
 
 impl From<TryFromSliceError> for ChdError {
     fn from(_: TryFromSliceError) -> Self {
-        return ChdError::InvalidFile
+        return ChdError::InvalidFile;
     }
 }
 
 impl From<BitReaderError> for ChdError {
     fn from(_: BitReaderError) -> Self {
-        return ChdError::ReadError
+        return ChdError::ReadError;
     }
 }
 
 impl From<FromBytesWithNulError> for ChdError {
     fn from(_: FromBytesWithNulError) -> Self {
-        return ChdError::InvalidData
+        return ChdError::InvalidData;
     }
 }
 
 impl From<Utf8Error> for ChdError {
     fn from(_: Utf8Error) -> Self {
-        return ChdError::InvalidData
+        return ChdError::InvalidData;
     }
 }
 

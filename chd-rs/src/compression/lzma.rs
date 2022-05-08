@@ -1,8 +1,8 @@
-use std::io::Cursor;
+use crate::compression::{BlockCodec, DecompressLength, InternalCodec};
+use crate::error::{ChdError, Result};
 use lzma_rs::decode::lzma::LzmaParams;
 use lzma_rs::lzma_decompress_with_params;
-use crate::compression::{BlockCodec, DecompressLength, InternalCodec};
-use crate::error::{Result, ChdError};
+use std::io::Cursor;
 
 pub struct LzmaCodec {
     params: LzmaParams,
@@ -45,25 +45,22 @@ impl InternalCodec for LzmaCodec {
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
-
         // LZMA 19.0 uses lc = 3, lp = 0, pb = 2
-        let params = LzmaParams::new(3, 0, 2,
-                                     get_lzma_dict_size(9, hunk_size),
-                                     None);
+        let params = LzmaParams::new(3, 0, 2, get_lzma_dict_size(9, hunk_size), None);
 
-        Ok(LzmaCodec {
-            params
-        })
+        Ok(LzmaCodec { params })
     }
 
     // not sure if this works but
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressLength> {
         let mut read = Cursor::new(input);
         let len = output.len();
-        if let Ok(_) = lzma_decompress_with_params(&mut read, &mut output, None,
-                                                   self.params.with_size( len as u64)) {
-
-
+        if let Ok(_) = lzma_decompress_with_params(
+            &mut read,
+            &mut output,
+            None,
+            self.params.with_size(len as u64),
+        ) {
             Ok(DecompressLength::new(len, read.position() as usize))
         } else {
             Err(ChdError::DecompressionError)

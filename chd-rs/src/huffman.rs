@@ -1,8 +1,8 @@
-use std::marker::PhantomData;
+use bitreader::{BitReader, BitReaderError};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use bitreader::{BitReaderError, BitReader};
+use std::marker::PhantomData;
 
 type LookupValue = u16;
 
@@ -23,9 +23,9 @@ impl Display for HuffmanError {
         match self {
             HuffmanError::TooManyBits => f.write_str("Too many bits"),
             HuffmanError::InvalidData => f.write_str("Invalid data"),
-            HuffmanError::InputBufferTooSmall =>  f.write_str("Input buffer too small"),
-            HuffmanError::OutputBufferTooSmall =>  f.write_str("Output buffer too small"),
-            HuffmanError::InternalInconsistency =>  f.write_str("Internal inconsistency"),
+            HuffmanError::InputBufferTooSmall => f.write_str("Input buffer too small"),
+            HuffmanError::OutputBufferTooSmall => f.write_str("Output buffer too small"),
+            HuffmanError::InternalInconsistency => f.write_str("Internal inconsistency"),
             HuffmanError::TooManyContexts => f.write_str("Too many contexts"),
         }
     }
@@ -34,8 +34,16 @@ impl Display for HuffmanError {
 impl From<bitreader::BitReaderError> for HuffmanError {
     fn from(err: BitReaderError) -> Self {
         match err {
-            BitReaderError::NotEnoughData { position: _, length: _, requested: _}=> HuffmanError::InputBufferTooSmall,
-            BitReaderError::TooManyBitsForType { position: _, requested: _, allowed: _ } => HuffmanError::TooManyBits,
+            BitReaderError::NotEnoughData {
+                position: _,
+                length: _,
+                requested: _,
+            } => HuffmanError::InputBufferTooSmall,
+            BitReaderError::TooManyBitsForType {
+                position: _,
+                requested: _,
+                allowed: _,
+            } => HuffmanError::TooManyBits,
         }
     }
 }
@@ -51,27 +59,27 @@ pub struct HuffmanNode<'a> {
     weight: u32,
     bits: u32,
     num_bits: u8,
-    _phantom: PhantomData<&'a HuffmanNode<'a>> // want this phantomdata to ensure we can only compare nodes with the same lifetimes.
+    _phantom: PhantomData<&'a HuffmanNode<'a>>, // want this phantomdata to ensure we can only compare nodes with the same lifetimes.
 }
 
-impl <'a> PartialEq for HuffmanNode<'a> {
+impl<'a> PartialEq for HuffmanNode<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.bits == other.bits
     }
 }
 
-impl <'a> PartialOrd for HuffmanNode<'a> {
+impl<'a> PartialOrd for HuffmanNode<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // todo check impl
         if self.weight != other.weight {
             //  node2->weight - node1->weight;
-            return Some(other.weight.cmp(&self.weight))
+            return Some(other.weight.cmp(&self.weight));
         }
         if self.bits == other.bits {
-            return None
+            return None;
         }
         // (int)node1->bits - (int)node2->bits;
-        return Some(self.bits.cmp(&other.bits))
+        return Some(self.bits.cmp(&other.bits));
     }
 }
 
@@ -82,11 +90,11 @@ pub struct HuffmanDecoder<'a> {
     huffnode_array: Vec<HuffmanNode<'a>>,
 }
 
-impl <'a> HuffmanDecoder<'a> {
+impl<'a> HuffmanDecoder<'a> {
     fn new(num_codes: usize, max_bits: u8) -> Result<HuffmanDecoder<'a>, HuffmanError> {
         // todo: limit to 24
         if max_bits > 24 {
-            return Err(HuffmanError::TooManyBits)
+            return Err(HuffmanError::TooManyBits);
         }
 
         Ok(HuffmanDecoder {
@@ -97,18 +105,20 @@ impl <'a> HuffmanDecoder<'a> {
         })
     }
 
-    pub fn from_tree_rle(num_codes: usize, max_bits: u8, reader: &mut BitReader<'_>)
-            -> Result<HuffmanDecoder<'a>, HuffmanError> {
+    pub fn from_tree_rle(
+        num_codes: usize,
+        max_bits: u8,
+        reader: &mut BitReader<'_>,
+    ) -> Result<HuffmanDecoder<'a>, HuffmanError> {
         let mut decoder = HuffmanDecoder::new(num_codes, max_bits)?;
         let num_bits = match max_bits {
-            0..= 7 => 3, // < 8
-            8..= 15 => 4, // >= 8
-            _ => 5, // >= 16
+            0..=7 => 3,  // < 8
+            8..=15 => 4, // >= 8
+            _ => 5,      // >= 16
         };
 
         let mut curr_node = 0;
         while curr_node < num_codes {
-
             let node_bits = reader.read_u8(num_bits)?;
 
             // 1 is an escape code
@@ -118,7 +128,7 @@ impl <'a> HuffmanDecoder<'a> {
                 continue;
             }
 
-            let node_bits =  reader.read_u8(num_bits)?;
+            let node_bits = reader.read_u8(num_bits)?;
             if node_bits == 1 {
                 // double 1 is just a 1
                 decoder.huffnode_array[curr_node].num_bits = node_bits;
@@ -129,12 +139,12 @@ impl <'a> HuffmanDecoder<'a> {
             let rep_count = reader.read_u8(num_bits)? + 3;
             for _ in 0..rep_count {
                 decoder.huffnode_array[curr_node].num_bits = node_bits;
-                curr_node += 1 ;
+                curr_node += 1;
             }
         }
 
         if curr_node != decoder.num_codes {
-            return Err(HuffmanError::InvalidData)
+            return Err(HuffmanError::InvalidData);
         }
 
         decoder.assign_canonical_codes()?;
@@ -161,7 +171,7 @@ impl <'a> HuffmanDecoder<'a> {
         for curr_code in 0..self.num_codes {
             let node = &self.huffnode_array[curr_code];
             if node.num_bits > self.max_bits {
-                return Err(HuffmanError::InternalInconsistency)
+                return Err(HuffmanError::InternalInconsistency);
             }
             if node.num_bits <= 32 {
                 histogram[node.num_bits as usize] += 1;
@@ -172,7 +182,7 @@ impl <'a> HuffmanDecoder<'a> {
         for code_len in (1..33).rev() {
             let next_start = (curr_start + histogram[code_len]) >> 1;
             if code_len != 1 && next_start * 2 != (curr_start + histogram[code_len]) {
-                return Err(HuffmanError::InternalInconsistency)
+                return Err(HuffmanError::InternalInconsistency);
             }
             histogram[code_len] = curr_start;
             curr_start = next_start

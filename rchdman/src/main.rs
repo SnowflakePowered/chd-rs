@@ -1,21 +1,24 @@
+use anyhow::anyhow;
+use chd::chd::ChdFile;
+use chd::header;
+use chd::header::{ChdHeader, CodecType};
+use clap::{Parser, Subcommand};
+use num_traits::cast::FromPrimitive;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{Read, Seek};
 use std::path::PathBuf;
-use anyhow::anyhow;
-use clap::{Parser, Subcommand};
 use thousands::Separable;
-use chd::chd::ChdFile;
-use chd::header;
-use chd::header::{ChdHeader, CodecType};
-use num_traits::cast::FromPrimitive;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
     if path.exists() && path.is_file() {
-        return Ok(path)
+        return Ok(path);
     }
-    Err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found or not a file."))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "File not found or not a file.",
+    ))
 }
 
 #[derive(Parser)]
@@ -36,7 +39,7 @@ enum Commands {
 
         /// output additional information
         #[clap(short, long)]
-        verbose: bool
+        verbose: bool,
     },
 }
 
@@ -46,7 +49,7 @@ fn get_file_version(chd: &ChdHeader) -> usize {
         ChdHeader::V2Header(_) => 2,
         ChdHeader::V3Header(_) => 3,
         ChdHeader::V4Header(_) => 4,
-        ChdHeader::V5Header(_) => 5
+        ChdHeader::V5Header(_) => 5,
     }
 }
 
@@ -114,15 +117,20 @@ fn print_compression(header: &ChdHeader) {
 }
 
 fn to_fourcc(fourcc: u32) -> anyhow::Result<[char; 4]> {
-    let parts = [(fourcc >> 24) & 0xff, (fourcc >> 16) & 0xff, (fourcc >> 8) & 0xff, fourcc & 0xff];
+    let parts = [
+        (fourcc >> 24) & 0xff,
+        (fourcc >> 16) & 0xff,
+        (fourcc >> 8) & 0xff,
+        fourcc & 0xff,
+    ];
     let res = parts.map(|e| char::from_u32(e));
     if res.iter().any(|f| f.is_none()) {
-        return Err(anyhow!("unable to parse"))
+        return Err(anyhow!("unable to parse"));
     }
     Ok(res.map(Option::unwrap))
 }
 
-fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()>{
+fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
     println!("     Hunks  Percent  Name");
     println!("----------  -------  ------------------------------------");
 
@@ -137,13 +145,10 @@ fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()>{
                     // none
                 }
             }
-
-
         }
     }
 
     Ok(())
-
 }
 
 fn main() -> anyhow::Result<()> {
@@ -155,16 +160,34 @@ fn main() -> anyhow::Result<()> {
             let mut chd = ChdFile::open_stream(&mut f, None)?;
             println!("Input file:\t{}", input.display());
             println!("File Version:\t{}", get_file_version(chd.header()));
-            println!("Logical size:\t{} bytes", chd.header().logical_bytes().separate_with_commas());
-            println!("Hunk Size:\t{} bytes", chd.header().hunk_bytes().separate_with_commas());
-            println!("Total Hunks:\t{}", chd.header().hunk_count().separate_with_commas());
-            println!("Unit Size:\t{} bytes", chd.header().unit_bytes().separate_with_commas());
-            println!("Total Units:\t{}", chd.header().unit_count().separate_with_commas());
+            println!(
+                "Logical size:\t{} bytes",
+                chd.header().logical_bytes().separate_with_commas()
+            );
+            println!(
+                "Hunk Size:\t{} bytes",
+                chd.header().hunk_bytes().separate_with_commas()
+            );
+            println!(
+                "Total Hunks:\t{}",
+                chd.header().hunk_count().separate_with_commas()
+            );
+            println!(
+                "Unit Size:\t{} bytes",
+                chd.header().unit_bytes().separate_with_commas()
+            );
+            println!(
+                "Total Units:\t{}",
+                chd.header().unit_count().separate_with_commas()
+            );
             print_compression(chd.header());
             println!("CHD size:\t{} bytes", fsize.separate_with_commas());
 
             if chd.header().is_compressed() {
-                println!("Ratio:\t\t{:.1}%", 100.0 * fsize as f64 / chd.header().logical_bytes() as f64);
+                println!(
+                    "Ratio:\t\t{:.1}%",
+                    100.0 * fsize as f64 / chd.header().logical_bytes() as f64
+                );
             }
 
             // hash
@@ -174,9 +197,17 @@ fn main() -> anyhow::Result<()> {
                 for meta in metadata {
                     let tag = to_fourcc(meta.metatag);
                     if let Ok(tag) = tag {
-                        println!("Metadata:\tTag='{}'  Index={}  Length={} bytes", tag.iter().collect::<String>(), meta.index, meta.length);
+                        println!(
+                            "Metadata:\tTag='{}'  Index={}  Length={} bytes",
+                            tag.iter().collect::<String>(),
+                            meta.index,
+                            meta.length
+                        );
                     } else {
-                        println!("Metadata:\tTag={:0x}  Index={}  Length={} bytes", meta.metatag, meta.index, meta.length);
+                        println!(
+                            "Metadata:\tTag={:0x}  Index={}  Length={} bytes",
+                            meta.metatag, meta.index, meta.length
+                        );
                     }
                     print!("              \t");
                     println!("{}", std::str::from_utf8(&meta.value).unwrap())

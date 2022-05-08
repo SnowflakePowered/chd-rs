@@ -1,23 +1,23 @@
-use std::ops::Add;
-use crate::header::CodecType;
 use crate::error::Result;
+use crate::header::CodecType;
+use std::ops::Add;
 
+mod cdrom;
 mod ecc;
+mod flac;
+mod lzma;
 mod none;
 mod zlib;
-mod lzma;
-mod cdrom;
-mod flac;
 
 #[cfg(feature = "flac_header")]
 mod flac_header;
 
 pub mod codecs {
+    pub use crate::compression::cdrom::CdLzCodec;
+    pub use crate::compression::cdrom::CdZlCodec;
+    pub use crate::compression::flac::CdFlCodec;
     pub use crate::compression::none::NoneCodec;
     pub use crate::compression::zlib::ZlibCodec;
-    pub use crate::compression::cdrom::CdZlCodec;
-    pub use crate::compression::cdrom::CdLzCodec;
-    pub use crate::compression::flac::CdFlCodec;
 }
 
 // unstable(trait_alias)
@@ -29,20 +29,26 @@ pub trait BlockCodec: InternalCodec {}
 
 /// A codec that has a externally known type.
 pub trait CompressionCodecType {
-    fn codec_type(&self) -> CodecType where Self: Sized;
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized;
 }
 
 /// A compression codec used to decompress.
 pub trait InternalCodec {
-    fn is_lossy(&self) -> bool where Self: Sized;
-    fn new(hunk_bytes: u32) -> Result<Self> where Self: Sized;
+    fn is_lossy(&self) -> bool
+    where
+        Self: Sized;
+    fn new(hunk_bytes: u32) -> Result<Self>
+    where
+        Self: Sized;
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength>;
 }
 
 #[derive(Copy, Clone)]
 pub struct DecompressLength {
     bytes_out: usize,
-    bytes_read: usize
+    bytes_read: usize,
 }
 
 impl Add for DecompressLength {
@@ -51,7 +57,7 @@ impl Add for DecompressLength {
     fn add(self, rhs: Self) -> Self::Output {
         DecompressLength {
             bytes_out: self.total_out() + rhs.total_out(),
-            bytes_read: self.total_in() + rhs.total_in()
+            bytes_read: self.total_in() + rhs.total_in(),
         }
     }
 }
@@ -60,7 +66,7 @@ impl DecompressLength {
     pub fn new(out: usize, read: usize) -> Self {
         DecompressLength {
             bytes_out: out,
-            bytes_read: read
+            bytes_read: read,
         }
     }
 

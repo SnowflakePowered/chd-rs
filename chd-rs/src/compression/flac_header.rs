@@ -7,22 +7,21 @@ const fn flac_optimal_size(bytes: u32) -> u32 {
     return hunkbytes;
 }
 
-const CHD_FLAC_HEADER_TEMPLATE: [u8; 0x2a] =
-    [
-        0x66, 0x4C, 0x61, 0x43,                         /* +00: 'fLaC' stream header */
-        0x80,                                           /* +04: metadata block type 0 (STREAMINFO), */
-        /*      flagged as last block */
-        0x00, 0x00, 0x22,                               /* +05: metadata block length = 0x22 */
-        0x00, 0x00,                                     /* +08: minimum block size */
-        0x00, 0x00,                                     /* +0A: maximum block size */
-        0x00, 0x00, 0x00,                               /* +0C: minimum frame size (0 == unknown) */
-        0x00, 0x00, 0x00,                               /* +0F: maximum frame size (0 == unknown) */
-        0x0A, 0xC4, 0x42, 0xF0, 0x00, 0x00, 0x00, 0x00, /* +12: sample rate (0x0ac44 == 44100), */
-        /*      numchannels (2), sample bits (16), */
-        /*      samples in stream (0 == unknown) */
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* +1A: MD5 signature (0 == none) */
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00  /* +2A: start of stream data */
-    ];
+const CHD_FLAC_HEADER_TEMPLATE: [u8; 0x2a] = [
+    0x66, 0x4C, 0x61, 0x43, /* +00: 'fLaC' stream header */
+    0x80, /* +04: metadata block type 0 (STREAMINFO), */
+    /*      flagged as last block */
+    0x00, 0x00, 0x22, /* +05: metadata block length = 0x22 */
+    0x00, 0x00, /* +08: minimum block size */
+    0x00, 0x00, /* +0A: maximum block size */
+    0x00, 0x00, 0x00, /* +0C: minimum frame size (0 == unknown) */
+    0x00, 0x00, 0x00, /* +0F: maximum frame size (0 == unknown) */
+    0x0A, 0xC4, 0x42, 0xF0, 0x00, 0x00, 0x00, 0x00, /* +12: sample rate (0x0ac44 == 44100), */
+    /*      numchannels (2), sample bits (16), */
+    /*      samples in stream (0 == unknown) */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* +1A: MD5 signature (0 == none) */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* +2A: start of stream data */
+];
 
 /// Custom FLAC header matching CHD specification
 pub(crate) struct ChdFlacHeader {
@@ -36,7 +35,6 @@ pub(crate) struct ChdHeaderFlacBufRead<'a> {
 }
 
 impl ChdFlacHeader {
-
     pub const fn len() -> usize {
         CHD_FLAC_HEADER_TEMPLATE.len()
     }
@@ -61,21 +59,19 @@ impl ChdFlacHeader {
 
         header[0x14] = (sample_rate << 4) as u8 | ((channels - 1) << 1) as u8;
 
-        ChdFlacHeader {
-            header,
-        }
+        ChdFlacHeader { header }
     }
 
     /// Create a Read implementation that puts the FLAC header before the inner audio data.
-    pub (crate) fn as_read<'a>(&'a mut self, buffer: &'a [u8]) -> ChdHeaderFlacBufRead<'a> {
+    pub(crate) fn as_read<'a>(&'a mut self, buffer: &'a [u8]) -> ChdHeaderFlacBufRead<'a> {
         ChdHeaderFlacBufRead {
             header: &self.header,
-            inner: buffer
+            inner: buffer,
         }
     }
 }
 
-impl <'a> Read for ChdHeaderFlacBufRead<'a> {
+impl<'a> Read for ChdHeaderFlacBufRead<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut bytes_read = 0;
         // read header first.

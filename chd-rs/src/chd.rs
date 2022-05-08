@@ -1,12 +1,12 @@
-use std::fs::File;
-use std::io::{Seek, Read, SeekFrom, Cursor};
-use std::path::Path;
-use byteorder::{BigEndian, WriteBytesExt};
 use crate::compression::CompressionCodec;
+use crate::error::{ChdError, Result};
 use crate::header::ChdHeader;
-use crate::error::{Result, ChdError};
+use crate::map::{ChdMap, LegacyEntryType, MapEntry, V5CompressionType};
 use crate::metadata::IterMetadataEntry;
-use crate::map::{ChdMap, MapEntry, LegacyEntryType, V5CompressionType};
+use byteorder::{BigEndian, WriteBytesExt};
+use std::fs::File;
+use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::path::Path;
 
 use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -25,14 +25,14 @@ pub struct ChdFile<F: Read + Seek> {
     header: ChdHeader,
     parent: Option<Box<ChdFile<F>>>,
     map: ChdMap,
-    codecs: Vec<Box<dyn CompressionCodec>>
+    codecs: Vec<Box<dyn CompressionCodec>>,
 }
 
 pub struct ChdHunk<'a, F: Read + Seek> {
     inner: &'a mut ChdFile<F>,
     hunk_num: u32,
     compressed_buffer: Option<Vec<u8>>,
-    cached: bool
+    cached: bool,
 }
 
 impl<F: Read + Seek> ChdFile<F> {
@@ -44,7 +44,7 @@ impl<F: Read + Seek> ChdFile<F> {
     pub fn open_stream(mut file: F, parent: Option<Box<ChdFile<F>>>) -> Result<ChdFile<F>> {
         let header = ChdHeader::try_read_header(&mut file)?;
         if !header.validate() {
-            return Err(ChdError::InvalidParameter)
+            return Err(ChdError::InvalidParameter);
         }
 
         // No point in checking writable because traits are read only.
@@ -52,11 +52,11 @@ impl<F: Read + Seek> ChdFile<F> {
 
         // Make sure we have a parent if we have one
         if parent.is_none() && header.has_parent() {
-            return Err(ChdError::RequiresParent)
+            return Err(ChdError::RequiresParent);
         }
 
         if !header.validate_compression() {
-            return Err(ChdError::UnsupportedFormat)
+            return Err(ChdError::UnsupportedFormat);
         }
 
         let map = ChdMap::try_read_map(&header, &mut file)?;
@@ -70,7 +70,7 @@ impl<F: Read + Seek> ChdFile<F> {
             header,
             parent,
             map,
-            codecs
+            codecs,
         })
     }
 
@@ -78,7 +78,7 @@ impl<F: Read + Seek> ChdFile<F> {
         &self.header
     }
 
-    pub fn metadata(&mut self) -> Option<IterMetadataEntry<F>>{
+    pub fn metadata(&mut self) -> Option<IterMetadataEntry<F>> {
         let offset = self.header().meta_offset();
         if let Some(offset) = offset {
             Some(IterMetadataEntry::from_stream(&mut self.file, offset))
@@ -93,37 +93,43 @@ impl<F: Read + Seek> ChdFile<F> {
 
     pub fn hunk(&mut self, hunk_num: u32) -> Result<ChdHunk<F>> {
         if hunk_num >= self.header.hunk_count() {
-            return Err(ChdError::HunkOutOfRange)
+            return Err(ChdError::HunkOutOfRange);
         }
         Ok(ChdHunk {
             inner: self,
             hunk_num,
             compressed_buffer: None,
-            cached: false
+            cached: false,
         })
     }
 
-    pub fn hunk_in(&mut self, hunk_num: u32, compressed_buffer: Option<Vec<u8>>, output_buffer: Vec<u8>) -> Result<ChdHunk<F>> {
+    pub fn hunk_in(
+        &mut self,
+        hunk_num: u32,
+        compressed_buffer: Option<Vec<u8>>,
+        output_buffer: Vec<u8>,
+    ) -> Result<ChdHunk<F>> {
         if hunk_num >= self.header.hunk_count() {
-            return Err(ChdError::HunkOutOfRange)
+            return Err(ChdError::HunkOutOfRange);
         }
 
         Ok(ChdHunk {
             inner: self,
             hunk_num,
             compressed_buffer,
-            cached: false
+            cached: false,
         })
     }
 }
 
-impl <'a, F: Read + Seek> ChdHunk<'a, F> {
-
+impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     /// Buffer the compressed bytes into the hunk buffer.
     fn buffer_compressed(&mut self) -> Result<()> {
         // Ideally I don't  want to reacquire the map_entry but I'm not sure how to solve the
         // lifetime requirements here.
-        let map_entry = self.inner.map()
+        let map_entry = self
+            .inner
+            .map()
             .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
@@ -140,7 +146,9 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
             buffer
         } else {
             self.compressed_buffer = Some(vec![0u8; length as usize]);
-            self.compressed_buffer.as_deref_mut().ok_or(ChdError::OutOfMemory)?
+            self.compressed_buffer
+                .as_deref_mut()
+                .ok_or(ChdError::OutOfMemory)?
         };
 
         self.inner.file.seek(SeekFrom::Start(offset))?;
@@ -154,7 +162,9 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
     fn read_uncompressed(&mut self, dest: &mut [u8]) -> Result<usize> {
         // Ideally I don't  want to reacquire the map_entry but I'm not sure how to solve the
         // lifetime requirements here.
-        let map_entry = self.inner.map()
+        let map_entry = self
+            .inner
+            .map()
             .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
@@ -178,11 +188,14 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
     }
 
     fn read_hunk_legacy(&mut self, dest: &mut [u8]) -> Result<usize> {
-        let map_entry = self.inner.map().get_entry(self.hunk_num as usize)
+        let map_entry = self
+            .inner
+            .map()
+            .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
         if !map_entry.is_legacy() {
-            return Err(ChdError::InvalidParameter)
+            return Err(ChdError::InvalidParameter);
         }
 
         let block_len = map_entry.block_size()? as usize;
@@ -197,20 +210,20 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         self.buffer_compressed()?;
 
                         return if let Some(buffer) = &self.compressed_buffer {
-                            let res = &self.inner.codecs[0]
-                                .decompress(&buffer[..block_len], dest)?;
+                            let res =
+                                &self.inner.codecs[0].decompress(&buffer[..block_len], dest)?;
 
                             // #[cfg(feature = "checksum")]
                             match block_crc {
                                 Some(crc) if CRC32.checksum(dest) != crc => {
                                     return Err(ChdError::DecompressionError)
-                                },
-                                _ => ()
+                                }
+                                _ => (),
                             };
                             Ok(res.total_out())
                         } else {
                             Err(ChdError::OutOfMemory)
-                        }
+                        };
                     }
                     LegacyEntryType::Uncompressed => {
                         let res = self.read_uncompressed(dest)?;
@@ -218,8 +231,8 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         match block_crc {
                             Some(crc) if CRC32.checksum(&dest) != crc => {
                                 return Err(ChdError::DecompressionError)
-                            },
-                            _ => ()
+                            }
+                            _ => (),
                         };
                         Ok(res)
                     }
@@ -230,7 +243,9 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         let mut bytes_read_into = std::mem::size_of::<u64>();
 
                         // todo: optimize this operation
-                        for off in std::mem::size_of::<u64>()..self.inner.header().hunk_bytes() as usize {
+                        for off in
+                            std::mem::size_of::<u64>()..self.inner.header().hunk_bytes() as usize
+                        {
                             dest[off] = dest[off - 8];
                             bytes_read_into += 1;
                         }
@@ -238,8 +253,8 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         match block_crc {
                             Some(crc) if CRC32.checksum(dest) != crc => {
                                 return Err(ChdError::DecompressionError)
-                            },
-                            _ => ()
+                            }
+                            _ => (),
                         };
                         Ok(bytes_read_into)
                     }
@@ -250,7 +265,7 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         let c = self_hunk.into_buffer();
                         self.compressed_buffer = c;
                         Ok(res)
-                    },
+                    }
                     LegacyEntryType::ParentHunk => {
                         // todo: optimize to reuse internal buffers
                         match self.inner.parent.as_deref_mut() {
@@ -263,23 +278,26 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                                 Ok(res)
                             }
                         }
-                    },
+                    }
                     LegacyEntryType::ExternalCompressed => Err(ChdError::UnsupportedFormat),
-                    LegacyEntryType::Invalid => Err(ChdError::InvalidData)
+                    LegacyEntryType::Invalid => Err(ChdError::InvalidData),
                 }
             }
-            _ => Err(ChdError::InvalidParameter)
+            _ => Err(ChdError::InvalidParameter),
         }?;
         self.cached = true;
         Ok(value)
     }
 
     fn buffer_hunk_v5(&mut self, dest: &mut [u8]) -> Result<usize> {
-        let map_entry = self.inner.map().get_entry(self.hunk_num as usize)
+        let map_entry = self
+            .inner
+            .map()
+            .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
         if map_entry.is_legacy() {
-            return Err(ChdError::InvalidParameter)
+            return Err(ChdError::InvalidParameter);
         }
 
         // block_off is already accurate for uncompressed case
@@ -294,19 +312,19 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                 (0, false) => {
                     dest.fill(0);
                     Ok(dest.len())
-                },
+                }
                 (0, true) => {
                     if let Some(parent) = self.inner.parent.as_deref_mut() {
                         // todo: optimize to reuse buffers
                         let mut parent = parent.hunk(self.hunk_num)?;
                         let res = parent.read_hunk(dest)?;
-                        let c= parent.into_buffer();
+                        let c = parent.into_buffer();
                         self.compressed_buffer = c;
                         Ok(res)
                     } else {
                         Err(ChdError::RequiresParent)
                     }
-                },
+                }
                 (_offset, _) => {
                     // read_uncompressed will handle the proper offset for us automatically.
                     let res = self.read_uncompressed(dest)?;
@@ -315,16 +333,21 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
             }
         } else {
             // compressed case
-            match map_entry.block_type().map(V5CompressionType::from_u8).flatten() {
-                Some(comptype @ V5CompressionType::CompressionType0
-                     | comptype @ V5CompressionType::CompressionType1
-                     | comptype @ V5CompressionType::CompressionType2
-                     | comptype @ V5CompressionType::CompressionType3) => {
+            match map_entry
+                .block_type()
+                .map(V5CompressionType::from_u8)
+                .flatten()
+            {
+                Some(
+                    comptype @ V5CompressionType::CompressionType0
+                    | comptype @ V5CompressionType::CompressionType1
+                    | comptype @ V5CompressionType::CompressionType2
+                    | comptype @ V5CompressionType::CompressionType3,
+                ) => {
                     // buffer the compressed data
                     self.buffer_compressed()?;
 
-                    if let Some(codec) = self.inner.codecs
-                            .get_mut(comptype.to_usize().unwrap()) {
+                    if let Some(codec) = self.inner.codecs.get_mut(comptype.to_usize().unwrap()) {
                         if let Some(buffer) = self.compressed_buffer.as_deref_mut() {
                             let res = codec.decompress(buffer, dest)?;
 
@@ -332,9 +355,7 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                                 Some(crc) if CRC16.checksum(dest) != crc => {
                                     Err(ChdError::DecompressionError)
                                 }
-                                _ => {
-                                    Ok(res.total_out())
-                                }
+                                _ => Ok(res.total_out()),
                             }
                         } else {
                             Err(ChdError::OutOfMemory)
@@ -350,9 +371,7 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                         Some(crc) if CRC16.checksum(dest) != crc => {
                             return Err(ChdError::DecompressionError)
                         }
-                        _ => {
-                            Ok(res)
-                        }
+                        _ => Ok(res),
                     }
                 }
                 Some(V5CompressionType::CompressionSelf) => {
@@ -365,10 +384,9 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                 }
                 Some(V5CompressionType::CompressionParent) => {
                     // todo: optimize to reuse internal buffers
-                    let hunk_bytes =  self.inner.header().hunk_bytes();
+                    let hunk_bytes = self.inner.header().hunk_bytes();
                     let unit_bytes = self.inner.header().unit_bytes();
-                    let units_in_hunk =
-                       hunk_bytes / unit_bytes;
+                    let units_in_hunk = hunk_bytes / unit_bytes;
 
                     match self.inner.parent.as_deref_mut() {
                         None => Err(ChdError::RequiresParent),
@@ -382,39 +400,40 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                             if block_off % units_in_hunk as u64 == 0 {
                                 dest.copy_from_slice(&buf);
                                 self.compressed_buffer = c;
-                                return Ok(res_1)
+                                return Ok(res_1);
                             }
 
                             let remainder_in_hunk = block_off as usize % units_in_hunk as usize;
-                            let hunk_split = (units_in_hunk as usize - remainder_in_hunk) *
-                                unit_bytes as usize;
+                            let hunk_split =
+                                (units_in_hunk as usize - remainder_in_hunk) * unit_bytes as usize;
 
                             dest[..hunk_split].copy_from_slice(
-                                &buf[remainder_in_hunk * unit_bytes as usize..][..hunk_split]);
+                                &buf[remainder_in_hunk * unit_bytes as usize..][..hunk_split],
+                            );
 
-
-                            let mut parent_hunk = parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
+                            let mut parent_hunk =
+                                parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
                             let res_2 = parent_hunk.read_hunk(&mut buf)?;
                             let _c = parent_hunk.into_buffer();
 
                             dest[hunk_split..].copy_from_slice(
-                                &buf[..remainder_in_hunk * self.inner.header().unit_bytes() as usize]);
+                                &buf[..remainder_in_hunk
+                                    * self.inner.header().unit_bytes() as usize],
+                            );
                             self.compressed_buffer = None;
 
                             match block_crc.and_then(|f| f.to_u16()) {
                                 Some(crc) if CRC16.checksum(&dest) != crc => {
                                     return Err(ChdError::DecompressionError)
                                 }
-                                _ => {
-                                    Ok(hunk_split + remainder_in_hunk * unit_bytes as usize)
-                                }
+                                _ => Ok(hunk_split + remainder_in_hunk * unit_bytes as usize),
                             }
                         }
                     }
                 }
-                _ => Err(ChdError::UnsupportedFormat)
+                _ => Err(ChdError::UnsupportedFormat),
             }
-        }
+        };
     }
 
     /// Decompresses the hunk into the cache.
@@ -423,7 +442,7 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
     pub fn read_hunk(&mut self, dest: &mut [u8]) -> Result<usize> {
         // todo: lift CompressedBuffer out of read_hunk
         if dest.len() < self.inner.header.hunk_bytes() as usize {
-            return Err(ChdError::HunkOutOfRange)
+            return Err(ChdError::HunkOutOfRange);
         }
 
         // https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/src/libchdr_chd.c#L2233
@@ -433,13 +452,15 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
             // We purposefully avoid a `_` pattern here.
             // When CHD v6 is released, this should fail to compile unless
             // the case is explicitly added.
-            ChdHeader::V1Header(_) | ChdHeader::V2Header(_)
-                | ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => self.read_hunk_legacy(dest)
+            ChdHeader::V1Header(_)
+            | ChdHeader::V2Header(_)
+            | ChdHeader::V3Header(_)
+            | ChdHeader::V4Header(_) => self.read_hunk_legacy(dest),
         }
     }
 }
 
-impl <'a, F: Read + Seek> Read for ChdHunk<'a, F> {
+impl<'a, F: Read + Seek> Read for ChdHunk<'a, F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
         // match self.read_hunk() {
@@ -449,7 +470,7 @@ impl <'a, F: Read + Seek> Read for ChdHunk<'a, F> {
     }
 }
 
-impl <'a, F: Read + Seek> Read for ChdFile<F> {
+impl<'a, F: Read + Seek> Read for ChdFile<F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }

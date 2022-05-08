@@ -1,8 +1,8 @@
-use std::convert::TryInto;
-use std::io::{Read, Seek, SeekFrom, Cursor};
-use crate::error::{Result, ChdError};
-use byteorder::{ReadBytesExt, BigEndian};
+use crate::error::{ChdError, Result};
 use crate::make_tag;
+use byteorder::{BigEndian, ReadBytesExt};
+use std::convert::TryInto;
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 const METADATA_HEADER_SIZE: usize = 16;
 use num_derive::FromPrimitive;
@@ -22,19 +22,22 @@ pub enum KnownMetadata {
     GdRomOld = make_tag(b"CHGT"),
     GdRomTrack = make_tag(b"CHGD"),
     AudioVideo = make_tag(b"AVAV"),
-    AudioVideoLaserDisc = make_tag(b"AVLD")
+    AudioVideoLaserDisc = make_tag(b"AVLD"),
 }
 
 impl KnownMetadata {
     pub fn is_cdrom(tag: u32) -> bool {
         if let Some(tag) = FromPrimitive::from_u32(tag) {
             return match tag {
-                KnownMetadata::CdRomOld | KnownMetadata::CdRomTrack | KnownMetadata::CdRomTrack2
-                    | KnownMetadata::GdRomOld | KnownMetadata::GdRomTrack => true,
-                _ => false
-            }
+                KnownMetadata::CdRomOld
+                | KnownMetadata::CdRomTrack
+                | KnownMetadata::CdRomTrack2
+                | KnownMetadata::GdRomOld
+                | KnownMetadata::GdRomTrack => true,
+                _ => false,
+            };
         }
-       false
+        false
     }
 }
 
@@ -73,7 +76,7 @@ impl MetadataEntry {
             value: buf,
             flags: self.flags,
             index: self.index,
-            length: self.length
+            length: self.length,
         })
     }
 }
@@ -83,16 +86,16 @@ pub struct IterMetadataEntry<'a, F: Read + Seek + 'a> {
     curr_offset: u64,
     curr: Option<MetadataEntry>,
     // Just use a tuple because we rarely have more than 2 or 3 types of tag.
-    indices: Vec<(u32, u32)>
+    indices: Vec<(u32, u32)>,
 }
 
-impl <'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
     pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
         IterMetadataEntry {
             file,
             curr_offset: initial_offset,
             curr: None,
-            indices: Vec::new()
+            indices: Vec::new(),
         }
     }
 
@@ -101,32 +104,33 @@ impl <'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
     }
 }
 
-impl <'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for IterMetadataEntry<'a, F> {
     type Error = ChdError;
 
     fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
         let metas = &mut self;
-        let metas : Vec<_> = metas.collect();
-        metas.iter().map(|e| e.read(&mut self.file))
-            .collect()
+        let metas: Vec<_> = metas.collect();
+        metas.iter().map(|e| e.read(&mut self.file)).collect()
     }
 }
 
-impl <'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
     // really need GATs to do this properly...
     type Item = MetadataEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.curr_offset == 0 {
-            return None
+            return None;
         }
 
-        fn next_inner<'a, F: Read + Seek + 'a>(s: &mut IterMetadataEntry<'a, F>) -> Result<MetadataEntry> {
+        fn next_inner<'a, F: Read + Seek + 'a>(
+            s: &mut IterMetadataEntry<'a, F>,
+        ) -> Result<MetadataEntry> {
             let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
             let count = s.file.read(&mut raw_header)?;
             if count != METADATA_HEADER_SIZE {
-                return Err(ChdError::MetadataNotFound)
+                return Err(ChdError::MetadataNotFound);
             }
             let mut cursor = Cursor::new(raw_header);
             cursor.seek(SeekFrom::Start(0))?;
@@ -162,7 +166,7 @@ impl <'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
                 length: length as u64,
                 metatag,
                 flags: flags as u8,
-                index
+                index,
             };
 
             if let Some(curr) = &s.curr {
@@ -172,6 +176,6 @@ impl <'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
             s.curr = Some(new.clone());
             Ok(new)
         }
-        return next_inner(self).ok()
+        return next_inner(self).ok();
     }
 }

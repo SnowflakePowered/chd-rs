@@ -1,11 +1,13 @@
-use std::convert::TryFrom;
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
-use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::ecc::ErrorCorrectedSector;
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
-use crate::error::{Result, ChdError};
+use crate::compression::{
+    BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
+};
+use crate::error::{ChdError, Result};
 use crate::header::CodecType;
-use crate::compression::ecc::ErrorCorrectedSector;
+use std::convert::TryFrom;
 
 pub type CdLzCodec = CdBlockCodec<LzmaCodec, ZlibCodec>;
 pub type CdZlCodec = CdBlockCodec<ZlibCodec, ZlibCodec>;
@@ -29,24 +31,24 @@ impl CompressionCodec for CdLzCodec {}
 pub struct CdBlockCodec<Engine: BlockCodec, SubEngine: BlockCodec> {
     engine: Engine,
     sub_engine: SubEngine,
-    buffer: Vec<u8>
+    buffer: Vec<u8>,
 }
 
-impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
+impl<Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
     fn is_lossy(&self) -> bool {
         self.engine.is_lossy() && self.sub_engine.is_lossy()
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
         if hunk_size % CD_FRAME_SIZE != 0 {
-            return Err(ChdError::CodecError)
+            return Err(ChdError::CodecError);
         }
 
         let buffer = vec![0u8; hunk_size as usize];
         Ok(CdBlockCodec {
             engine: Engine::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA)?,
             sub_engine: SubEngine::new((hunk_size / CD_FRAME_SIZE) * CD_MAX_SUBCODE_DATA)?,
-            buffer
+            buffer,
         })
     }
 
@@ -58,34 +60,48 @@ impl <Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<
         let header_bytes = ecc_bytes + complen_bytes;
 
         // extract compressed length of base
-        let mut complen_base: u32 = (input[ecc_bytes + 0] as u32) << 8 | input[ecc_bytes + 1] as u32;
+        let mut complen_base: u32 =
+            (input[ecc_bytes + 0] as u32) << 8 | input[ecc_bytes + 1] as u32;
         if complen_bytes > 2 {
-            complen_base = complen_base << 8 |  input[ecc_bytes + 2] as u32;
+            complen_base = complen_base << 8 | input[ecc_bytes + 2] as u32;
         }
 
         // decode frame data
-        let frame_res = self.engine.decompress(&input[header_bytes..][..complen_base as usize],
-                               &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize])?;
+        let frame_res = self.engine.decompress(
+            &input[header_bytes..][..complen_base as usize],
+            &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
+        )?;
 
         // WANT_SUBCODE
-        let sub_res = self.sub_engine.decompress(&input[header_bytes + complen_base as usize..],
-                                   &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize])?;
-
+        let sub_res = self.sub_engine.decompress(
+            &input[header_bytes + complen_base as usize..],
+            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+                [..frames * CD_MAX_SUBCODE_DATA as usize],
+        )?;
 
         // reassemble data
         for frame_num in 0..frames {
             output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
-                .copy_from_slice(&self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SECTOR_DATA as usize]);
+                .copy_from_slice(
+                    &self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..]
+                        [..CD_MAX_SECTOR_DATA as usize],
+                );
 
             // WANT_SUBCODE
-            output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_MAX_SUBCODE_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]);
+            output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
+                [..CD_MAX_SUBCODE_DATA as usize]
+                .copy_from_slice(
+                    &self.buffer[frames * CD_MAX_SECTOR_DATA as usize
+                        + frame_num * CD_MAX_SUBCODE_DATA as usize..]
+                        [..CD_MAX_SUBCODE_DATA as usize],
+                );
 
             // WANT_RAW_DATA_SECTOR
 
             // this may be a bit overkill..
-            let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>
-                ::try_from(&mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize])?;
+            let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
+                &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize],
+            )?;
             if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
                 sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
                 sector_slice.generate_ecc();

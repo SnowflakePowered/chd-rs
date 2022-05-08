@@ -1,18 +1,19 @@
 use std::io::{Cursor, Read};
 use std::mem;
+
 use byteorder::{BigEndian, LittleEndian, NativeEndian, WriteBytesExt};
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
-use crate::error::{ChdError, Result};
 use claxon::frame::FrameReader;
 use claxon::input::BufferedReader;
+
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 use crate::compression::zlib::ZlibCodec;
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
 struct FlacCodec {
-    buffer: Vec<i32>
+    buffer: Vec<i32>,
 }
-
 
 // #[cfg(target_endian = "big")]
 // const IS_LITTLE_ENDIAN: bool = false;
@@ -20,16 +21,13 @@ struct FlacCodec {
 // #[cfg(target_endian = "little")]
 // const IS_LITTLE_ENDIAN: bool = true;
 
-
 impl InternalCodec for FlacCodec {
     fn is_lossy(&self) -> bool {
         false
     }
 
     fn new(_: u32) -> Result<Self> {
-        Ok(FlacCodec {
-            buffer: Vec::new()
-        })
+        Ok(FlacCodec { buffer: Vec::new() })
     }
 
     /// Decompress FLAC data from raw input.
@@ -76,14 +74,17 @@ impl InternalCodec for FlacCodec {
         }
         self.buffer = buf;
         let bytes_in = frame_read.into_inner().position();
-        Ok(DecompressLength::new(samples_written * 4, bytes_in as usize))
+        Ok(DecompressLength::new(
+            samples_written * 4,
+            bytes_in as usize,
+        ))
     }
 }
 
 pub struct CdFlCodec {
     engine: FlacCodec,
     sub_engine: ZlibCodec,
-    buffer: Vec<u8>
+    buffer: Vec<u8>,
 }
 
 impl CompressionCodec for CdFlCodec {}
@@ -99,38 +100,52 @@ impl InternalCodec for CdFlCodec {
         false
     }
 
-    fn new(hunk_size: u32) -> Result<Self> where Self: Sized {
+    fn new(hunk_size: u32) -> Result<Self>
+    where
+        Self: Sized,
+    {
         if hunk_size % CD_FRAME_SIZE != 0 {
-            return Err(ChdError::CodecError)
+            return Err(ChdError::CodecError);
         }
 
         // neither FlacCodec nor ZlibCodec actually make use of hunk_size.
         Ok(CdFlCodec {
             engine: FlacCodec::new(hunk_size)?,
             sub_engine: ZlibCodec::new(hunk_size)?,
-            buffer: vec![0u8; hunk_size as usize]
+            buffer: vec![0u8; hunk_size as usize],
         })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
         let frames = output.len() / CD_FRAME_SIZE as usize;
 
-        let frame_res =
-            self.engine.decompress(input, &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize])?;
+        let frame_res = self.engine.decompress(
+            input,
+            &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
+        )?;
 
-        let sub_res =
-            self.sub_engine.decompress(&input[frame_res.total_in()..],
-                                       &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize])?;
+        let sub_res = self.sub_engine.decompress(
+            &input[frame_res.total_in()..],
+            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+                [..frames * CD_MAX_SUBCODE_DATA as usize],
+        )?;
 
         // reassemble the data into the buffer
         for frame_num in 0..frames {
             output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
-                .copy_from_slice(&self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SECTOR_DATA as usize]);
+                .copy_from_slice(
+                    &self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..]
+                        [..CD_MAX_SECTOR_DATA as usize],
+                );
 
             // WANT_SUBCODE
-            output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(&self.buffer[frames * CD_MAX_SECTOR_DATA as usize + frame_num * CD_MAX_SUBCODE_DATA as usize..][..CD_MAX_SUBCODE_DATA as usize]);
-
+            output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
+                [..CD_MAX_SUBCODE_DATA as usize]
+                .copy_from_slice(
+                    &self.buffer[frames * CD_MAX_SECTOR_DATA as usize
+                        + frame_num * CD_MAX_SUBCODE_DATA as usize..]
+                        [..CD_MAX_SUBCODE_DATA as usize],
+                );
         }
         Ok(frame_res + sub_res)
     }

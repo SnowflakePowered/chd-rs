@@ -1,7 +1,7 @@
-use std::io::Write;
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
-use crate::header::CodecType;
 use crate::error::Result;
+use crate::header::CodecType;
+use std::io::Write;
 
 pub struct NoneCodec;
 impl InternalCodec for NoneCodec {

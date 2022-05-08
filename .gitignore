@@ -1,3 +1,4 @@
 .testimages/
 target/
 FORBIDDEN_TEST/
+/.idea/inspectionProfiles/Project_Default.xml
