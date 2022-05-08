@@ -323,19 +323,19 @@ impl <'a, F: Read + Seek> ChdHunk<'a, F> {
                     // buffer the compressed data
                     self.buffer_compressed()?;
 
-                    return if let Some(codec) = self.inner.codecs
+                    if let Some(codec) = self.inner.codecs
                             .get_mut(comptype.to_usize().unwrap()) {
                         if let Some(buffer) = self.compressed_buffer.as_deref_mut() {
                             let res = codec.decompress(buffer, dest)?;
 
                             match block_crc.and_then(|f| f.to_u16()) {
                                 Some(crc) if CRC16.checksum(dest) != crc => {
-                                    return Err(ChdError::DecompressionError)
+                                    Err(ChdError::DecompressionError)
                                 }
-                                _ => {}
+                                _ => {
+                                    Ok(res.total_out())
+                                }
                             }
-
-                            Ok(res.total_out())
                         } else {
                             Err(ChdError::OutOfMemory)
                         }

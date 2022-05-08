@@ -24,7 +24,6 @@ mod tests {
     use crate::header::ChdHeader;
     use crate::chd::ChdFile;
     use crate::metadata::ChdMetadata;
-    use crate::compression::flac::ChdFlacHeader;
 
     #[test]
     fn read_metas_test() {
@@ -50,18 +49,10 @@ mod tests {
         let mut hunk_buf = vec![0u8; hunk_size as usize];
         // 13439 breaks??
         // 13478 breaks now with decmp error.
-        for hunk_num in 13439..hunk_count {
+        // for hunk_num in 13478..hunk_count {
+        for hunk_num in 13478..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             hunk.read_hunk(&mut hunk_buf).expect(format!("could not read_hunk {}", hunk_num).as_str());
         }
-    }
-
-    #[test]
-    fn flac_buf_test() {
-        let b = [1, 2, 3, 4];
-        let mut fb = ChdFlacHeader::new(44100, 2, 2352);
-        let mut n = vec![0u8; 100];
-        fb.as_read(&b).read(&mut n).expect("read");
-        assert_eq!(&n[0x2a..][..4], &b);
     }
 }
