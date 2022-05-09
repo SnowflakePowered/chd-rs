@@ -11,8 +11,16 @@ use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLengt
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
-struct FlacCodec {
+pub struct FlacCodec {
     buffer: Vec<i32>,
+}
+
+impl CompressionCodec for FlacCodec {}
+
+impl CompressionCodecType for FlacCodec {
+    fn codec_type(&self) -> CodecType where Self: Sized {
+        CodecType::FlacV5
+    }
 }
 
 impl InternalCodec for FlacCodec {
@@ -29,7 +37,7 @@ impl InternalCodec for FlacCodec {
     /// FLAC data is assumed to be 2-channel interleaved 16-bit PCM. Thus the length of the output
     /// buffer must be a multiple of 4 to hold 2 bytes per sample, for 2 channels.
     ///
-    /// The input buffer must also contain enough commpressed samples to fill the length of the
+    /// The input buffer must also contain enough compressed samples to fill the length of the
     /// output buffer.
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
         // should do the equivalent of flac_decoder_decode_interleaved

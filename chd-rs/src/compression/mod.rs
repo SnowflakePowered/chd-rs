@@ -18,6 +18,8 @@ pub mod codecs {
     pub use crate::compression::flac::CdFlCodec;
     pub use crate::compression::none::NoneCodec;
     pub use crate::compression::zlib::ZlibCodec;
+    pub use crate::compression::lzma::LzmaCodec;
+    pub use crate::compression::flac::FlacCodec;
 }
 
 // unstable(trait_alias)

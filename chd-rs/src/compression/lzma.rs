@@ -1,14 +1,16 @@
-use crate::compression::{BlockCodec, DecompressLength, InternalCodec};
+use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use lzma_rs_headerless::decode::lzma::LzmaParams;
 use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
+use crate::header::CodecType;
 
 pub struct LzmaCodec {
     params: LzmaParams,
 }
 
 impl BlockCodec for LzmaCodec {}
+impl CompressionCodec for LzmaCodec {}
 
 // LzmaEnc.c LzmaEncProps_Normalize
 fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
@@ -37,6 +39,12 @@ fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
     }
 
     dict_size
+}
+
+impl CompressionCodecType for LzmaCodec {
+    fn codec_type(&self) -> CodecType where Self: Sized {
+        CodecType::LzmaV5
+    }
 }
 
 impl InternalCodec for LzmaCodec {
