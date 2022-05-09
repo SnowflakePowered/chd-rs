@@ -7,6 +7,10 @@ use std::fmt::Display;
 use std::io::ErrorKind;
 use std::str::Utf8Error;
 
+/// Error types that may occur when reading a CHD file or hunk.
+///
+/// This type tries to be ABI-compatible with [libchdr](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L258),
+/// given sane defaults in the C compiler. See [repr(C) in the Rustonomicon](https://doc.rust-lang.org/nomicon/other-reprs.html#reprc) for more details.
 #[derive(Debug)]
 #[repr(C)]
 pub enum ChdError {
@@ -137,4 +141,5 @@ impl From<HuffmanError> for ChdError {
     }
 }
 
+/// Result type for `chd`.
 pub type Result<T> = std::result::Result<T, ChdError>;

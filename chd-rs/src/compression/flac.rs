@@ -36,6 +36,7 @@ impl InternalCodec for FlacCodec {
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_flac.c#L158
         let frames = output.len() / CD_MAX_SECTOR_DATA as usize;
 
+        // assumes 2 channels (4 = 2 * sizeof(i16))
         let num_samples = frames * CD_MAX_SECTOR_DATA as usize / 4;
 
         let flac_buf = Cursor::new(input);
@@ -50,6 +51,17 @@ impl InternalCodec for FlacCodec {
         while samples_written < num_samples {
             match frame_read.read_next_or_eof(buf) {
                 Ok(Some(block)) => {
+
+                    // We assume 2 channels, so we can use claxon's stereo_samples
+                    // iterator for slightly better performance.
+                    #[cfg(not(feature = "nonstandard_channel_count"))]
+                    for (l, r) in block.stereo_samples() {
+                        cursor.write_i16::<BigEndian>(l as i16)?;
+                        cursor.write_i16::<BigEndian>(r as i16)?;
+                        samples_written += 1;
+                    }
+
+                    #[cfg(feature = "nonstandard_channel_count")]
                     for sample in 0..block.len() / block.channels() {
                         for channel in 0..block.channels() {
                             let sample_data = block.sample(channel, sample) as u16;
@@ -57,6 +69,7 @@ impl InternalCodec for FlacCodec {
                         }
                         samples_written += 1;
                     }
+
                     buf = block.into_buffer();
                 }
                 _ => {

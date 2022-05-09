@@ -1,8 +1,17 @@
-use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, NoneCodec, ZlibCodec};
+//! Types and methods relating to header data for a CHD file.
+//!
+//! CHD V1-5 all have different header formats that are supported by this library.
+//! Common information can be accessed with the [`ChdHeader`](crate::header::ChdHeader) enum,
+//! but if version-specific information is needed, all fields in each version header struct
+//! can be accessed publicly.
+//!
+//! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
+//! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
+
 use crate::compression::{CompressionCodec, InternalCodec};
 use crate::error::{ChdError, Result};
 use crate::make_tag;
-use crate::metadata::{IterMetadataEntry, KnownMetadata};
+use crate::metadata::{ChdMetadataRefIter, KnownMetadata};
 use byteorder::{BigEndian, ReadBytesExt};
 use lazy_static::lazy_static;
 use num_derive::FromPrimitive;
@@ -10,21 +19,32 @@ use num_traits::FromPrimitive;
 use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
+use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, NoneCodec, ZlibCodec};
 
+/// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
 #[derive(FromPrimitive, Debug)]
 pub enum CodecType {
+    /// No compression.
     None = 0,
+    /// V1-4 Zlib DEFLATE compression.
     Zlib = 1,
+    /// V1-4 Zlib+ DEFLATE compression.
     ZlibPlus = 2,
+    /// V1-4 AV Huffman compression.
     AV = 3,
+    /// V5 Zlib DEFLATE compression.
     ZLibV5 = make_tag(b"zlib"),
+    /// V5 CD Zlib DEFLATE compression (cdzl)
     ZLibCdV5 = make_tag(b"cdzl"),
+    /// V5 CD LZMA compression (cdlz)
     LzmaCdV5 = make_tag(b"cdlz"),
+    /// V5 CD FLAC compression (cdfl)
     FlacCdV5 = make_tag(b"cdfl"),
 }
 
 impl CodecType {
+    /// Returns whether or not the codec type is a legacy (V1-4) codec or a V5 codec.
     pub const fn is_legacy(&self) -> bool {
         match self {
             CodecType::None => false,
@@ -33,6 +53,16 @@ impl CodecType {
         }
     }
 
+    /// Initializes the codec for the provided hunk size.
+    ///
+    /// Supported codecs are
+    /// * None
+    /// * Zlib/Zlib+/Zlib V5
+    /// * CDZL (CD Zlib)
+    /// * CDLZ (CD LZMA)
+    /// * CDFL (CD Flac)
+    ///
+    /// AVHuff decompression is not supported.
     pub fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
         match self {
             CodecType::None => {
@@ -55,99 +85,192 @@ impl CodecType {
     }
 }
 
+/// The CHD header version.
 #[repr(u32)]
 pub enum Version {
+    /// CHD version 1.
     ChdV1 = 1,
+    /// CHD version 2.
     ChdV2 = 2,
+    /// CHD version 3.
     ChdV3 = 3,
+    /// CHD version 4.
     ChdV4 = 4,
+    /// CHD version 5
     ChdV5 = 5,
 }
 
-#[repr(C)]
+/// A CHD V1/V2 header. V1 and V2 headers share a similar format with the only difference being
+/// V1 having a fixed 512-byte sector length, and V2 having an arbitrary sector length.
+///
+/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// of this struct.
 pub struct HeaderV1 {
+    /// The CHD version (1, or 2).
     pub version: Version,
+    /// The length of the header.
     pub length: u32,
+    /// CHD file flags.
     pub flags: u32,
+    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
+    /// valid codec types supported by this library.
     pub compression: u32,
+    /// The size of each hunk in the CHD file in units of sector length.
     pub hunk_size: u32,
+    /// The total number of hunks in the CHD file.
     pub total_hunks: u32,
+    /// The number of cylinders on the hard disk.
     pub cylinders: u32,
+    /// The number of sectors on the hard disk.
     pub sectors: u32,
+    /// The number of heads on the hard disk.
     pub heads: u32,
+    /// The size of each hunk in the CHD file in bytes.
     pub hunk_bytes: u32,
+    /// The MD5 hash of the CHD file.
     pub md5: [u8; MD5_BYTES],
+    /// The MD5 hash of the parent CHD file.
     pub parent_md5: [u8; MD5_BYTES],
+    /// The size of each unit in the CHD file in bytes.
     pub unit_bytes: u32,
+    /// The number of units in each hunk.
     pub unit_count: u64,
+    /// The logical size of the compressed data in bytes.
     pub logical_bytes: u64,
+    /// The length of each sector on the hard disk.
+    /// For V1 CHD files, this will be 512. For V2,
+    /// CHD files, this can be arbitrary.
+    pub sector_length: u32,
 }
 
-#[repr(C)]
+/// A CHD V3 header.
+///
+/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// of this struct.
 pub struct HeaderV3 {
+    /// The CHD version (3).
     pub version: Version,
+    /// The length of the header.
     pub length: u32,
+    /// CHD file flags.
     pub flags: u32,
+    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
+    /// valid codec types supported by this library.
     pub compression: u32,
+    /// The size of each hunk of the CHD file in bytes.
+    pub hunk_bytes: u32,
+    /// The total number of hunks in the CHD file.
     pub total_hunks: u32,
+    /// The logical size of the compressed data in bytes.
     pub logical_bytes: u64,
+    /// The offset in the stream where the CHD metadata section begins.
     pub meta_offset: u64,
+    /// The MD5 hash of the CHD file.
     pub md5: [u8; MD5_BYTES],
+    /// The MD5 hash of the parent CHD file.
     pub parent_md5: [u8; MD5_BYTES],
-    pub hunk_bytes: u32,
+    /// The SHA1 hash of the CHD file.
     pub sha1: [u8; SHA1_BYTES],
+    /// The SHA1 hash of the parent CHD file.
     pub parent_sha1: [u8; SHA1_BYTES],
+    /// The size of each unit in bytes.
     pub unit_bytes: u32,
+    /// The number of units in each hunk.
     pub unit_count: u64,
 }
 
-#[repr(C)]
+/// A CHD V4 header. The major difference between a V3 header and V4 header is the absence of MD5
+/// hash information in CHD V4.
+///
+/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// of this struct.
 pub struct HeaderV4 {
+    /// The CHD version (4).
     pub version: Version,
+    /// The length of the header.
     pub length: u32,
+    /// CHD file flags.
     pub flags: u32,
+    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
+    /// valid codec types supported by this library.
     pub compression: u32,
+    /// The total number of hunks in the CHD file.
     pub total_hunks: u32,
+    /// The logical size of the compressed data in bytes.
     pub logical_bytes: u64,
+    /// The offset in the stream where the CHD metadata section begins.
     pub meta_offset: u64,
+    /// The size of each hunk in the CHD file in bytes.
     pub hunk_bytes: u32,
+    /// The SHA1 hash of the CHD file.
     pub sha1: [u8; SHA1_BYTES],
+    /// The SHA1 hash of the parent CHD file.
     pub parent_sha1: [u8; SHA1_BYTES],
+    /// The SHA1 hash of the raw, uncompressed data.
     pub raw_sha1: [u8; SHA1_BYTES],
+    /// The size of each unit in bytes.
     pub unit_bytes: u32,
+    /// The number of units in each hunk.
     pub unit_count: u64,
 }
 
-#[repr(C)]
+/// A CHD V5 header.
+///
+/// While all members of this struct are public, prefer the `ChdHeader` API over the fields
+/// of this struct.
 pub struct HeaderV5 {
+    /// The CHD version (4).
     pub version: Version,
+    /// The length of the header.
     pub length: u32,
+    /// The compression codec used in the CHD file. CHD V5 supports up to 4 different codecs in a
+    /// single CHD file.
+    ///
+    /// See [`CodecType`](crate::header::CodecType) for the
+    /// valid codec types supported by this library.
     pub compression: [u32; 4],
+    /// The logical size of the compressed data in bytes.
     pub logical_bytes: u64,
+    /// The offset in the stream where the CHD map section begins.
     pub map_offset: u64,
+    /// The offset in the stream where the CHD metadata section begins.
     pub meta_offset: u64,
+    /// The size of each hunk in the CHD file in bytes.
     pub hunk_bytes: u32,
+    /// The size of each unit in bytes.
     pub unit_bytes: u32,
+    /// The SHA1 hash of the CHD file.
     pub sha1: [u8; SHA1_BYTES],
+    /// The SHA1 hash of the parent CHD file.
     pub parent_sha1: [u8; SHA1_BYTES],
+    /// The SHA1 hash of the raw, uncompressed data.
     pub raw_sha1: [u8; SHA1_BYTES],
+    /// The number of units in each hunk.
     pub unit_count: u64,
+    /// The total number of hunks in the CHD file.
     pub hunk_count: u32,
+    /// The size of each map entry in bytes.
     pub map_entry_bytes: i32,
 }
 
-#[repr(C)]
+/// A CHD header of unspecified version.
 pub enum ChdHeader {
+    /// A CHD V1 header.
     V1Header(HeaderV1),
+    /// A CHD V2 header.
     V2Header(HeaderV1),
+    /// A CHD V3 header.
     V3Header(HeaderV3),
+    /// A CHD V4 header.
     V4Header(HeaderV4),
+    /// A CHD V5 header.
     V5Header(HeaderV5),
 }
 
 const MD5_BYTES: usize = 16;
 const SHA1_BYTES: usize = 20;
 
+/// The CHD magic number.
 pub const CHD_MAGIC: &'static str = "MComprHD";
 
 const CHD_V1_HEADER_SIZE: u32 = 76;
@@ -155,14 +278,27 @@ const CHD_V2_HEADER_SIZE: u32 = 80;
 const CHD_V3_HEADER_SIZE: u32 = 120;
 const CHD_V4_HEADER_SIZE: u32 = 108;
 const CHD_V5_HEADER_SIZE: u32 = 124;
-pub const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
+
+const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
 // pub const COOKIE_VALUE: u32 = 0xbaadf00d;
 
 impl ChdHeader {
+    /// Reads CHD header data from the provided stream.
+    ///
+    /// If the header is not valid, returns `ChdError::InvalidParameter`.
+    /// If the header indicates an unsupported compression format, returns `ChdError::UnsupportedFormat`
     pub fn try_read_header<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
-        read_header(file)
+        let header = read_header(file)?;
+        if !header.validate() {
+            return Err(ChdError::InvalidParameter);
+        }
+        if !header.validate_compression() {
+            return Err(ChdError::UnsupportedFormat);
+        }
+        Ok(header)
     }
 
+    /// Returns whether or not the CHD file is compressed.
     pub const fn is_compressed(&self) -> bool {
         match self {
             ChdHeader::V1Header(c) => c.compression != CodecType::None as u32,
@@ -173,6 +309,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the offset of the CHD metadata, if available.
     pub const fn meta_offset(&self) -> Option<u64> {
         match self {
             ChdHeader::V1Header(_c) => None,
@@ -183,6 +320,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the flags of the CHD file, if available.
     pub const fn flags(&self) -> Option<u32> {
         match self {
             ChdHeader::V1Header(c) => Some(c.flags),
@@ -193,6 +331,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the total number of hunks in the CHD file.
     pub const fn hunk_count(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.total_hunks,
@@ -203,16 +342,18 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the size of each hunk in the CHD file in bytes.
     pub const fn hunk_bytes(&self) -> u32 {
         match self {
-            ChdHeader::V1Header(c) => c.hunk_size,
-            ChdHeader::V2Header(c) => c.hunk_size,
+            ChdHeader::V1Header(c) => c.hunk_bytes,
+            ChdHeader::V2Header(c) => c.hunk_bytes,
             ChdHeader::V3Header(c) => c.hunk_bytes,
             ChdHeader::V4Header(c) => c.hunk_bytes,
             ChdHeader::V5Header(c) => c.hunk_bytes,
         }
     }
 
+    /// Returns the logical size of the compressed data in bytes.
     pub const fn logical_bytes(&self) -> u64 {
         match self {
             ChdHeader::V1Header(c) => c.logical_bytes,
@@ -223,6 +364,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the number of bytes per unit within each hunk.
     pub const fn unit_bytes(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.unit_bytes,
@@ -233,6 +375,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the number of units per hunk.
     pub const fn unit_count(&self) -> u64 {
         match self {
             ChdHeader::V1Header(c) => c.unit_count,
@@ -243,6 +386,7 @@ impl ChdHeader {
         }
     }
 
+    /// Returns whether or not this CHD file has a parent.
     pub fn has_parent(&self) -> bool {
         match self {
             ChdHeader::V5Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
@@ -253,7 +397,8 @@ impl ChdHeader {
         }
     }
 
-    pub const fn length(&self) -> u32 {
+    /// Returns the length of the header.
+    pub const fn len(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.length,
             ChdHeader::V2Header(c) => c.length,
@@ -263,8 +408,36 @@ impl ChdHeader {
         }
     }
 
-    pub fn validate(&self) -> bool {
-        // todo: validate compression
+    pub(crate) fn create_compression_codecs(&self) -> Result<Vec<Box<dyn CompressionCodec>>> {
+        match self {
+            ChdHeader::V1Header(c) => CodecType::from_u32(c.compression)
+                .map(|e| e.init(self.hunk_bytes()))
+                .ok_or(ChdError::UnsupportedFormat)?
+                .map(|e| vec![e]),
+            ChdHeader::V2Header(c) => CodecType::from_u32(c.compression)
+                .map(|e| e.init(self.hunk_bytes()))
+                .ok_or(ChdError::UnsupportedFormat)?
+                .map(|e| vec![e]),
+            ChdHeader::V3Header(c) => CodecType::from_u32(c.compression)
+                .map(|e| e.init(self.hunk_bytes()))
+                .ok_or(ChdError::UnsupportedFormat)?
+                .map(|e| vec![e]),
+            ChdHeader::V4Header(c) => CodecType::from_u32(c.compression)
+                .map(|e| e.init(self.hunk_bytes()))
+                .ok_or(ChdError::UnsupportedFormat)?
+                .map(|e| vec![e]),
+            ChdHeader::V5Header(c) => c
+                .compression
+                .map(CodecType::from_u32)
+                .map(|f| f.ok_or(ChdError::UnsupportedFormat))
+                .map(|f| f.and_then(|f| f.init(self.hunk_bytes())))
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    /// Validate the header.
+    fn validate(&self) -> bool {
         let length_valid = match self {
             ChdHeader::V1Header(c) => c.length == CHD_V1_HEADER_SIZE,
             ChdHeader::V2Header(c) => c.length == CHD_V2_HEADER_SIZE,
@@ -321,7 +494,8 @@ impl ChdHeader {
         return true;
     }
 
-    pub fn validate_compression(&self) -> bool {
+    /// Validate the compression types of the CHD file can be read.
+    fn validate_compression(&self) -> bool {
         match self {
             ChdHeader::V1Header(c) => ChdHeader::validate_legacy_compression(c.compression),
             ChdHeader::V2Header(c) => ChdHeader::validate_legacy_compression(c.compression),
@@ -335,40 +509,14 @@ impl ChdHeader {
         }
     }
 
-    pub fn create_compression_codecs(&self) -> Result<Vec<Box<dyn CompressionCodec>>> {
-        match self {
-            ChdHeader::V1Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| vec![e]),
-            ChdHeader::V2Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| vec![e]),
-            ChdHeader::V3Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| vec![e]),
-            ChdHeader::V4Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| vec![e]),
-            ChdHeader::V5Header(c) => c
-                .compression
-                .map(CodecType::from_u32)
-                .map(|f| f.ok_or(ChdError::UnsupportedFormat))
-                .map(|f| f.and_then(|f| f.init(self.hunk_bytes())))
-                .into_iter()
-                .collect(),
-        }
-    }
-
+    /// Validate compression for V1-4 CHD headers.
     fn validate_legacy_compression(value: u32) -> bool {
         CodecType::from_u32(value)
             .map(|e| e.is_legacy())
             .unwrap_or(false)
     }
 
+    /// Validate compression for V5 CHD headers.
     fn validate_v5_compression(value: u32) -> bool {
         // v5 can not be legacy.
         CodecType::from_u32(value)
@@ -377,10 +525,16 @@ impl ChdHeader {
     }
 }
 
+/// CHD flags for legacy V1-4 headers.
 #[repr(u32)]
 pub enum Flags {
+    /// This CHD file has a parent.
     HasParent = 0x00000001,
+
+    /// This CHD file is writable.
     IsWritable = 0x00000002,
+
+    /// Undefined.
     Undefined = 0xfffffffc,
 }
 
@@ -473,6 +627,7 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
         hunk_size,
         parent_md5,
         logical_bytes,
+        sector_length,
     })
 }
 
@@ -564,7 +719,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         static ref RE_BPS: Regex = Regex::new(r"(?-u)(BPS:)(\d+)").unwrap();
     }
 
-    let metas: Vec<_> = IterMetadataEntry::from_stream(chd, off).collect();
+    let metas: Vec<_> = ChdMetadataRefIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
         .iter()
         .find(|&e| e.metatag == KnownMetadata::HardDisk as u32)

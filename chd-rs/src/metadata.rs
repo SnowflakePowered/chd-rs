@@ -1,3 +1,5 @@
+//! Types and methods relating to metadata stored in a CHD file.
+
 use crate::error::{ChdError, Result};
 use crate::make_tag;
 use byteorder::{BigEndian, ReadBytesExt};
@@ -8,6 +10,7 @@ const METADATA_HEADER_SIZE: usize = 16;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+/// A list of well-known metadata tags.
 #[derive(FromPrimitive)]
 #[repr(u32)]
 pub enum KnownMetadata {
@@ -26,6 +29,7 @@ pub enum KnownMetadata {
 }
 
 impl KnownMetadata {
+    /// Returns whether a given tag indicates that the CHD contains CDROM data.
     pub fn is_cdrom(tag: u32) -> bool {
         if let Some(tag) = FromPrimitive::from_u32(tag) {
             return match tag {
@@ -41,17 +45,24 @@ impl KnownMetadata {
     }
 }
 
+/// A complete CHD metadata entry with contents read into memory.
 pub struct ChdMetadata {
+    /// The FourCC metadata tag.
     pub metatag: u32,
+    /// The contents of this metadata entry.
     pub value: Vec<u8>,
+    /// The flags of this metadata entry.
     pub flags: u8,
+    /// The index of this metadata entry relative to the beginning of the metadata section.
     pub index: u32,
+    /// The length of this metadata entry.
     pub length: u64,
 }
 
+/// A reference to a metadata entry within the CHD file.
 #[repr(C)]
 #[derive(Clone)]
-pub struct MetadataEntry {
+pub struct ChdMetadataRef {
     offset: u64,
     next: u64,
     prev: u64,
@@ -61,13 +72,15 @@ pub struct MetadataEntry {
     pub(crate) index: u32,
 }
 
-impl MetadataEntry {
+impl ChdMetadataRef {
     fn read_into<F: Read + Seek>(&self, file: &mut F, buf: &mut [u8]) -> Result<()> {
         file.seek(SeekFrom::Start(self.offset + METADATA_HEADER_SIZE as u64))?;
         file.read_exact(buf)?;
         Ok(())
     }
 
+    /// Read the contents of the metadata from the input stream. The `ChdMetadataRef` must have
+    /// the same provenance as the input stream for a successful read.
     pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<ChdMetadata> {
         let mut buf = vec![0u8; self.length as usize];
         self.read_into(file, &mut buf)?;
@@ -81,17 +94,18 @@ impl MetadataEntry {
     }
 }
 
-pub struct IterMetadataEntry<'a, F: Read + Seek + 'a> {
+/// An iterator over the metadata entries of a stream that contains a CHD file.
+pub struct ChdMetadataRefIter<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
     curr_offset: u64,
-    curr: Option<MetadataEntry>,
+    curr: Option<ChdMetadataRef>,
     // Just use a tuple because we rarely have more than 2 or 3 types of tag.
     indices: Vec<(u32, u32)>,
 }
 
-impl<'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> ChdMetadataRefIter<'a, F> {
     pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
-        IterMetadataEntry {
+        ChdMetadataRefIter {
             file,
             curr_offset: initial_offset,
             curr: None,
@@ -99,12 +113,14 @@ impl<'a, F: Read + Seek + 'a> IterMetadataEntry<'a, F> {
         }
     }
 
+    /// Consumes the iterator, collecting all remaining metadata references and
+    /// reads all their contents into a `Vec<ChdMetadata>`.
     pub fn try_into_vec(self) -> Result<Vec<ChdMetadata>> {
         self.try_into()
     }
 }
 
-impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for ChdMetadataRefIter<'a, F> {
     type Error = ChdError;
 
     fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
@@ -114,9 +130,9 @@ impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for IterMetadataEntry<'a
     }
 }
 
-impl<'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
     // really need GATs to do this properly...
-    type Item = MetadataEntry;
+    type Item = ChdMetadataRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.curr_offset == 0 {
@@ -124,8 +140,8 @@ impl<'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
         }
 
         fn next_inner<'a, F: Read + Seek + 'a>(
-            s: &mut IterMetadataEntry<'a, F>,
-        ) -> Result<MetadataEntry> {
+            s: &mut ChdMetadataRefIter<'a, F>,
+        ) -> Result<ChdMetadataRef> {
             let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
             let count = s.file.read(&mut raw_header)?;
@@ -159,7 +175,7 @@ impl<'a, F: Read + Seek + 'a> Iterator for IterMetadataEntry<'a, F> {
                 s.indices.push((metatag, 1))
             }
 
-            let mut new = MetadataEntry {
+            let mut new = ChdMetadataRef {
                 offset: s.curr_offset,
                 next,
                 prev: 0,

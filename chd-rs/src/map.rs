@@ -1,3 +1,5 @@
+//! Types and methods relating to the CHD hunk map.
+
 use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
 use crate::huffman::HuffmanDecoder;
@@ -49,12 +51,10 @@ pub enum LegacyEntryType {
     ExternalCompressed = 6, // compressed with external algorithm (i.e. flac CDDA)
 }
 
-type RawMap = (Vec<u8>, bool, u32);
+pub type RawMap = (Vec<u8>, bool, u32);
+pub type MapList = Vec<LegacyMapEntry>;
 
-#[allow(unused)]
-type MapList = Vec<LegacyMapEntry>;
-
-#[allow(unused)]
+/// A CHD V1-V4 map entry.
 pub struct LegacyMapEntry {
     offset: u64,      // offset within file of data
     crc: Option<u32>, // crc32 of data
@@ -81,26 +81,35 @@ impl LegacyMapEntry {
     }
 }
 
+/// A CHD V5 map entry for a compressed hunk.
+pub struct V5CompressedEntry<'a>(&'a [u8; 12]);
+
+/// A CHD V5 map entry for an uncompressed hunk.
+pub struct V5UncompressedEntry<'a>(&'a [u8; 4], u32);
+
+/// The hunk map for a CHD file.
 pub enum ChdMap {
     V5(RawMap), // compressed
     Legacy(MapList),
 }
 
+/// A map entry for a CHD file of unspecified version.
 pub enum MapEntry<'a> {
-    V5Compressed(&'a [u8; 12]),
-    V5Uncompressed(&'a [u8; 4], u32),
+    V5Compressed(V5CompressedEntry<'a>),
+    V5Uncompressed(V5UncompressedEntry<'a>),
     LegacyEntry(&'a LegacyMapEntry),
 }
 
+
 impl<'a> MapEntry<'a> {
+
+    /// Returns whether or not this map entry is for a compressed hunk.
     pub fn is_compressed(&self) -> bool {
         match self {
             MapEntry::V5Compressed(_) => true,
-            MapEntry::V5Uncompressed(_, _) => false,
+            MapEntry::V5Uncompressed(_) => false,
             MapEntry::LegacyEntry(e) => {
-                if let Some(LegacyEntryType::Uncompressed) =
-                    LegacyEntryType::from_u8(e.flags & MAP_ENTRY_FLAG_TYPE_MASK)
-                {
+                if let Ok(LegacyEntryType::Uncompressed) = e.entry_type() {
                     false
                 } else {
                     true
@@ -109,6 +118,7 @@ impl<'a> MapEntry<'a> {
         }
     }
 
+    /// Returns whether or not this map entry is from a legacy (V1-4) CHD file.
     pub fn is_legacy(&self) -> bool {
         match self {
             MapEntry::LegacyEntry(_) => true,
@@ -122,16 +132,17 @@ impl<'a> MapEntry<'a> {
     /// hunk size of the CHD.
     pub fn block_size(&self) -> Result<u32> {
         match self {
-            MapEntry::V5Compressed(r) => Ok(Cursor::new(&r[1..]).read_u24::<BigEndian>()?),
-            MapEntry::V5Uncompressed(_, hunk_bytes) => Ok(*hunk_bytes),
+            MapEntry::V5Compressed(r) => Ok(Cursor::new(&r.0[1..]).read_u24::<BigEndian>()?),
+            MapEntry::V5Uncompressed(e) => Ok(e.1),
             MapEntry::LegacyEntry(e) => Ok(e.length),
         }
     }
 
+    /// Returns the offset of the hunk this map entry refers to.
     pub fn block_offset(&self) -> Result<u64> {
         match self {
-            MapEntry::V5Compressed(r) => Ok(Cursor::new(&r[4..]).read_u48::<BigEndian>()?),
-            MapEntry::V5Uncompressed(r, hunk_bytes) => {
+            MapEntry::V5Compressed(r) => Ok(Cursor::new(&r.0[4..]).read_u48::<BigEndian>()?),
+            MapEntry::V5Uncompressed(V5UncompressedEntry(r, hunk_bytes)) => {
                 let off = Cursor::new(r).read_u32::<BigEndian>()?;
                 Ok(off as u64 * *hunk_bytes as u64)
             }
@@ -139,24 +150,25 @@ impl<'a> MapEntry<'a> {
         }
     }
 
+    /// Returns the CRC (16 or 32) of the map entry, if present.
     pub fn block_crc(&self) -> Result<Option<u32>> {
         match self {
             MapEntry::V5Compressed(r) => {
-                Ok(Some(Cursor::new(&r[10..]).read_u16::<BigEndian>()? as u32))
+                Ok(Some(Cursor::new(&r.0[10..]).read_u16::<BigEndian>()? as u32))
             }
-            MapEntry::V5Uncompressed(_, _) => Ok(None),
+            MapEntry::V5Uncompressed(_) => Ok(None),
             MapEntry::LegacyEntry(e) => Ok(e.crc),
         }
     }
 
+    /// Returns the compression/block type of the hunk this map entry belongs to.
     pub fn block_type(&self) -> Option<u8> {
         match self {
-            MapEntry::V5Compressed(r) => Some(r[0]),
-            MapEntry::V5Uncompressed(_, _) => None,
+            MapEntry::V5Compressed(r) => Some(r.0[0]),
+            MapEntry::V5Uncompressed(_) => None,
             MapEntry::LegacyEntry(e) => Some(e.flags & MAP_ENTRY_FLAG_TYPE_MASK),
         }
     }
-    // todo: get compression type for map entry
 }
 
 impl ChdMap {
@@ -181,11 +193,11 @@ impl ChdMap {
                 if let &Some(entry_slice) = entry_slice {
                     return if m.1 {
                         <&[u8; 12]>::try_from(entry_slice)
-                            .map(MapEntry::V5Compressed)
+                            .map(|e| MapEntry::V5Compressed(V5CompressedEntry(e)))
                             .ok()
                     } else {
                         <&[u8; 4]>::try_from(entry_slice)
-                            .map(|e| MapEntry::V5Uncompressed(e, m.2))
+                            .map(|e| MapEntry::V5Uncompressed(V5UncompressedEntry(e, m.2)))
                             .ok()
                     };
                 }
@@ -240,7 +252,7 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
 
     // wrap into bufreader
     let mut file = BufReader::new(file);
-    file.seek(SeekFrom::Start(header.length() as u64))?;
+    file.seek(SeekFrom::Start(header.len() as u64))?;
 
     // SAFETY: V3_MAP_ENTRY_SIZE is strictly greater than V1_MAP_ENTRY_SIZE so it is safe to overallocate.
     // the read will instead read only to the first 8 bytes = u64 in the V1 case.
