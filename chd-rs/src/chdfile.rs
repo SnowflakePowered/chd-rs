@@ -179,7 +179,6 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                         Ok(res)
                     }
                     LegacyEntryType::ParentHunk => {
-                        // todo: optimize to reuse internal buffers
                         match self.inner.parent.as_deref_mut() {
                             None => Err(ChdError::RequiresParent),
                             Some(parent) => {

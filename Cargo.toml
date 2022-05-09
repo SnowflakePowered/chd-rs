@@ -5,3 +5,6 @@ members = [
     "rchdman",
     "chd-rs-capi"
 ]
+
+[profile.release]
+debug = true

@@ -19,41 +19,36 @@ pub type chd_file = ChdFile<Box<dyn ReadAndSeek>>;
 extern "C" fn chd_open_file(filename: *const c_char, _mode: c_int,
                             parent: *mut chd_file,
                             out: *mut *mut chd_file) -> ChdError {
-    catch_unwind(|| {
-        let c_filename = unsafe { CStr::from_ptr(filename) };
-        let filename = if let Ok(s) = std::str::from_utf8(c_filename.to_bytes()) {
-            Path::new(s)
+
+    let c_filename = unsafe { CStr::from_ptr(filename) };
+    let filename = if let Ok(s) = std::str::from_utf8(c_filename.to_bytes()) {
+        Path::new(s)
+    } else {
+        return ChdError::InvalidParameter
+    };
+    let file = if let Ok(file) = File::open(filename) {
+        file
+    } else {
+        return ChdError::FileNotFound
+    };
+    let bufread =
+        Box::new(BufReader::new(file)) as Box<dyn ReadAndSeek>;
+    let parent = if parent.is_null() {
+        None
+    } else {
+        Some(unsafe { Box::from_raw(parent) })
+    };
+    let chd =
+        if let Ok(chd) = ChdFile::open(bufread, parent) {
+            chd
         } else {
-            return ChdError::InvalidParameter
+            return ChdError::FileNotFound;
         };
+    unsafe {
+        *out = Box::into_raw(Box::new(chd))
+    }
+    return ChdError::None;
 
-        let file = if let Ok(file) = File::open(filename) {
-            file
-        } else {
-            return ChdError::FileNotFound
-        };
-
-        let bufread =
-            Box::new(BufReader::new(file)) as Box<dyn ReadAndSeek>;
-
-        let parent = if parent.is_null() {
-            None
-        } else {
-            Some(unsafe { Box::from_raw(parent) })
-        };
-
-        let chd =
-            if let Ok(chd) = ChdFile::open(bufread, parent) {
-                chd
-            } else {
-                return ChdError::FileNotFound;
-            };
-
-        unsafe {
-            *out = Box::into_raw(Box::new(chd))
-        }
-        return ChdError::None;
-    }).unwrap_or(ChdError::Unknown)
 }
 
 #[no_mangle]
