@@ -141,5 +141,11 @@ impl From<HuffmanError> for ChdError {
     }
 }
 
+impl From<ChdError> for std::io::Error {
+    fn from(e: ChdError) -> Self {
+        std::io::Error::new(ErrorKind::Other, e)
+    }
+}
+
 /// Result type for `chd`.
 pub type Result<T> = std::result::Result<T, ChdError>;

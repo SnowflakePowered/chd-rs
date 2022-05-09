@@ -22,11 +22,6 @@ pub struct ChdFile<F: Read + Seek> {
     codecs: Vec<Box<dyn CompressionCodec>>,
 }
 
-/// A reference to a compressed Hunk in a CHD file.
-pub struct ChdHunk<'a, F: Read + Seek> {
-    inner: &'a mut ChdFile<F>,
-    hunk_num: u32,
-}
 
 impl<F: Read + Seek> ChdFile<F> {
     /// Open a CHD file from a file on disk.
@@ -106,6 +101,12 @@ impl<F: Read + Seek> ChdFile<F> {
     pub fn into_inner(self) -> F {
         self.file
     }
+}
+
+/// A reference to a compressed Hunk in a CHD file.
+pub struct ChdHunk<'a, F: Read + Seek> {
+    inner: &'a mut ChdFile<F>,
+    hunk_num: u32,
 }
 
 impl<'a, F: Read + Seek> ChdHunk<'a, F> {
@@ -321,8 +322,8 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     }
 
     /// Decompresses the hunk into output, using the provided temporary buffer to hold the
-    /// compressed hunk. The size of the output buffer must be larger than hunk size of the
-    /// CHD file.
+    /// compressed hunk. The size of the output buffer must be larger than or equal to the
+    /// hunk size of the CHD file.
     ///
     /// Returns the number of bytes decompressed on success.
     pub fn read_hunk_in(&mut self, compressed_buffer: &mut Vec<u8>, dest: &mut [u8]) -> Result<usize> {
@@ -335,20 +336,9 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
             ChdMap::Legacy(_) => self.read_hunk_legacy(compressed_buffer, dest)
         }
     }
-}
 
-impl<'a, F: Read + Seek> Read for ChdHunk<'a, F> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
-        // match self.read_hunk() {
-        //     Ok(size) => Ok(size),
-        //     Err(e) => Err(std::io::Error::new(ErrorKind::Other,e))
-        // }
-    }
-}
-
-impl<'a, F: Read + Seek> Read for ChdFile<F> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
+    /// Returns the length of this hunk in bytes.
+    pub const fn len(&self) -> usize {
+        self.inner.header.hunk_bytes() as usize
     }
 }
