@@ -7,8 +7,8 @@ use crate::compression::{
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
-use std::convert::TryFrom;
 use cfg_if::cfg_if;
+use std::convert::TryFrom;
 
 pub type CdLzCodec = CdBlockCodec<LzmaCodec, ZlibCodec>;
 pub type CdZlCodec = CdBlockCodec<ZlibCodec, ZlibCodec>;
@@ -77,41 +77,43 @@ impl<Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<E
             if #[cfg(feature = "want_subcode")] {
                 let sub_res = self.sub_engine.decompress(
                     &input[header_bytes + complen_base as usize..],
-                    &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
-                    [..frames * CD_MAX_SUBCODE_DATA as usize],
+                    &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize],
                 )?;
             } else {
                 let sub_res = DecompressLength::default();
             }
         }
 
-        // reassemble data
-        for frame_num in 0..frames {
+        // reassemble frames data
+        for (frame_num, chunk) in self.buffer[..frames * CD_MAX_SECTOR_DATA as usize]
+            .chunks_exact(CD_MAX_SECTOR_DATA as usize)
+            .enumerate()
+        {
             output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
-                .copy_from_slice(
-                    &self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..]
-                        [..CD_MAX_SECTOR_DATA as usize],
-                );
+                .copy_from_slice(chunk);
+        }
 
-            #[cfg(feature = "want_subcode")]
+        // reassemble subcode data
+        #[cfg(feature = "want_subcode")]
+        for (frame_num, chunk) in self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+            .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
+            .enumerate()
+        {
             output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
                 [..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(
-                    &self.buffer[frames * CD_MAX_SECTOR_DATA as usize
-                        + frame_num * CD_MAX_SUBCODE_DATA as usize..]
-                        [..CD_MAX_SUBCODE_DATA as usize],
-                );
+                .copy_from_slice(chunk);
+        }
 
-            #[cfg(feature = "want_raw_data_sector")]
-            {
-                // this may be a bit overkill..
-                let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
-                    &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize],
-                )?;
-                if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
-                    sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
-                    sector_slice.generate_ecc();
-                }
+        // reassemble data
+        #[cfg(feature = "want_raw_data_sector")]
+        for frame_num in 0..frames {
+            let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
+                &mut output[frame_num * CD_FRAME_SIZE as usize..]
+                    [..CD_MAX_SECTOR_DATA as usize],
+            )?;
+            if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
+                sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);
+                sector_slice.generate_ecc();
             }
         }
 

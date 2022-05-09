@@ -147,5 +147,5 @@ impl From<ChdError> for std::io::Error {
     }
 }
 
-/// Result type for `chd`.
+/// Result type for chd-rs.
 pub type Result<T> = std::result::Result<T, ChdError>;

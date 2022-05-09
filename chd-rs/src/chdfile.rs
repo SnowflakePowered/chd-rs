@@ -24,19 +24,11 @@ pub struct ChdFile<F: Read + Seek> {
 
 
 impl<F: Read + Seek> ChdFile<F> {
-    /// Open a CHD file from a file on disk.
-    ///
-    /// The CHD header and hunk map are read and validated immediately.
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<ChdFile<File>> {
-        let file = File::open(path)?;
-        ChdFile::open_stream(file, None)
-    }
-
     /// Open a CHD file from a `Read + Seek` stream. Optionally provide a parent of the same stream
     /// type.
     ///
     /// The CHD header and hunk map are read and validated immediately.
-    pub fn open_stream(mut file: F, parent: Option<Box<ChdFile<F>>>) -> Result<ChdFile<F>> {
+    pub fn open(mut file: F, parent: Option<Box<ChdFile<F>>>) -> Result<ChdFile<F>> {
         let header = ChdHeader::try_read_header(&mut file)?;
         // No point in checking writable because traits are read only.
         // In the future if we want to support a Write feature, will need to ensure writable.
@@ -115,7 +107,6 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         let offset = map_entry.block_offset();
         let length = map_entry.block_size();
 
-        comp_buf.fill(0);
         comp_buf.resize(length as usize, 0);
 
         self.inner.file.seek(SeekFrom::Start(offset))?;

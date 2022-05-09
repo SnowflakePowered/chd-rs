@@ -748,6 +748,7 @@ impl ErrorCorrectedSector for &mut [u8; CD_MAX_SECTOR_DATA as usize] {
         self[ECC_Q_OFFSET..][..2 * ECC_Q_NUM_BYTES].fill(0);
     }
 
+    #[inline(always)]
     fn generate_ecc(&mut self) {
         // write P bytes
         for (idx, row) in ECC_P_OFF.iter().enumerate() {

@@ -69,7 +69,7 @@ impl CodecType {
     /// * LZMA (Raw LZMA)
     ///
     /// AVHuff decompression is not supported.
-    pub fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
+    pub(crate) fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
         match self {
             CodecType::None => {
                 NoneCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)

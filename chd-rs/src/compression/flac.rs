@@ -18,7 +18,10 @@ pub struct FlacCodec {
 impl CompressionCodec for FlacCodec {}
 
 impl CompressionCodecType for FlacCodec {
-    fn codec_type(&self) -> CodecType where Self: Sized {
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized,
+    {
         CodecType::FlacV5
     }
 }
@@ -59,7 +62,6 @@ impl InternalCodec for FlacCodec {
         while samples_written < num_samples {
             match frame_read.read_next_or_eof(buf) {
                 Ok(Some(block)) => {
-
                     // We assume 2 channels, so we can use claxon's stereo_samples
                     // iterator for slightly better performance.
                     #[cfg(not(feature = "nonstandard_channel_count"))]
@@ -151,22 +153,24 @@ impl InternalCodec for CdFlCodec {
             }
         };
 
-        // reassemble the data into the buffer
-        for frame_num in 0..frames {
+        // reassemble frames data
+        for (frame_num, chunk) in self.buffer[..frames * CD_MAX_SECTOR_DATA as usize]
+            .chunks_exact(CD_MAX_SECTOR_DATA as usize)
+            .enumerate()
+        {
             output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
-                .copy_from_slice(
-                    &self.buffer[frame_num * CD_MAX_SECTOR_DATA as usize..]
-                        [..CD_MAX_SECTOR_DATA as usize],
-                );
+                .copy_from_slice(chunk);
+        }
 
-            #[cfg(feature = "want_subcode")]
+        // reassemble subcode data
+        #[cfg(feature = "want_subcode")]
+        for (frame_num, chunk) in self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+            .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
+            .enumerate()
+        {
             output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
                 [..CD_MAX_SUBCODE_DATA as usize]
-                .copy_from_slice(
-                    &self.buffer[frames * CD_MAX_SECTOR_DATA as usize
-                        + frame_num * CD_MAX_SUBCODE_DATA as usize..]
-                        [..CD_MAX_SUBCODE_DATA as usize],
-                );
+                .copy_from_slice(chunk);
         }
 
         Ok(frame_res + sub_res)

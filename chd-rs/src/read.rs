@@ -21,7 +21,7 @@ impl ChdHunkBufReader {
     /// Creates a `ChdHunkBufReader` with the provided buffers.
     ///
     /// Ownership of `buffer` is transferred to the created `ChdHunkBufReader` and can be
-    /// reacquired with [`ChdHunkBufReader::into_inner`](crate::hunk::ChdHunkBufReader::into_inner).
+    /// reacquired with [`ChdHunkBufReader::into_inner`](crate::read::ChdHunkBufReader::into_inner).
     ///
     /// The hunk contents are immediately buffered from the stream upon creation.
     pub fn new_in<F: Read + Seek>(hunk: &mut ChdHunk<F>, cmp_buffer: &mut Vec<u8>, mut buffer: Vec<u8>) -> Result<Self> {

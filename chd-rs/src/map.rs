@@ -101,6 +101,7 @@ impl LegacyMapEntry {
 
     /// Obtain a proof that the hunk this entry refers to is compressed.
     /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
             LegacyEntryType::Compressed => Ok(CompressedEntryProof(self.block_offset(), self.block_size())),
@@ -110,6 +111,7 @@ impl LegacyMapEntry {
 
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
     /// If the hunk is compressed, returns `ChdError::InvalidParameter`.
+    #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
             LegacyEntryType::Uncompressed => Ok(UncompressedEntryProof(self.block_offset(), self.block_size())),
@@ -142,6 +144,7 @@ impl V5CompressedEntry<'_> {
 
     /// Obtain a proof that the hunk this entry refers to is compressed.
     /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
             V5CompressionType::CompressionType0 |
@@ -154,6 +157,7 @@ impl V5CompressedEntry<'_> {
 
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
     /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
             V5CompressionType::CompressionNone => Ok(UncompressedEntryProof(self.block_offset()?, self.block_size()?)),
@@ -176,6 +180,7 @@ impl V5UncompressedEntry<'_> {
     }
 
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
+    #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         Ok(UncompressedEntryProof(self.block_offset()?, self.block_size()))
     }

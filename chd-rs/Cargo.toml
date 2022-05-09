@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
@@ -22,7 +22,7 @@ want_raw_data_sector = []
 byteorder = "1"
 num-traits = "0.2"
 num-derive = "0.3"
-regex = "1"
+regex = { version = "1", features = ["std", "perf"] }
 lazy_static = "1.4.0"
 flate2 = "1"
 lzma-rs-headerless = "0.2.1"
@@ -30,3 +30,10 @@ claxon = "0.4"
 bitreader = "0.3.4"
 crc = "3"
 cfg-if = "1"
+
+[dev-dependencies]
+bencher = "0.1.5"
+
+[[bench]]
+name = "bench"
+harness = false

@@ -1,3 +1,16 @@
+//! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
+//! for CHD V1-5.
+//!
+//! ## Supported Compression Codecs
+//! chd-rs supports the following compression codecs.
+//!
+//! * None
+//! * Zlib/Zlib+/Zlib V5
+//! * CDZL (CD Zlib)
+//! * CDLZ (CD LZMA)
+//! * CDFL (CD FLAC)
+//! * FLAC (Raw FLAC)
+//! * LZMA (Raw LZMA)
 #![forbid(unsafe_code)]
 
 mod error;
@@ -25,13 +38,15 @@ mod tests {
     use crate::metadata::ChdMetadata;
     use std::convert::TryInto;
     use std::fs::File;
-    use std::io::{Read, Write};
+    use std::io::{BufReader, Read, Write};
+    use std::process::Termination;
+    use bencher::Bencher;
     use crate::read::{ChdFileReader, ChdHunkBufReader};
 
     #[test]
     fn read_metas_test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
-        let mut chd = ChdFile::open_stream(&mut f, None).expect("file");
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
 
         let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
         let meta_datas: Vec<_> = metadatas
@@ -43,8 +58,8 @@ mod tests {
 
     #[test]
     fn read_hunks_test() {
-        let mut f = File::open(".testimages/Test.chd").expect("");
-        let mut chd = ChdFile::open_stream(&mut f, None).expect("file");
+        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
 
         let mut hunk_buf = Vec::new();
@@ -62,8 +77,8 @@ mod tests {
 
     #[test]
     fn read_file_test() {
-        let mut f = File::open(".testimages/Test.chd").expect("");
-        let chd = ChdFile::open_stream(&mut f, None).expect("file");
+        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let chd = ChdFile::open(&mut f, None).expect("file");
         let mut read = ChdFileReader::new(chd);
 
         let mut buf = Vec::new(); // this is really bad..
