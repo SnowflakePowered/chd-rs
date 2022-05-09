@@ -1,6 +1,10 @@
 use num_traits::ToPrimitive;
-use crate::error::{ChdError, Result};
+use crate::Result;
 
+#[cfg(feature = "verify_block_crc")]
+use crate::ChdError;
+
+#[allow(unused_imports)]
 use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
 
 // CRC16 table in hashing.cpp indicates CRC16/CCITT, but constants
@@ -10,6 +14,7 @@ pub(crate) const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
 // The polynomial matches up (0x04c11db7 reflected = 0xedb88320), and
 // checking with zlib crc32.c matches the check 0xcbf43926 for
 // "12345678".
+#[cfg(feature = "verify_block_crc")]
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 /// Crate-private trait for the implementation of a CHD-compatible CRC instance for
@@ -27,6 +32,7 @@ pub(crate) trait ChdBlockChecksum {
 
 impl ChdBlockChecksum for Crc<u16> {
     #[inline(always)]
+    #[allow(unused_variables)]
     fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R> {
 
         #[cfg(feature = "verify_block_crc")]
@@ -44,6 +50,7 @@ impl ChdBlockChecksum for Crc<u16> {
 
 impl ChdBlockChecksum for Crc<u32> {
     #[inline(always)]
+    #[allow(unused_variables)]
     fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R> {
         #[cfg(feature = "verify_block_crc")]
         match crc.and_then(|f| f.to_u32()) {

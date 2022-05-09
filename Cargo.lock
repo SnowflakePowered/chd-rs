@@ -98,6 +98,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "chd-rs-capi"
+version = "0.1.0"
+dependencies = [
+ "chd",
+]
+
+[[package]]
 name = "clap"
 version = "3.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"

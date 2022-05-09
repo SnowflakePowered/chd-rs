@@ -8,9 +8,7 @@ use crate::metadata::ChdMetadataRefIter;
 use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
-use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use std::path::Path;
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct ChdFile<F: Read + Seek> {

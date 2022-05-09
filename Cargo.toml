@@ -2,5 +2,6 @@
 members = [
     "chd-rs",
     "lzma-rs",
-    "rchdman"
+    "rchdman",
+    "chd-rs-capi"
 ]
