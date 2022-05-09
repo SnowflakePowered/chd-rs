@@ -1,7 +1,7 @@
 use crate::compression::{BlockCodec, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
-use lzma_rs::decode::lzma::LzmaParams;
-use lzma_rs::lzma_decompress_with_params;
+use lzma_rs_headerless::decode::lzma::LzmaParams;
+use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
 
 pub struct LzmaCodec {

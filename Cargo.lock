@@ -84,7 +84,7 @@ dependencies = [
  "crc 3.0.0",
  "flate2",
  "lazy_static",
- "lzma-rs",
+ "lzma-rs-headerless 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-derive",
  "num-traits",
  "regex",
@@ -258,13 +258,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "lzma-rs"
-version = "0.2.0"
+name = "lzma-rs-headerless"
+version = "0.2.1"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
  "env_logger",
  "log",
+]
+
+[[package]]
+name = "lzma-rs-headerless"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ace830963c56ba4170d7ecc292f330220544dac3e6d741c7812bbb2595a72b09"
+dependencies = [
+ "byteorder",
+ "crc 1.8.1",
 ]
 
 [[package]]

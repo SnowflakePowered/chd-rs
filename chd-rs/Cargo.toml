@@ -4,7 +4,12 @@ version = "0.0.2"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
-license = "MIT"
+license = "BSD-3-Clause"
+repository = "https://github.com/SnowflakePowered/chd-rs"
+readme = "../README.md"
+categories = ["emulators", "compression", "encoding"]
+keywords = ["mame", "chd", "decompression"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -20,7 +25,7 @@ num-derive = "0.3"
 regex = "1"
 lazy_static = "1.4.0"
 flate2 = "1"
-lzma-rs = { path = "../lzma-rs" }
+lzma-rs-headerless = "0.2.1"
 claxon = "0.4"
 bitreader = "0.3.4"
 crc = "3"
