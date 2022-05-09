@@ -2,12 +2,12 @@ use crate::compression::CompressionCodec;
 use crate::error::{ChdError, Result};
 use crate::block_hash::ChdBlockChecksum;
 use crate::header::ChdHeader;
-use crate::map::{ChdMap, LegacyEntryType, MapEntry, V5CompressionType};
+use crate::map::{ChdMap, CompressedEntryProof, LegacyEntryType, MapEntry, UncompressedEntryProof, V5CompressionType};
 use crate::metadata::ChdMetadataRefIter;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::ToPrimitive;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -110,20 +110,9 @@ impl<F: Read + Seek> ChdFile<F> {
 
 impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     /// Buffer the compressed bytes into the hunk buffer.
-    fn read_compressed_in(&mut self, comp_buf: &mut Vec<u8>) -> Result<()> {
-        // Ideally I don't want to reacquire the map_entry but I'm not sure how to solve the
-        // lifetime requirements here.
-        let map_entry = self
-            .inner
-            .map()
-            .get_entry(self.hunk_num as usize)
-            .ok_or(ChdError::HunkOutOfRange)?;
-
-        if !map_entry.is_compressed() {
-            return Err(ChdError::InvalidParameter);
-        }
-        let offset = map_entry.block_offset()?;
-        let length = map_entry.block_size()?;
+    fn read_compressed_in(&mut self, map_entry: CompressedEntryProof, comp_buf: &mut Vec<u8>) -> Result<()> {
+        let offset = map_entry.block_offset();
+        let length = map_entry.block_size();
 
         comp_buf.fill(0);
         comp_buf.resize(length as usize, 0);
@@ -136,20 +125,9 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         Ok(())
     }
 
-    fn read_uncompressed(&mut self, dest: &mut [u8]) -> Result<usize> {
-        // Ideally I don't  want to reacquire the map_entry but I'm not sure how to solve the
-        // lifetime requirements here.
-        let map_entry = self
-            .inner
-            .map()
-            .get_entry(self.hunk_num as usize)
-            .ok_or(ChdError::HunkOutOfRange)?;
-
-        if map_entry.is_compressed() {
-            return Err(ChdError::InvalidParameter);
-        }
-        let offset = map_entry.block_offset()?;
-        let length = map_entry.block_size()?;
+    fn read_uncompressed(&mut self, map_entry: UncompressedEntryProof, dest: &mut [u8]) -> Result<usize> {
+        let offset = map_entry.block_offset();
+        let length = map_entry.block_size();
 
         if dest.len() != length as usize {
             return Err(ChdError::InvalidParameter);
@@ -166,20 +144,17 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
             .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
-        if !map_entry.is_legacy() {
-            return Err(ChdError::InvalidParameter);
-        }
-
-        let block_len = map_entry.block_size()? as usize;
-        let block_crc = map_entry.block_crc()?;
-        let block_off = map_entry.block_offset()?;
-
         match map_entry {
             MapEntry::LegacyEntry(entry) => {
-                match entry.entry_type()? {
+                let block_len = entry.block_size() as usize;
+                let block_crc = entry.hunk_crc();
+                let block_off = entry.block_offset();
+
+                match entry.hunk_type()? {
                     LegacyEntryType::Compressed => {
                         // buffer the compressed data
-                        self.read_compressed_in(comp_buf)?;
+                        let proof = entry.prove_compressed()?;
+                        self.read_compressed_in(proof, comp_buf)?;
                         let res =
                             &self.inner.codecs[0].decompress(&comp_buf[..block_len], dest)?;
 
@@ -187,12 +162,13 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                                                           dest, res.total_out())
                     }
                     LegacyEntryType::Uncompressed => {
-                        let res = self.read_uncompressed(dest)?;
+                        let proof = entry.prove_uncompressed()?;
+                        let res = self.read_uncompressed(proof, dest)?;
                         Crc::<u32>::verify_block_checksum(block_crc, dest, res)
                     }
                     LegacyEntryType::Mini => {
                         let mut cursor = Cursor::new(dest);
-                        cursor.write_u64::<BigEndian>(entry.offset())?;
+                        cursor.write_u64::<BigEndian>(entry.block_offset())?;
                         let dest = cursor.into_inner();
                         let mut bytes_read_into = std::mem::size_of::<u64>();
 
@@ -231,121 +207,117 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         }
     }
 
-    fn buffer_hunk_v5(&mut self, comp_buf: &mut Vec<u8>, dest: &mut [u8]) -> Result<usize> {
+    fn read_hunk_v5(&mut self, comp_buf: &mut Vec<u8>, dest: &mut [u8]) -> Result<usize> {
         let map_entry = self
             .inner
             .map()
             .get_entry(self.hunk_num as usize)
             .ok_or(ChdError::HunkOutOfRange)?;
 
-        if map_entry.is_legacy() {
-            return Err(ChdError::InvalidParameter);
-        }
-
-        // block_off is already accurate for uncompressed case
-        let block_off = map_entry.block_offset()?;
-        let block_crc = map_entry.block_crc()?;
-
         let has_parent = self.inner.header.has_parent();
 
-        return if !map_entry.is_compressed() {
-            match (block_off, has_parent) {
-                (0, false) => {
-                    dest.fill(0);
-                    Ok(dest.len())
-                }
-                (0, true) => {
-                    if let Some(parent) = self.inner.parent.as_deref_mut() {
-                        let mut parent = parent.hunk(self.hunk_num)?;
-                        let res = parent.read_hunk_in(comp_buf, dest)?;
-                        Ok(res)
-                    } else {
-                        Err(ChdError::RequiresParent)
-                    }
-                }
-                (_offset, _) => {
-                    // read_uncompressed will handle the proper offset for us automatically.
-                    let res = self.read_uncompressed(dest)?;
-                    Ok(res)
-                }
-            }
-        } else {
-            // compressed case
-            match map_entry
-                .block_type()
-                .map(V5CompressionType::from_u8)
-                .flatten()
-            {
-                Some(
+        match map_entry {
+            MapEntry::V5Compressed(entry) => {
+                let block_off = entry.block_offset()?;
+                let block_crc = Some(entry.hunk_crc()?);
+                match entry.hunk_type()? {
                     comptype @ V5CompressionType::CompressionType0
                     | comptype @ V5CompressionType::CompressionType1
                     | comptype @ V5CompressionType::CompressionType2
-                    | comptype @ V5CompressionType::CompressionType3,
-                ) => {
-                    // buffer the compressed data
-                    self.read_compressed_in(comp_buf)?;
+                    | comptype @ V5CompressionType::CompressionType3
+                    => {
+                        // buffer the compressed data
+                        let proof = entry.prove_compressed()?;
 
-                    if let Some(codec) = self.inner.codecs.get_mut(comptype.to_usize().unwrap()) {
-                        let res = codec.decompress(comp_buf, dest)?;
-                        Crc::<u16>::verify_block_checksum(block_crc, dest, res.total_out())
-                    } else {
-                        Err(ChdError::UnsupportedFormat)
-                    }
-                }
-                Some(V5CompressionType::CompressionNone) => {
-                    let res = self.read_uncompressed(dest)?;
-                    Crc::<u16>::verify_block_checksum(block_crc, dest, res)
-                }
-                Some(V5CompressionType::CompressionSelf) => {
-                    let mut self_hunk = self.inner.hunk(block_off as u32)?;
-                    let res = self_hunk.read_hunk_in(comp_buf, dest)?;
-                    Ok(res)
-                }
-                Some(V5CompressionType::CompressionParent) => {
-                    let hunk_bytes = self.inner.header().hunk_bytes();
-                    let unit_bytes = self.inner.header().unit_bytes();
-                    let units_in_hunk = hunk_bytes / unit_bytes;
+                        self.read_compressed_in(proof, comp_buf)?;
 
-                    match self.inner.parent.as_deref_mut() {
-                        None => Err(ChdError::RequiresParent),
-                        Some(parent) => {
-                            let mut buf = vec![0u8; hunk_bytes as usize];
-
-                            let mut parent_hunk = parent.hunk(block_off as u32 / units_in_hunk)?;
-                            let res_1 = parent_hunk.read_hunk_in(comp_buf, &mut buf)?;
-
-                            if block_off % units_in_hunk as u64 == 0 {
-                                dest.copy_from_slice(&buf);
-                                return Ok(res_1);
-                            }
-
-                            let remainder_in_hunk = block_off as usize % units_in_hunk as usize;
-                            let hunk_split =
-                                (units_in_hunk as usize - remainder_in_hunk) * unit_bytes as usize;
-
-                            dest[..hunk_split].copy_from_slice(
-                                &buf[remainder_in_hunk * unit_bytes as usize..][..hunk_split],
-                            );
-
-                            let mut parent_hunk =
-                                parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
-                            let _res_2 = parent_hunk.read_hunk_in(comp_buf, &mut buf)?;
-
-                            dest[hunk_split..].copy_from_slice(
-                                &buf[..remainder_in_hunk
-                                    * self.inner.header().unit_bytes() as usize],
-                            );
-                            Crc::<u16>::verify_block_checksum(
-                                block_crc,
-                                dest,
-                                hunk_split + remainder_in_hunk * unit_bytes as usize,
-                            )
+                        if let Some(codec) = self.inner.codecs.get_mut(comptype.to_usize().unwrap()) {
+                            let res = codec.decompress(comp_buf, dest)?;
+                            Crc::<u16>::verify_block_checksum(block_crc, dest, res.total_out())
+                        } else {
+                            Err(ChdError::UnsupportedFormat)
                         }
                     }
+                    V5CompressionType::CompressionNone => {
+                        let proof = entry.prove_uncompressed()?;
+                        let res = self.read_uncompressed(proof, dest)?;
+                        Crc::<u16>::verify_block_checksum(block_crc, dest, res)
+                    }
+                    V5CompressionType::CompressionSelf => {
+                        let mut self_hunk = self.inner.hunk(block_off as u32)?;
+                        let res = self_hunk.read_hunk_in(comp_buf, dest)?;
+                        Ok(res)
+                    }
+                    V5CompressionType::CompressionParent => {
+                        let hunk_bytes = self.inner.header().hunk_bytes();
+                        let unit_bytes = self.inner.header().unit_bytes();
+                        let units_in_hunk = hunk_bytes / unit_bytes;
+
+                        match self.inner.parent.as_deref_mut() {
+                            None => Err(ChdError::RequiresParent),
+                            Some(parent) => {
+                                let mut buf = vec![0u8; hunk_bytes as usize];
+
+                                let mut parent_hunk = parent.hunk(block_off as u32 / units_in_hunk)?;
+                                let res_1 = parent_hunk.read_hunk_in(comp_buf, &mut buf)?;
+
+                                if block_off % units_in_hunk as u64 == 0 {
+                                    dest.copy_from_slice(&buf);
+                                    return Ok(res_1);
+                                }
+
+                                let remainder_in_hunk = block_off as usize % units_in_hunk as usize;
+                                let hunk_split =
+                                    (units_in_hunk as usize - remainder_in_hunk) * unit_bytes as usize;
+
+                                dest[..hunk_split].copy_from_slice(
+                                    &buf[remainder_in_hunk * unit_bytes as usize..][..hunk_split],
+                                );
+
+                                let mut parent_hunk =
+                                    parent.hunk((block_off as u32 / units_in_hunk) + 1)?;
+                                let _res_2 = parent_hunk.read_hunk_in(comp_buf, &mut buf)?;
+
+                                dest[hunk_split..].copy_from_slice(
+                                    &buf[..remainder_in_hunk
+                                        * self.inner.header().unit_bytes() as usize],
+                                );
+                                Crc::<u16>::verify_block_checksum(
+                                    block_crc,
+                                    dest,
+                                    hunk_split + remainder_in_hunk * unit_bytes as usize,
+                                )
+                            }
+                        }
+                    }
+                    _ => Err(ChdError::UnsupportedFormat),
                 }
-                _ => Err(ChdError::UnsupportedFormat),
             }
-        };
+            MapEntry::V5Uncompressed(entry) => {
+                match (entry.block_offset()?, has_parent) {
+                    (0, false) => {
+                        dest.fill(0);
+                        Ok(dest.len())
+                    }
+                    (0, true) => {
+                        if let Some(parent) = self.inner.parent.as_deref_mut() {
+                            let mut parent = parent.hunk(self.hunk_num)?;
+                            let res = parent.read_hunk_in(comp_buf, dest)?;
+                            Ok(res)
+                        } else {
+                            Err(ChdError::RequiresParent)
+                        }
+                    }
+                    (_offset, _) => {
+                        // read_uncompressed will handle the proper offset for us automatically.
+                        let proof = entry.prove_uncompressed()?;
+                        let res = self.read_uncompressed(proof, dest)?;
+                        Ok(res)
+                    }
+                }
+            }
+            MapEntry::LegacyEntry(_) => return Err(ChdError::InvalidParameter)
+        }
     }
 
     /// Decompresses the hunk into output, using the provided temporary buffer to hold the
@@ -358,17 +330,9 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
             return Err(ChdError::HunkOutOfRange);
         }
 
-        // https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/src/libchdr_chd.c#L2233
-        match self.inner.header() {
-            ChdHeader::V5Header(_) => self.buffer_hunk_v5(compressed_buffer, dest),
-
-            // We purposefully avoid a `_` pattern here.
-            // When CHD v6 is released, this should fail to compile unless
-            // the case is explicitly added.
-            ChdHeader::V1Header(_)
-            | ChdHeader::V2Header(_)
-            | ChdHeader::V3Header(_)
-            | ChdHeader::V4Header(_) => self.read_hunk_legacy(compressed_buffer, dest),
+        match self.inner.map() {
+            ChdMap::V5(_) => self.read_hunk_v5(compressed_buffer, dest),
+            ChdMap::Legacy(_) => self.read_hunk_legacy(compressed_buffer, dest)
         }
     }
 }

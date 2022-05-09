@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::{Read, Seek};
 use std::path::PathBuf;
 use thousands::Separable;
+use chd::map::MapEntry;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
@@ -137,6 +138,11 @@ fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
     for i in 0..chd.map().len() {
         let hunk = chd.map().get_entry(i).unwrap();
         // v5 only
+        match hunk {
+            MapEntry::V5Compressed(_) => {}
+            MapEntry::V5Uncompressed(_) => {}
+            MapEntry::LegacyEntry(_) => {}
+        }
         if !hunk.is_legacy() {
             if !hunk.is_compressed() {
                 if hunk.block_offset()? == 0 {

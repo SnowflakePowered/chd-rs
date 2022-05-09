@@ -5,7 +5,7 @@ use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
 
 // CRC16 table in hashing.cpp indicates CRC16/CCITT, but constants
 // are consistent with CRC16/CCITT-FALSE, which is CRC-16/IBM-3740
-const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
+pub(crate) const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
 
 // The polynomial matches up (0x04c11db7 reflected = 0xedb88320), and
 // checking with zlib crc32.c matches the check 0xcbf43926 for
@@ -19,6 +19,9 @@ pub(crate) trait ChdBlockChecksum {
     /// the given bit width using the CHD-native CRC instance for that bit width.
     ///
     /// If the `crc` provided is `None`, this function always returns `Ok`.
+    ///
+    /// This function should only be used to verify decompressed hunks. If the `verify_block_crc`
+    /// feature is not enabled, this function always returns `Ok`.
     fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R>;
 }
 
