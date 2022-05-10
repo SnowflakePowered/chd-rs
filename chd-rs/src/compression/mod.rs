@@ -14,6 +14,7 @@ mod avhuff;
 
 #[cfg(feature = "flac_header")]
 mod flac_header;
+mod huff;
 
 pub mod codecs {
     pub use crate::compression::cdrom::CdLzCodec;

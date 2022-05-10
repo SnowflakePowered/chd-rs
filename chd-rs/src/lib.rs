@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn read_hunks_test() {
-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
 

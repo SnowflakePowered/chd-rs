@@ -389,6 +389,7 @@ fn read_map_v5<F: Read + Seek>(
         return Ok(V5MapData(raw_map, is_compressed, header.hunk_bytes));
     }
 
+
     // read compressed params
     file.seek(SeekFrom::Start(header.map_offset))?;
 
@@ -410,7 +411,10 @@ fn read_map_v5<F: Read + Seek>(
     let mut rep_count = 0;
     let mut last_cmp = 0;
 
-    for map_slice in raw_map.chunks_exact_mut(12) {
+    // Something subtle wrong with this. Result map is not the same as the one from libchdr.
+
+    for hunk in 0..header.hunk_count as usize {
+        let map_slice = &mut raw_map[(hunk * 12)..((hunk + 1) * 12)];
         if rep_count > 0 {
             map_slice[0] = last_cmp;
             rep_count -= 1;
@@ -436,6 +440,8 @@ fn read_map_v5<F: Read + Seek>(
         }
     }
 
+    // map read is identical up to here.
+
     // iterate hunks
     let mut curr_off = first_offs;
     let mut last_self = 0;
@@ -454,12 +460,12 @@ fn read_map_v5<F: Read + Seek>(
             | V5CompressionType::CompressionType3 => {
                 len = bitstream.read_u32(length_bits)?;
                 curr_off += len as u64;
-                crc = bitstream.read_u16(16)?;
+                crc = bitstream.read_u32(16)? as u16;
             }
             V5CompressionType::CompressionNone => {
                 len = header.hunk_bytes;
                 curr_off += len as u64;
-                crc = bitstream.read_u16(16)?;
+                crc = bitstream.read_u32(16)? as u16;
             }
             V5CompressionType::CompressionSelf => {
                 off = bitstream.read_u64(self_bits)?;

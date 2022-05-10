@@ -49,6 +49,8 @@ pub enum CodecType {
     LzmaV5 = make_tag(b"lzma"),
     /// V5 AV/Huffman compression (avhu)
     AVHuffV5 = make_tag(b"avhu"),
+    /// V5 Huffman compression
+    HuffV5 = make_tag(b"huff"),
 }
 
 impl CodecType {
