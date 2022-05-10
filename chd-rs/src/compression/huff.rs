@@ -1,4 +1,3 @@
-use std::io::Write;
 use bitreader::BitReader;
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::header::CodecType;

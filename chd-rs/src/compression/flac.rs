@@ -15,14 +15,89 @@ pub struct CdFlacInnerCodec {
     buffer: Vec<i32>,
 }
 
-impl CompressionCodec for CdFlacInnerCodec {}
+pub struct FlacCodec {
+    buffer: Vec<i32>,
+}
 
-impl CompressionCodecType for CdFlacInnerCodec {
+impl CompressionCodec for FlacCodec {}
+
+impl CompressionCodecType for FlacCodec {
     fn codec_type(&self) -> CodecType
     where
         Self: Sized,
     {
         CodecType::FlacV5
+    }
+}
+
+impl InternalCodec for FlacCodec {
+    fn is_lossy(&self) -> bool {
+        false
+    }
+
+    fn new(hunk_bytes: u32) -> Result<Self> {
+        if hunk_bytes % 4 != 0 {
+            return Err(ChdError::CodecError);
+        }
+
+        Ok(FlacCodec { buffer: Vec::new() })
+    }
+
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+        let swap_endian = match input[0] {
+            b'L' => true,
+            b'B' => false,
+            _ => return Err(ChdError::DecompressionError)
+        };
+
+        // assumes 2 channels (4 = 2 * sizeof(i16))
+        let num_samples = output.len() / 4;
+
+        let flac_buf = Cursor::new(&input[1..]);
+
+        // We don't need to create a fake header since claxon will read raw FLAC frames just fine.
+        let mut frame_read = FrameReader::new(flac_buf);
+        let mut cursor = Cursor::new(output);
+
+        let mut samples_written = 0;
+
+        let mut buf = mem::take(&mut self.buffer);
+        while samples_written < num_samples {
+            match frame_read.read_next_or_eof(buf) {
+                Ok(Some(block)) => {
+                    // We assume 2 channels, so we can use claxon's stereo_samples
+                    // iterator for slightly better performance.
+                    #[cfg(not(feature = "nonstandard_channel_count"))]
+                    for (l, r) in block.stereo_samples() {
+                        cursor.write_i16::<BigEndian>(l as i16)?;
+                        cursor.write_i16::<BigEndian>(r as i16)?;
+                        samples_written += 1;
+                    }
+
+                    #[cfg(feature = "nonstandard_channel_count")]
+                    for sample in 0..block.len() / block.channels() {
+                        for channel in 0..block.channels() {
+                            let sample_data = block.sample(channel, sample) as u16;
+                            cursor.write_i16::<BigEndian>(sample_data as i16)?;
+                        }
+                        samples_written += 1;
+                    }
+
+                    buf = block.into_buffer();
+                }
+                e => {
+                    // if frame_read dies our buffer just gets eaten. The Error return for a failed
+                    // read does not expose the inner buffer.
+                    return Err(ChdError::DecompressionError);
+                }
+            }
+        }
+        self.buffer = buf;
+        let bytes_in = frame_read.into_inner().position();
+        Ok(DecompressLength::new(
+            samples_written * 4,
+            bytes_in as usize,
+        ))
     }
 }
 
