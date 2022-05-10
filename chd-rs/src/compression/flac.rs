@@ -11,13 +11,13 @@ use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLengt
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
-pub struct FlacCodec {
+pub struct CdFlacInnerCodec {
     buffer: Vec<i32>,
 }
 
-impl CompressionCodec for FlacCodec {}
+impl CompressionCodec for CdFlacInnerCodec {}
 
-impl CompressionCodecType for FlacCodec {
+impl CompressionCodecType for CdFlacInnerCodec {
     fn codec_type(&self) -> CodecType
     where
         Self: Sized,
@@ -26,13 +26,13 @@ impl CompressionCodecType for FlacCodec {
     }
 }
 
-impl InternalCodec for FlacCodec {
+impl InternalCodec for CdFlacInnerCodec {
     fn is_lossy(&self) -> bool {
         false
     }
 
     fn new(_: u32) -> Result<Self> {
-        Ok(FlacCodec { buffer: Vec::new() })
+        Ok(CdFlacInnerCodec { buffer: Vec::new() })
     }
 
     /// Decompress FLAC data from raw input.
@@ -82,7 +82,7 @@ impl InternalCodec for FlacCodec {
 
                     buf = block.into_buffer();
                 }
-                _ => {
+                e => {
                     // if frame_read dies our buffer just gets eaten. The Error return for a failed
                     // read does not expose the inner buffer.
                     return Err(ChdError::DecompressionError);
@@ -99,7 +99,7 @@ impl InternalCodec for FlacCodec {
 }
 
 pub struct CdFlCodec {
-    engine: FlacCodec,
+    engine: CdFlacInnerCodec,
     sub_engine: ZlibCodec,
     buffer: Vec<u8>,
 }
@@ -127,7 +127,7 @@ impl InternalCodec for CdFlCodec {
 
         // neither FlacCodec nor ZlibCodec actually make use of hunk_size.
         Ok(CdFlCodec {
-            engine: FlacCodec::new(hunk_size)?,
+            engine: CdFlacInnerCodec::new(hunk_size)?,
             sub_engine: ZlibCodec::new(hunk_size)?,
             buffer: vec![0u8; hunk_size as usize],
         })

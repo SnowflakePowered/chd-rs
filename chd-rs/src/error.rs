@@ -136,7 +136,7 @@ impl From<std::io::Error> for ChdError {
 }
 
 impl From<HuffmanError> for ChdError {
-    fn from(_: HuffmanError) -> Self {
+    fn from(_e: HuffmanError) -> Self {
         ChdError::DecompressionError
     }
 }
