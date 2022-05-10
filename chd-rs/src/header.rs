@@ -19,7 +19,7 @@ use num_traits::FromPrimitive;
 use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, FlacCodec, LzmaCodec, NoneCodec, ZlibCodec};
+use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, FlacCodec, HuffmanCodec, LzmaCodec, NoneCodec, ZlibCodec};
 #[cfg(feature = "avhuff")]
 use crate::compression::codecs::AVHuffCodec;
 
@@ -97,6 +97,9 @@ impl CodecType {
             }
             CodecType::FlacV5 => {
                 FlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            }
+            CodecType::HuffV5 => {
+                HuffmanCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             #[cfg(feature = "avhuff")]
             CodecType::AV | CodecType::AVHuffV5 => {

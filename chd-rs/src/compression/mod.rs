@@ -24,6 +24,7 @@ pub mod codecs {
     pub use crate::compression::zlib::ZlibCodec;
     pub use crate::compression::lzma::LzmaCodec;
     pub use crate::compression::flac::FlacCodec;
+    pub use crate::compression::huff::HuffmanCodec;
     #[cfg(feature = "avhuff")]
     pub use crate::compression::avhuff::AVHuffCodec;
 }

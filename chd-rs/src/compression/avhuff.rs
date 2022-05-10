@@ -295,6 +295,7 @@ impl AVHuffCodec {
                 let mut source = input;
                 let mut bytes_written = 0;
                 let mut bit_reader = BitReader::new(&source[..tree_size as usize]);
+                // todo: should be HuffmanCodec (huffman8bit)
                 let mut hi_decoder = DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
                 bit_reader.align(1)?;
                 let mut lo_decoder = DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
