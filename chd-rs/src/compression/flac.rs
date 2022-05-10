@@ -1,7 +1,8 @@
 use std::io::Cursor;
+use std::marker::PhantomData;
 use std::mem;
 
-use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
+use byteorder::{BigEndian, ByteOrder, LittleEndian, WriteBytesExt};
 use cfg_if::cfg_if;
 use claxon::frame::FrameReader;
 
@@ -11,124 +12,38 @@ use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLengt
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
-pub struct CdFlacInnerCodec {
+// Generic block decoder for FLAC
+struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
     buffer: Vec<i32>,
+    _ordering: PhantomData<T>,
 }
 
-pub struct FlacCodec {
-    buffer: Vec<i32>,
-}
-
-impl CompressionCodec for FlacCodec {}
-
-impl CompressionCodecType for FlacCodec {
-    fn codec_type(&self) -> CodecType
+// what I really want is specialization for Channels = 2 ...
+impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNELS> {
+    fn is_lossy(&self) -> bool
     where
         Self: Sized,
     {
-        CodecType::FlacV5
-    }
-}
-
-impl InternalCodec for FlacCodec {
-    fn is_lossy(&self) -> bool {
-        false
+        return false;
     }
 
-    fn new(hunk_bytes: u32) -> Result<Self> {
-        if hunk_bytes % 4 != 0 {
+    fn new(hunk_bytes: u32) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if hunk_bytes % (CHANNELS * mem::size_of::<i16>()) as u32 != 0 {
             return Err(ChdError::CodecError);
         }
 
-        Ok(FlacCodec { buffer: Vec::new() })
+        Ok(FlacCodec {
+            buffer: Vec::new(),
+            _ordering: PhantomData::default(),
+        })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
-        let is_little_endian = match input[0] {
-            b'L' => true,
-            b'B' => false,
-            _ => return Err(ChdError::DecompressionError)
-        };
-
         // assumes 2 channels (4 = 2 * sizeof(i16))
-        let num_samples = output.len() / 4;
-
-        let flac_buf = Cursor::new(&input[1..]);
-
-        // We don't need to create a fake header since claxon will read raw FLAC frames just fine.
-        let mut frame_read = FrameReader::new(flac_buf);
-        let mut cursor = Cursor::new(output);
-
-        let mut samples_written = 0;
-
-        let mut buf = mem::take(&mut self.buffer);
-        while samples_written < num_samples {
-            match frame_read.read_next_or_eof(buf) {
-                Ok(Some(block)) => {
-                    // We assume 2 channels, so we can use claxon's stereo_samples
-                    // iterator for slightly better performance.
-                    #[cfg(not(feature = "nonstandard_channel_count"))]
-                    for (l, r) in block.stereo_samples() {
-                        if is_little_endian {
-                            cursor.write_i16::<LittleEndian>(l as i16)?;
-                            cursor.write_i16::<LittleEndian>(r as i16)?;
-                        } else {
-                            cursor.write_i16::<BigEndian>(l as i16)?;
-                            cursor.write_i16::<BigEndian>(r as i16)?;
-                        }
-                        samples_written += 1;
-                    }
-
-                    #[cfg(feature = "nonstandard_channel_count")]
-                    for sample in 0..block.len() / block.channels() {
-                        for channel in 0..block.channels() {
-                            let sample_data = block.sample(channel, sample) as u16;
-                            cursor.write_i16::<BigEndian>(sample_data as i16)?;
-                        }
-                        samples_written += 1;
-                    }
-
-                    buf = block.into_buffer();
-                }
-                e => {
-                    // if frame_read dies our buffer just gets eaten. The Error return for a failed
-                    // read does not expose the inner buffer.
-                    return Err(ChdError::DecompressionError);
-                }
-            }
-        }
-        self.buffer = buf;
-        let bytes_in = frame_read.into_inner().position();
-        Ok(DecompressLength::new(
-            samples_written * 4,
-            bytes_in as usize,
-        ))
-    }
-}
-
-impl InternalCodec for CdFlacInnerCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
-    fn new(_: u32) -> Result<Self> {
-        Ok(CdFlacInnerCodec { buffer: Vec::new() })
-    }
-
-    /// Decompress FLAC data from raw input.
-    ///
-    /// FLAC data is assumed to be 2-channel interleaved 16-bit PCM. Thus the length of the output
-    /// buffer must be a multiple of 4 to hold 2 bytes per sample, for 2 channels.
-    ///
-    /// The input buffer must also contain enough compressed samples to fill the length of the
-    /// output buffer.
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
-        // should do the equivalent of flac_decoder_decode_interleaved
-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_flac.c#L158
-        let frames = output.len() / CD_MAX_SECTOR_DATA as usize;
-
-        // assumes 2 channels (4 = 2 * sizeof(i16))
-        let num_samples = frames * CD_MAX_SECTOR_DATA as usize / 4;
+        let num_samples = output.len() / (CHANNELS * mem::size_of::<i16>());
 
         let flac_buf = Cursor::new(input);
 
@@ -142,20 +57,22 @@ impl InternalCodec for CdFlacInnerCodec {
         while samples_written < num_samples {
             match frame_read.read_next_or_eof(buf) {
                 Ok(Some(block)) => {
-                    // We assume 2 channels, so we can use claxon's stereo_samples
+                    // We assume 2 channels (by default), so we can use claxon's stereo_samples
                     // iterator for slightly better performance.
                     #[cfg(not(feature = "nonstandard_channel_count"))]
                     for (l, r) in block.stereo_samples() {
-                        cursor.write_i16::<BigEndian>(l as i16)?;
-                        cursor.write_i16::<BigEndian>(r as i16)?;
+                        cursor.write_i16::<T>(l as i16)?;
+                        cursor.write_i16::<T>(r as i16)?;
                         samples_written += 1;
                     }
 
+                    // This is generic over number of assumed channels, but is broken effectively
+                    // for any value other than 2.
                     #[cfg(feature = "nonstandard_channel_count")]
                     for sample in 0..block.len() / block.channels() {
                         for channel in 0..block.channels() {
                             let sample_data = block.sample(channel, sample) as u16;
-                            cursor.write_i16::<BigEndian>(sample_data as i16)?;
+                            cursor.write_i16::<T>(sample_data as i16)?;
                         }
                         samples_written += 1;
                     }
@@ -178,8 +95,59 @@ impl InternalCodec for CdFlacInnerCodec {
     }
 }
 
+/// Codec for Raw FLAC (flac) compressed hunks.
+///
+/// MAME Raw FLAC has the first byte as either 'L' or 'B' depending
+/// on the endianness of the output data.
+pub struct RawFlacCodec {
+    be: FlacCodec<BigEndian>,
+    le: FlacCodec<LittleEndian>,
+}
+
+impl CompressionCodec for RawFlacCodec {}
+
+impl CompressionCodecType for RawFlacCodec {
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized,
+    {
+        CodecType::FlacV5
+    }
+}
+
+impl InternalCodec for RawFlacCodec {
+    fn is_lossy(&self) -> bool {
+        false
+    }
+
+    fn new(hunk_bytes: u32) -> Result<Self> {
+        Ok(RawFlacCodec {
+            be: FlacCodec::new(hunk_bytes)?,
+            le: FlacCodec::new(hunk_bytes)?,
+        })
+    }
+
+    /// Decompress CD FLAC data from MAME RAW FLAC data.
+    ///
+    /// The first byte indicates the endianness of the data to be written, and not
+    ///
+    /// FLAC data is assumed to be 2-channel interleaved 16-bit PCM. Thus the length of the output
+    /// buffer must be a multiple of 4 to hold 2 bytes per sample, for 2 channels.
+    ///
+    /// The input buffer must also contain enough compressed samples to fill the length of the
+    /// output buffer.
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+        match input[0] {
+            b'L' => self.le.decompress(&input[1..], output),
+            b'B' => self.be.decompress(&input[1..], output),
+            _ => Err(ChdError::DecompressionError),
+        }
+    }
+}
+
 pub struct CdFlCodec {
-    engine: CdFlacInnerCodec,
+    // cdfl is always big endian writes.
+    engine: FlacCodec<BigEndian>,
     sub_engine: ZlibCodec,
     buffer: Vec<u8>,
 }
@@ -205,9 +173,13 @@ impl InternalCodec for CdFlCodec {
             return Err(ChdError::CodecError);
         }
 
+        // The size of the FLAC data in each cdfl hunk, excluding the subcode data.
+        let max_frames = hunk_size / CD_FRAME_SIZE;
+        let flac_data_size = max_frames * CD_MAX_SECTOR_DATA;
+
         // neither FlacCodec nor ZlibCodec actually make use of hunk_size.
         Ok(CdFlCodec {
-            engine: CdFlacInnerCodec::new(hunk_size)?,
+            engine: FlacCodec::new(flac_data_size)?,
             sub_engine: ZlibCodec::new(hunk_size)?,
             buffer: vec![0u8; hunk_size as usize],
         })
