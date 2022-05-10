@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::mem;
 
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use cfg_if::cfg_if;
 use claxon::frame::FrameReader;
 
@@ -44,7 +44,7 @@ impl InternalCodec for FlacCodec {
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
-        let swap_endian = match input[0] {
+        let is_little_endian = match input[0] {
             b'L' => true,
             b'B' => false,
             _ => return Err(ChdError::DecompressionError)
@@ -69,8 +69,13 @@ impl InternalCodec for FlacCodec {
                     // iterator for slightly better performance.
                     #[cfg(not(feature = "nonstandard_channel_count"))]
                     for (l, r) in block.stereo_samples() {
-                        cursor.write_i16::<BigEndian>(l as i16)?;
-                        cursor.write_i16::<BigEndian>(r as i16)?;
+                        if is_little_endian {
+                            cursor.write_i16::<LittleEndian>(l as i16)?;
+                            cursor.write_i16::<LittleEndian>(r as i16)?;
+                        } else {
+                            cursor.write_i16::<BigEndian>(l as i16)?;
+                            cursor.write_i16::<BigEndian>(r as i16)?;
+                        }
                         samples_written += 1;
                     }
 

@@ -214,6 +214,10 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             }
         }
 
+        if cur_code != NUM_CODES {
+            return Err(HuffmanError::InvalidData);
+        }
+
         new_huffman.assign_canonical_codes()?;
         new_huffman.build_lookup_table();
 
