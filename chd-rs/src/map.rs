@@ -413,8 +413,7 @@ fn read_map_v5<F: Read + Seek>(
 
     // Something subtle wrong with this. Result map is not the same as the one from libchdr.
 
-    for hunk in 0..header.hunk_count as usize {
-        let map_slice = &mut raw_map[(hunk * 12)..((hunk + 1) * 12)];
+    for map_slice in raw_map.chunks_exact_mut(12) {
         if rep_count > 0 {
             map_slice[0] = last_cmp;
             rep_count -= 1;
@@ -440,15 +439,12 @@ fn read_map_v5<F: Read + Seek>(
         }
     }
 
-    // map read is identical up to here.
-
     // iterate hunks
     let mut curr_off = first_offs;
     let mut last_self = 0;
     let mut last_parent = 0;
 
-    for hunk in 0..header.hunk_count as usize {
-        let map_slice = &mut raw_map[(hunk * 12)..((hunk + 1) * 12)];
+    for (hunk, map_slice) in raw_map.chunks_exact_mut(12).enumerate() {
         let mut off = curr_off;
         let mut len: u32 = 0;
         let mut crc: u16 = 0;
@@ -477,7 +473,11 @@ fn read_map_v5<F: Read + Seek>(
             }
 
             // pseudo types
-            V5CompressionType::CompressionSelf1 => last_self += 1,
+            V5CompressionType::CompressionSelf1 =>  {
+                last_self += 1;
+                map_slice[0] = V5CompressionType::CompressionSelf as u8;
+                off = last_self;
+            },
             V5CompressionType::CompressionSelf0 => {
                 map_slice[0] = V5CompressionType::CompressionSelf as u8;
                 off = last_self;
@@ -497,8 +497,7 @@ fn read_map_v5<F: Read + Seek>(
             _ => return Err(ChdError::DecompressionError),
         }
 
-        let mut cursor = Cursor::new(map_slice);
-        cursor.seek(SeekFrom::Start(1))?;
+        let mut cursor = Cursor::new(&mut map_slice[1..]);
         cursor.write_u24::<BigEndian>(len)?;
         cursor.write_u48::<BigEndian>(off)?;
         cursor.write_u16::<BigEndian>(crc)?;
