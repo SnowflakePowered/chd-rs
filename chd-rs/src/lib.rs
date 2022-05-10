@@ -11,6 +11,8 @@
 //! * CDFL (CD FLAC)
 //! * FLAC (Raw FLAC)
 //! * LZMA (Raw LZMA)
+//!
+//! AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
 #![forbid(unsafe_code)]
 
 mod error;

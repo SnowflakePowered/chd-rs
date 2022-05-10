@@ -17,6 +17,7 @@ default = ["want_subcode", "want_raw_data_sector"]
 verify_block_crc = []
 want_subcode = []
 want_raw_data_sector = []
+avhuff = []
 
 [dependencies]
 byteorder = "1"

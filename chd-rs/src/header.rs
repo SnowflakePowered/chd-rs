@@ -20,6 +20,8 @@ use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, FlacCodec, LzmaCodec, NoneCodec, ZlibCodec};
+#[cfg(feature = "avhuff")]
+use crate::compression::codecs::AVHuffCodec;
 
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
@@ -44,7 +46,9 @@ pub enum CodecType {
     /// V5 FLAC compression (flac)
     FlacV5 = make_tag(b"flac"),
     /// V5 LZMA compression (lzma)
-    LzmaV5 = make_tag(b"lzma")
+    LzmaV5 = make_tag(b"lzma"),
+    /// V5 AV/Huffman compression (avhu)
+    AVHuffV5 = make_tag(b"avhu"),
 }
 
 impl CodecType {
@@ -68,7 +72,7 @@ impl CodecType {
     /// * FLAC (Raw FLAC)
     /// * LZMA (Raw LZMA)
     ///
-    /// AVHuff decompression is not supported.
+    /// AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
     pub(crate) fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
         match self {
             CodecType::None => {
@@ -92,7 +96,12 @@ impl CodecType {
             CodecType::FlacV5 => {
                 FlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
-            CodecType::AV => return Err(ChdError::UnsupportedFormat),
+            #[cfg(feature = "avhuff")]
+            CodecType::AV | CodecType::AVHuffV5 => {
+                AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            },
+            #[allow(unreachable_patterns)]
+            _ => Err(ChdError::UnsupportedFormat)
         }
     }
 }

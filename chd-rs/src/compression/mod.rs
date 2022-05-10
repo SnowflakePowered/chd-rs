@@ -9,6 +9,9 @@ mod lzma;
 mod none;
 mod zlib;
 
+#[cfg(feature = "avhuff")]
+mod avhuff;
+
 #[cfg(feature = "flac_header")]
 mod flac_header;
 
@@ -20,6 +23,8 @@ pub mod codecs {
     pub use crate::compression::zlib::ZlibCodec;
     pub use crate::compression::lzma::LzmaCodec;
     pub use crate::compression::flac::FlacCodec;
+    #[cfg(feature = "avhuff")]
+    pub use crate::compression::avhuff::AVHuffCodec;
 }
 
 // unstable(trait_alias)
