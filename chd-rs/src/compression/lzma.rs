@@ -1,4 +1,4 @@
-use crate::compression::{BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use lzma_rs_headerless::decode::lzma::LzmaParams;
 use lzma_rs_headerless::lzma_decompress_with_params;
@@ -9,7 +9,6 @@ pub struct LzmaCodec {
     params: LzmaParams,
 }
 
-impl BlockCodec for LzmaCodec {}
 impl CompressionCodec for LzmaCodec {}
 
 // LzmaEnc.c LzmaEncProps_Normalize

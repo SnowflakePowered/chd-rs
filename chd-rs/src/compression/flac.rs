@@ -12,7 +12,7 @@ use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLengt
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
-// Generic block decoder for FLAC
+/// Generic block decoder for FLAC
 struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
     buffer: Vec<i32>,
     _ordering: PhantomData<T>,
@@ -79,7 +79,7 @@ impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNEL
 
                     buf = block.into_buffer();
                 }
-                e => {
+                _ => {
                     // if frame_read dies our buffer just gets eaten. The Error return for a failed
                     // read does not expose the inner buffer.
                     return Err(ChdError::DecompressionError);

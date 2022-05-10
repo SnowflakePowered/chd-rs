@@ -3,7 +3,7 @@ use crate::compression::ecc::ErrorCorrectedSector;
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
 use crate::compression::{
-    BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
+    CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
@@ -29,13 +29,13 @@ impl CompressionCodec for CdZlCodec {}
 impl CompressionCodec for CdLzCodec {}
 
 // unstable(adt_const_params): const TYPE: CodecType
-pub struct CdBlockCodec<Engine: BlockCodec, SubEngine: BlockCodec> {
+pub struct CdBlockCodec<Engine: InternalCodec, SubEngine: InternalCodec> {
     engine: Engine,
     sub_engine: SubEngine,
     buffer: Vec<u8>,
 }
 
-impl<Engine: BlockCodec, SubEngine: BlockCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
+impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
     fn is_lossy(&self) -> bool {
         self.engine.is_lossy() && self.sub_engine.is_lossy()
     }

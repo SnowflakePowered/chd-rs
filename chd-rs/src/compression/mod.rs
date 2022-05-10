@@ -33,9 +33,6 @@ pub mod codecs {
 /// Marker trait for a public user exposed codec that is used to decode CHDs.
 pub trait CompressionCodec: InternalCodec + CompressionCodecType {}
 
-/// Marker trait for a codec that decompresses in fixed sized chunks of compressed data.
-pub trait BlockCodec: InternalCodec {}
-
 /// A codec that has a externally known type.
 pub trait CompressionCodecType {
     fn codec_type(&self) -> CodecType

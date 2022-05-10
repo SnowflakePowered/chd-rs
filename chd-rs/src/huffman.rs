@@ -191,8 +191,8 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         let mut new_huffman = Self::new();
 
         let mut last: u32 = 0;
-        let mut cur_code = 0;
-        while cur_code < NUM_CODES {
+        let mut curr_node = 0;
+        while curr_node < NUM_CODES {
             let value = small_huf.decode_one(reader)?;
             match value {
                 0 => {
@@ -200,21 +200,21 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
                     if count == 7 + 2 {
                         count += reader.read_u32(Self::RLE_FULL_BITS)?;
                     }
-                    while count != 0 && cur_code < NUM_CODES {
-                        new_huffman.huffnode_array[cur_code].num_bits = last as u8;
-                        cur_code += 1;
+                    while count != 0 && curr_node < NUM_CODES {
+                        new_huffman.huffnode_array[curr_node].num_bits = last as u8;
+                        curr_node += 1;
                         count -= 1;
                     }
                 }
                 _ => {
                     last = value - 1;
-                    new_huffman.huffnode_array[cur_code].num_bits = last as u8;
-                    cur_code += 1;
+                    new_huffman.huffnode_array[curr_node].num_bits = last as u8;
+                    curr_node += 1;
                 }
             }
         }
 
-        if cur_code != NUM_CODES {
+        if curr_node != NUM_CODES {
             return Err(HuffmanError::InvalidData);
         }
 

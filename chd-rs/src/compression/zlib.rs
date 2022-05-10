@@ -1,15 +1,13 @@
 use crate::compression::{
-    BlockCodec, CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
+    CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};
 
 pub struct ZlibCodec {
-    engine: flate2::Decompress,
+    engine: Decompress,
 }
-
-impl BlockCodec for ZlibCodec {}
 
 impl InternalCodec for ZlibCodec {
     fn is_lossy(&self) -> bool {
