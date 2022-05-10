@@ -25,6 +25,21 @@ const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32);
 }
 
+macro_rules! const_assert {
+    ($($list:ident : $ty:ty),* => $expr:expr) => {{
+        struct Assert<$(const $list: $ty,)*>;
+        impl<$(const $list: $ty,)*> Assert<$($list,)*> {
+            const OK: u8 = 0 - !($expr) as u8;
+        }
+        Assert::<$($list,)*>::OK
+    }};
+    ($expr:expr) => {
+        const OK: u8 = 0 - !($expr) as u8;
+    };
+}
+
+pub(crate) use const_assert;
+
 pub use chdfile::{ChdFile, ChdHunk};
 pub use error::{ChdError, Result};
 pub mod header;

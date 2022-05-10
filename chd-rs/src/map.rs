@@ -11,12 +11,14 @@ use num_traits::FromPrimitive;
 use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
 use crate::huffman::HuffmanDecoder;
-use crate::map;
+use crate::{huffman, map};
+use crate::const_assert;
 
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk
 const MAP_ENTRY_FLAG_NO_CRC: u8 = 0x10; // no crc is present
+
 
 /// The types of compression allowed for a CHD V5 hunk.
 #[repr(u8)]
@@ -283,19 +285,6 @@ impl ChdMap {
     }
 }
 
-macro_rules! const_assert {
-    ($($list:ident : $ty:ty),* => $expr:expr) => {{
-        struct Assert<$(const $list: usize,)*>;
-        impl<$(const $list: $ty,)*> Assert<$($list,)*> {
-            const OK: u8 = 0 - !($expr) as u8;
-        }
-        Assert::<$($list,)*>::OK
-    }};
-    ($expr:expr) => {
-        const OK: u8 = 0 - !($expr) as u8;
-    };
-}
-
 fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
     header: &ChdHeader,
     mut file: F,
@@ -416,7 +405,7 @@ fn read_map_v5<F: Read + Seek>(
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let decoder = HuffmanDecoder::from_tree_rle(16, 8, &mut bitstream)?;
+    let decoder = HuffmanDecoder::<16, 8, {huffman::lookup_length::<8>()}>::from_tree_rle(&mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;
