@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use std::mem;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian, WriteBytesExt};
-use cfg_if::cfg_if;
 use claxon::frame::FrameReader;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
@@ -202,17 +201,15 @@ impl InternalCodec for CdFlCodec {
             &mut self.buffer[..total_frames * CD_MAX_SECTOR_DATA as usize],
         )?;
 
-        cfg_if! {
-            if #[cfg(feature = "want_subcode")] {
-                let sub_res = self.sub_engine.decompress(
-                    &input[frame_res.total_in()..],
-                    &mut self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
-                        [..total_frames * CD_MAX_SUBCODE_DATA as usize],
-                )?;
-            } else {
-              let sub_res =  DecompressLength::default();
-            }
-        };
+        #[cfg(feature = "want_subcode")]
+        let sub_res = self.sub_engine.decompress(
+            &input[frame_res.total_in()..],
+            &mut self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
+                [..total_frames * CD_MAX_SUBCODE_DATA as usize],
+        )?;
+
+        #[cfg(not(feature = "want_subcode"))]
+        let sub_res = DecompressLength::default();
 
         // Decompressed FLAC data has layout
         // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]

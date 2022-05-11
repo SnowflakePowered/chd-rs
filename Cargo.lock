@@ -86,7 +86,6 @@ dependencies = [
  "bencher",
  "bitreader",
  "byteorder",
- "cfg-if",
  "claxon",
  "crc 3.0.0",
  "flate2",

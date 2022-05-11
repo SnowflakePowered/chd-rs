@@ -6,7 +6,6 @@ use crate::compression::zlib::ZlibCodec;
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
-use cfg_if::cfg_if;
 use std::convert::TryFrom;
 
 pub type CdLzCodec = CdBlockCodec<LzmaCodec, ZlibCodec>;
@@ -75,16 +74,14 @@ impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec
             &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
         )?;
 
-        cfg_if! {
-            if #[cfg(feature = "want_subcode")] {
-                let sub_res = self.sub_engine.decompress(
-                    &input[header_bytes + complen_base as usize..],
-                    &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize],
-                )?;
-            } else {
-                let sub_res = DecompressLength::default();
-            }
-        }
+        #[cfg(feature = "want_subcode")]
+        let sub_res = self.sub_engine.decompress(
+            &input[header_bytes + complen_base as usize..],
+            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize],
+        )?;
+
+        #[cfg(not(feature = "want_subcode"))]
+        let sub_res = DecompressLength::default();
 
         // Decompressed FLAC data has layout
         // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]

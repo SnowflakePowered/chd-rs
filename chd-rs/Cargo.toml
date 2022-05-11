@@ -14,7 +14,7 @@ keywords = ["mame", "chd", "decompression"]
 
 [features]
 default = ["want_subcode", "want_raw_data_sector" ]
-verify_block_crc = []
+verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 want_subcode = []
 want_raw_data_sector = []
 avhuff = []
@@ -30,7 +30,6 @@ lzma-rs-headerless = "0.2.1"
 claxon = "0.4"
 bitreader = "0.3.6"
 crc = "3"
-cfg-if = "1"
 
 [dev-dependencies]
 bencher = "0.1.5"
