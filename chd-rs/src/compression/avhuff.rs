@@ -163,7 +163,7 @@ impl InternalCodec for AVHuffCodec {
             total_size += tree_size;
         }
         for ch in 0..channels as usize {
-            let ch_size = ((input[ch * 2 + 2] as u16) << 8) | input[ch * 2 + 3] as u16;
+            let ch_size = ((input[10 + 2 * ch] as u16) << 8) | input[11 + 2 * ch] as u16;
             ch_comp_sizes[ch] = ch_size;
             total_size += ch_size as u32;
         }
@@ -203,9 +203,11 @@ impl InternalCodec for AVHuffCodec {
 
         let video = rest;
 
+        input = &input[10 * 2 * channels as usize..];
+
         if meta_size > 0 {
-            meta.copy_from_slice(&input[10 * 2 * channels as usize..meta_size as usize]);
-            input = &input[10 * 2 * channels as usize + meta_size as usize..];
+            meta.copy_from_slice(&input[..meta_size as usize]);
+            input = &input[meta_size as usize..];
         }
 
         // todo: use DecompressLength
@@ -214,7 +216,7 @@ impl InternalCodec for AVHuffCodec {
             total_bytes += self
                 .decode_audio(
                     samples,
-                    &input,
+                    input,
                     &mut channel_slices,
                     0,
                     &ch_comp_sizes[..],
