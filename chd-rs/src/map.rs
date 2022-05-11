@@ -11,8 +11,7 @@ use num_traits::FromPrimitive;
 use crate::const_assert;
 use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
-use crate::huffman::HuffmanDecoder;
-use crate::{huffman, map};
+use crate::huffman::{lookup_length, HuffmanDecoder};
 
 const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
 const V5_COMPRESSED_MAP_ENTRY_SIZE: usize = 12;
@@ -245,6 +244,26 @@ impl UncompressedEntryProof {
     }
 }
 
+/// Iterator for `ChdMap`
+pub struct MapEntryIter<'a> {
+    map: &'a ChdMap,
+    curr: usize,
+}
+
+impl<'a> Iterator for MapEntryIter<'a> {
+    type Item = MapEntry<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr == self.map.len() {
+            None
+        } else {
+            let curr = self.curr;
+            self.curr += 1;
+            self.map.get_entry(curr)
+        }
+    }
+}
+
 impl ChdMap {
     /// Gets the number of entries in the CHD Map.
     pub fn len(&self) -> usize {
@@ -285,6 +304,11 @@ impl ChdMap {
             }
             ChdMap::Legacy(m) => m.0.get(hunk_num).map(MapEntry::LegacyEntry),
         }
+    }
+
+    /// Gets an iterator over the entries of this hunk map.
+    pub fn iter(&self) -> MapEntryIter {
+        MapEntryIter { map: self, curr: 0 }
     }
 
     /// Reads the hunk map from the provided stream given the parameters in the header,
@@ -438,8 +462,7 @@ fn read_map_v5<F: Read + Seek>(
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let decoder =
-        HuffmanDecoder::<16, 8, { huffman::lookup_length::<8>() }>::from_tree_rle(&mut bitstream)?;
+    let decoder = HuffmanDecoder::<16, 8, { lookup_length::<8>() }>::from_tree_rle(&mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;
