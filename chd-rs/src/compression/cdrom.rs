@@ -1,10 +1,9 @@
+/// Common logic for CD-ROM decompression codecs.
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
 use crate::compression::ecc::ErrorCorrectedSector;
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
-use crate::compression::{
-    CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
-};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use cfg_if::cfg_if;
@@ -28,14 +27,17 @@ impl CompressionCodecType for CdZlCodec {
 impl CompressionCodec for CdZlCodec {}
 impl CompressionCodec for CdLzCodec {}
 
-// unstable(adt_const_params): const TYPE: CodecType
+// unstable(adt_const_params): const TYPE: CodecType, but marker traits bring us
+// most of the way.
 pub struct CdBlockCodec<Engine: InternalCodec, SubEngine: InternalCodec> {
     engine: Engine,
     sub_engine: SubEngine,
     buffer: Vec<u8>,
 }
 
-impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockCodec<Engine, SubEngine> {
+impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec
+    for CdBlockCodec<Engine, SubEngine>
+{
     fn is_lossy(&self) -> bool {
         self.engine.is_lossy() && self.sub_engine.is_lossy()
     }
@@ -60,7 +62,7 @@ impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockC
         let ecc_bytes = (frames + 7) / 8;
         let header_bytes = ecc_bytes + complen_bytes;
 
-        // extract compressed length of base
+        // Extract compressed length of base
         let mut complen_base: u32 =
             (input[ecc_bytes + 0] as u32) << 8 | input[ecc_bytes + 1] as u32;
         if complen_bytes > 2 {
@@ -84,7 +86,12 @@ impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockC
             }
         }
 
-        // reassemble frames data
+        // Decompressed FLAC data has layout
+        // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+        // We need to reassemble the data to be
+        // [Frame0, Subcode0, Frame1, Subcode1, ..., FrameN, SubcodeN]
+
+        // Reassemble frame data to expected layout.
         for (frame_num, chunk) in self.buffer[..frames * CD_MAX_SECTOR_DATA as usize]
             .chunks_exact(CD_MAX_SECTOR_DATA as usize)
             .enumerate()
@@ -93,7 +100,7 @@ impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockC
                 .copy_from_slice(chunk);
         }
 
-        // reassemble subcode data
+        // Reassemble subcode data to expected layout.
         #[cfg(feature = "want_subcode")]
         for (frame_num, chunk) in self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
             .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
@@ -104,12 +111,11 @@ impl<Engine: InternalCodec, SubEngine: InternalCodec> InternalCodec for CdBlockC
                 .copy_from_slice(chunk);
         }
 
-        // reassemble data
+        // Recreate ECC data
         #[cfg(feature = "want_raw_data_sector")]
         for frame_num in 0..frames {
             let mut sector_slice = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
-                &mut output[frame_num * CD_FRAME_SIZE as usize..]
-                    [..CD_MAX_SECTOR_DATA as usize],
+                &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize],
             )?;
             if (input[frame_num / 8] & (1 << (frame_num % 8))) != 0 {
                 sector_slice[0..12].copy_from_slice(&CD_SYNC_HEADER);

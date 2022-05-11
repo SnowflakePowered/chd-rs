@@ -8,17 +8,18 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
+use crate::const_assert;
 use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
 use crate::huffman::HuffmanDecoder;
 use crate::{huffman, map};
-use crate::const_assert;
 
+const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
+const V5_COMPRESSED_MAP_ENTRY_SIZE: usize = 12;
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk
 const MAP_ENTRY_FLAG_NO_CRC: u8 = 0x10; // no crc is present
-
 
 /// The types of compression allowed for a CHD V5 hunk.
 #[repr(u8)]
@@ -74,10 +75,10 @@ pub struct LegacyMapEntry {
 }
 
 /// A CHD V5 map entry for a compressed hunk.
-pub struct V5CompressedEntry<'a>(&'a [u8; 12]);
+pub struct V5CompressedEntry<'a>(&'a [u8; V5_COMPRESSED_MAP_ENTRY_SIZE]);
 
 /// A CHD V5 map entry for an uncompressed hunk.
-pub struct V5UncompressedEntry<'a>(&'a [u8; 4], u32);
+pub struct V5UncompressedEntry<'a>(&'a [u8; V5_UNCOMPRESSED_MAP_ENTRY_SIZE], u32);
 
 impl LegacyMapEntry {
     /// Returns the hunk type of the compressed entry.
@@ -106,7 +107,9 @@ impl LegacyMapEntry {
     #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
-            LegacyEntryType::Compressed => Ok(CompressedEntryProof(self.block_offset(), self.block_size())),
+            LegacyEntryType::Compressed => {
+                Ok(CompressedEntryProof(self.block_offset(), self.block_size()))
+            }
             _ => Err(ChdError::InvalidParameter),
         }
     }
@@ -116,7 +119,10 @@ impl LegacyMapEntry {
     #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
-            LegacyEntryType::Uncompressed => Ok(UncompressedEntryProof(self.block_offset(), self.block_size())),
+            LegacyEntryType::Uncompressed => Ok(UncompressedEntryProof(
+                self.block_offset(),
+                self.block_size(),
+            )),
             _ => Err(ChdError::InvalidParameter),
         }
     }
@@ -125,8 +131,7 @@ impl LegacyMapEntry {
 impl V5CompressedEntry<'_> {
     /// Returns the hunk type of the compressed entry.
     pub fn hunk_type(&self) -> Result<V5CompressionType> {
-        V5CompressionType::from_u8(self.0[0])
-            .ok_or(ChdError::UnsupportedFormat)
+        V5CompressionType::from_u8(self.0[0]).ok_or(ChdError::UnsupportedFormat)
     }
 
     /// Returns the offset to the compressed data of this hunk.
@@ -149,10 +154,13 @@ impl V5CompressedEntry<'_> {
     #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
-            V5CompressionType::CompressionType0 |
-            V5CompressionType::CompressionType1 |
-            V5CompressionType::CompressionType2 |
-            V5CompressionType::CompressionType3 => Ok(CompressedEntryProof(self.block_offset()?, self.block_size()?)),
+            V5CompressionType::CompressionType0
+            | V5CompressionType::CompressionType1
+            | V5CompressionType::CompressionType2
+            | V5CompressionType::CompressionType3 => Ok(CompressedEntryProof(
+                self.block_offset()?,
+                self.block_size()?,
+            )),
             _ => Err(ChdError::InvalidParameter),
         }
     }
@@ -162,7 +170,10 @@ impl V5CompressedEntry<'_> {
     #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
-            V5CompressionType::CompressionNone => Ok(UncompressedEntryProof(self.block_offset()?, self.block_size()?)),
+            V5CompressionType::CompressionNone => Ok(UncompressedEntryProof(
+                self.block_offset()?,
+                self.block_size()?,
+            )),
             _ => Err(ChdError::InvalidParameter),
         }
     }
@@ -184,7 +195,10 @@ impl V5UncompressedEntry<'_> {
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
     #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
-        Ok(UncompressedEntryProof(self.block_offset()?, self.block_size()))
+        Ok(UncompressedEntryProof(
+            self.block_offset()?,
+            self.block_size(),
+        ))
     }
 }
 
@@ -216,7 +230,6 @@ impl CompressedEntryProof {
     }
 }
 
-
 /// A proof that a hunk is not compressed.
 /// An instance of this type can only be constructed from an uncompressed hunk.
 pub(crate) struct UncompressedEntryProof(u64, u32);
@@ -237,7 +250,11 @@ impl ChdMap {
         match self {
             ChdMap::V5(m) => {
                 // map_entry_bytes = 12 if compressed, else 4
-                let map_entry_bytes = if m.1 { 12 } else { 4 };
+                let map_entry_bytes = if m.1 {
+                    V5_COMPRESSED_MAP_ENTRY_SIZE
+                } else {
+                    V5_UNCOMPRESSED_MAP_ENTRY_SIZE
+                };
                 m.0.len() / map_entry_bytes
             }
             ChdMap::Legacy(m) => m.0.len(),
@@ -275,12 +292,22 @@ impl ChdMap {
                 &mut file,
                 header.is_compressed(),
             )?)),
-            ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => Ok(ChdMap::Legacy(
-                LegacyMapData(map::read_map_legacy::<_, V3_MAP_ENTRY_SIZE>(header, file)?),
-            )),
-            ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => Ok(ChdMap::Legacy(
-                LegacyMapData(map::read_map_legacy::<_, V1_MAP_ENTRY_SIZE>(header, file)?),
-            )),
+            ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => {
+                Ok(ChdMap::Legacy(LegacyMapData(map::read_map_legacy::<
+                    _,
+                    V3_MAP_ENTRY_SIZE,
+                >(
+                    header, file
+                )?)))
+            }
+            ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => {
+                Ok(ChdMap::Legacy(LegacyMapData(map::read_map_legacy::<
+                    _,
+                    V1_MAP_ENTRY_SIZE,
+                >(
+                    header, file
+                )?)))
+            }
         }
     }
 }
@@ -289,7 +316,9 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
     header: &ChdHeader,
     mut file: F,
 ) -> Result<Vec<LegacyMapEntry>> {
-    // Probably can express this better in the type system.
+    // Probably can express this better in the type system once const generics get a bit more stabilized.
+    // Essentially we ensure at compile time that the only possible MAP_ENTRY_SIZEs are
+    // V3_MAP_ENTRY_SIZE or V1_MAP_ENTRY_SIZE.
     const_assert!(MAP_ENTRY_SIZE: usize => V3_MAP_ENTRY_SIZE >=
         MAP_ENTRY_SIZE && (MAP_ENTRY_SIZE == V3_MAP_ENTRY_SIZE || MAP_ENTRY_SIZE == V1_MAP_ENTRY_SIZE));
     let mut map = Vec::new();
@@ -313,7 +342,7 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
             V1_MAP_ENTRY_SIZE => {
                 let mut read = Cursor::new(entry_buf);
                 let entry = read.read_u64::<BigEndian>()?;
-                read_map_entry_v1(entry, header.hunk_bytes())
+                read_map_entry_v1(entry, header.hunk_size())
             }
             _ => unreachable!(),
         };
@@ -389,8 +418,7 @@ fn read_map_v5<F: Read + Seek>(
         return Ok(V5MapData(raw_map, is_compressed, header.hunk_bytes));
     }
 
-
-    // read compressed params
+    // Read compressed map parameters.
     file.seek(SeekFrom::Start(header.map_offset))?;
 
     let map_bytes = file.read_u32::<BigEndian>()?;
@@ -400,20 +428,20 @@ fn read_map_v5<F: Read + Seek>(
     let self_bits = file.read_u8()?;
     let parent_bits = file.read_u8()?;
 
-    // read map
+    // Read the map data
     let mut compressed: Vec<u8> = vec![0u8; map_bytes as usize];
     file.seek(SeekFrom::Start(header.map_offset + 16))?;
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let decoder = HuffmanDecoder::<16, 8, {huffman::lookup_length::<8>()}>::from_tree_rle(&mut bitstream)?;
+    let decoder =
+        HuffmanDecoder::<16, 8, { huffman::lookup_length::<8>() }>::from_tree_rle(&mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;
 
-    // Something subtle wrong with this. Result map is not the same as the one from libchdr.
-
-    for map_slice in raw_map.chunks_exact_mut(12) {
+    // V5 Map data is Huffman-RLE encoded so we need to expand.
+    for map_slice in raw_map.chunks_exact_mut(V5_COMPRESSED_MAP_ENTRY_SIZE) {
         if rep_count > 0 {
             map_slice[0] = last_cmp;
             rep_count -= 1;
@@ -439,12 +467,15 @@ fn read_map_v5<F: Read + Seek>(
         }
     }
 
-    // iterate hunks
+    // Iterate and decompress each map entry.
     let mut curr_off = first_offs;
     let mut last_self = 0;
     let mut last_parent = 0;
 
-    for (hunk, map_slice) in raw_map.chunks_exact_mut(12).enumerate() {
+    for (hunk_num, map_slice) in raw_map
+        .chunks_exact_mut(V5_COMPRESSED_MAP_ENTRY_SIZE)
+        .enumerate()
+    {
         let mut off = curr_off;
         let mut len: u32 = 0;
         let mut crc: u16 = 0;
@@ -472,19 +503,19 @@ fn read_map_v5<F: Read + Seek>(
                 last_parent = off;
             }
 
-            // pseudo types
-            V5CompressionType::CompressionSelf1 =>  {
+            // Expand pseudo codecs to concrete.
+            V5CompressionType::CompressionSelf1 => {
                 last_self += 1;
                 map_slice[0] = V5CompressionType::CompressionSelf as u8;
                 off = last_self;
-            },
+            }
             V5CompressionType::CompressionSelf0 => {
                 map_slice[0] = V5CompressionType::CompressionSelf as u8;
                 off = last_self;
             }
             V5CompressionType::CompressionParentSelf => {
                 map_slice[0] = V5CompressionType::CompressionParent as u8;
-                off = ((hunk * header.hunk_bytes as usize) / header.unit_bytes as usize) as u64;
+                off = ((hunk_num * header.hunk_bytes as usize) / header.unit_bytes as usize) as u64;
                 last_parent = off;
             }
             V5CompressionType::CompressionParent1 => {
@@ -503,6 +534,7 @@ fn read_map_v5<F: Read + Seek>(
         cursor.write_u16::<BigEndian>(crc)?;
     }
 
+    // Verify map CRC
     if crate::block_hash::CRC16.checksum(&raw_map[0..header.hunk_count as usize * 12]) != map_crc {
         return Err(ChdError::DecompressionError);
     }

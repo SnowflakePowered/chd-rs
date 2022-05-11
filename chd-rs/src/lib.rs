@@ -11,17 +11,18 @@
 //! * CDFL (CD FLAC)
 //! * FLAC (Raw FLAC)
 //! * LZMA (Raw LZMA)
+//! * Huffman (Huff)
 //!
 //! AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
 #![forbid(unsafe_code)]
 
 mod error;
 
+mod block_hash;
 mod cdrom;
+mod chdfile;
 mod compression;
 mod huffman;
-mod block_hash;
-mod chdfile;
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32);
@@ -45,20 +46,20 @@ pub(crate) use const_assert;
 pub use chdfile::{ChdFile, ChdHunk};
 pub use error::{ChdError, Result};
 pub mod header;
-pub mod metadata;
 pub mod map;
+pub mod metadata;
 pub mod read;
 
 #[cfg(test)]
 mod tests {
-    use crate::ChdFile;
     use crate::metadata::ChdMetadata;
+    use crate::read::{ChdFileReader, ChdHunkBufReader};
+    use crate::ChdFile;
+    use bencher::Bencher;
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::{BufReader, Read, Write};
     use std::process::Termination;
-    use bencher::Bencher;
-    use crate::read::{ChdFileReader, ChdHunkBufReader};
 
     #[test]
     fn read_metas_test() {

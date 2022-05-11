@@ -1,6 +1,7 @@
 use anyhow::anyhow;
-use chd::ChdFile;
 use chd::header::{ChdHeader, CodecType};
+use chd::map::MapEntry;
+use chd::ChdFile;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
 use std::ffi::OsStr;
@@ -9,7 +10,6 @@ use std::io::{BufReader, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thousands::Separable;
-use chd::map::MapEntry;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
@@ -165,7 +165,7 @@ fn benchmark(p: impl AsRef<Path>) {
     let start = Instant::now();
     let mut chd = ChdFile::open(&mut f, None).expect("file");
     let hunk_count = chd.header().hunk_count();
-    let hunk_size = chd.header().hunk_bytes() as usize;
+    let hunk_size = chd.header().hunk_size() as usize;
     let mut hunk_buf = vec![0u8; hunk_size];
     // 13439 breaks??
     // 13478 breaks now with decmp error.
@@ -174,12 +174,16 @@ fn benchmark(p: impl AsRef<Path>) {
     let mut bytes = 0;
     for hunk_num in 0..hunk_count {
         let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
-        bytes += hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
+        bytes += hunk
+            .read_hunk_in(&mut cmp_buf, &mut hunk_buf)
             .expect(format!("could not read_hunk {}", hunk_num).as_str());
     }
     let time = Instant::now().saturating_duration_since(start);
     println!("Read {} bytes in {} seconds", bytes, time.as_secs_f64());
-    println!("Rate is {} MB/s", (bytes / (1024*1024)) as f64 / time.as_secs_f64());
+    println!(
+        "Rate is {} MB/s",
+        (bytes / (1024 * 1024)) as f64 / time.as_secs_f64()
+    );
 }
 
 fn main() -> anyhow::Result<()> {
@@ -197,7 +201,7 @@ fn main() -> anyhow::Result<()> {
             );
             println!(
                 "Hunk Size:\t{} bytes",
-                chd.header().hunk_bytes().separate_with_commas()
+                chd.header().hunk_size().separate_with_commas()
             );
             println!(
                 "Total Hunks:\t{}",
@@ -248,8 +252,8 @@ fn main() -> anyhow::Result<()> {
             // if verbose {
             //     print_verbose(&chd);
             // }
-        },
-        Commands::Benchmark { input, .. } => benchmark(input)
+        }
+        Commands::Benchmark { input, .. } => benchmark(input),
     }
     Ok(())
 }

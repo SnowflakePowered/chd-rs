@@ -1,13 +1,16 @@
-use bitreader::BitReader;
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
-use crate::header::CodecType;
 use crate::error::Result;
+use crate::header::CodecType;
 use crate::huffman;
 use crate::huffman::HuffmanDecoder;
+use bitreader::BitReader;
 
-type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, {huffman::lookup_length::<16>()}>;
+// The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
+// I prefer to make explicit the parameters at type instantiation for
+// clarity purposes.
+type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { huffman::lookup_length::<16>() }>;
 
-/// MAME Huffman codec
+/// MAME Huffman Codec.
 pub struct HuffmanCodec;
 impl InternalCodec for HuffmanCodec {
     fn is_lossy(&self) -> bool {
@@ -26,7 +29,10 @@ impl InternalCodec for HuffmanCodec {
             output[i] = decoder.decode_one(&mut bit_reader)? as u8;
         }
 
-        Ok(DecompressLength::new(output.len(), ((input.len() * 8) - bit_reader.remaining() as usize) / 8))
+        Ok(DecompressLength::new(
+            output.len(),
+            ((input.len() * 8) - bit_reader.remaining() as usize) / 8,
+        ))
     }
 }
 

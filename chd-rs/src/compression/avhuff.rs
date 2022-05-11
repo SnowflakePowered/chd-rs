@@ -1,3 +1,10 @@
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::header::CodecType;
+use crate::huffman::{HuffmanDecoder, HuffmanError};
+use crate::{huffman, ChdError};
+use bitreader::{BitReader, BitReaderError};
+use byteorder::{BigEndian, WriteBytesExt};
+use claxon::frame::FrameReader;
 /// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
 /// Needs a lot of work and clean up to be more descriptive.
 /// !WARNING!: Do not refer to this codec as documentative. It is most likely broken.
@@ -6,17 +13,9 @@
 /// should be considered unstable.
 use std::io::Cursor;
 use std::mem;
-use bitreader::{BitReader, BitReaderError};
-use byteorder::{BigEndian, WriteBytesExt};
-use claxon::frame::FrameReader;
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
-use crate::header::CodecType;
-use crate::{ChdError, huffman};
-use crate::huffman::{HuffmanDecoder, HuffmanError};
 
 #[allow(unused)]
-pub enum AVHuffError
-{
+pub enum AVHuffError {
     None,
     InvalidData,
     VideoTooLarge,
@@ -57,29 +56,27 @@ impl From<bitreader::BitReaderError> for AVHuffError {
 const fn code_to_rle_count(code: u32) -> u32 {
     match code {
         0 => 1,
-        code if code <= 0x107 => {
-            8 + (code - 0x100)
-        }
-        code => {
-            16 << (code - 0x108)
-        }
+        code if code <= 0x107 => 8 + (code - 0x100),
+        code => 16 << (code - 0x108),
     }
 }
 
-type DeltaRleHuffman<'a> = HuffmanDecoder<'a, {256 + 16}, 16, {huffman::lookup_length::<16>()}>;
+type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_length::<16>() }>;
 
 struct DeltaRleDecoder<'a> {
     huffman: DeltaRleHuffman<'a>,
     rle_count: u32,
-    prev_data: u8
+    prev_data: u8,
 }
 
-impl <'a> DeltaRleDecoder<'a> {
-    pub fn new(huff: HuffmanDecoder<'a, {256 + 16}, 16, {huffman::lookup_length::<16>()}>) -> Self {
+impl<'a> DeltaRleDecoder<'a> {
+    pub fn new(
+        huff: HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_length::<16>() }>,
+    ) -> Self {
         Self {
             huffman: huff,
             rle_count: 0,
-            prev_data: 0
+            prev_data: 0,
         }
     }
 
@@ -104,7 +101,7 @@ impl <'a> DeltaRleDecoder<'a> {
             self.rle_count = code_to_rle_count(data);
             self.rle_count -= 1;
             Ok(self.prev_data as u32)
-        }
+        };
     }
 }
 
@@ -115,26 +112,34 @@ pub struct AVHuffCodec {
 impl CompressionCodec for AVHuffCodec {}
 
 impl CompressionCodecType for AVHuffCodec {
-    fn codec_type(&self) -> CodecType where Self: Sized {
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized,
+    {
         CodecType::AV
     }
 }
 
 impl InternalCodec for AVHuffCodec {
-    fn is_lossy(&self) -> bool where Self: Sized {
+    fn is_lossy(&self) -> bool
+    where
+        Self: Sized,
+    {
         false
     }
 
     fn new(_hunk_bytes: u32) -> crate::Result<Self> {
-        Ok(AVHuffCodec {
-            buffer: Vec::new()
-        })
+        Ok(AVHuffCodec { buffer: Vec::new() })
     }
 
-    fn decompress(&mut self, mut input: &[u8], mut output: &mut [u8]) -> crate::Result<DecompressLength> {
+    fn decompress(
+        &mut self,
+        mut input: &[u8],
+        mut output: &mut [u8],
+    ) -> crate::Result<DecompressLength> {
         // https://github.com/mamedev/mame/blob/master/src/lib/util/avhuff.cpp#L723
         if input.len() < 8 {
-            return Err(ChdError::DecompressionError)
+            return Err(ChdError::DecompressionError);
         }
 
         let mut total_bytes = 0;
@@ -185,10 +190,10 @@ impl InternalCodec for AVHuffCodec {
 
         let (meta, mut rest) = output.split_at_mut(meta_size as usize);
         // workaround for Option<&mut [u8]> not being Copy.
-        let mut channel_slices: [Option<&mut [u8]>; 16] =  [None, None, None, None,
-                                                      None, None, None, None,
-                                                      None, None, None, None,
-                                                      None, None, None, None];
+        let mut channel_slices: [Option<&mut [u8]>; 16] = [
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None,
+        ];
 
         for channel in 0..channels as usize {
             let (ch_out, next) = rest.split_at_mut(2 * samples as usize);
@@ -206,24 +211,43 @@ impl InternalCodec for AVHuffCodec {
         // todo: use DecompressLength
         if channels > 0 {
             // todo: bounds
-            total_bytes += self.decode_audio(samples, &input, &mut channel_slices, 0, &ch_comp_sizes[..], tree_size)
+            total_bytes += self
+                .decode_audio(
+                    samples,
+                    &input,
+                    &mut channel_slices,
+                    0,
+                    &ch_comp_sizes[..],
+                    tree_size,
+                )
                 .map_err(|_| ChdError::DecompressionError)?;
 
             input = &input[tree_size as usize + ch_comp_sizes.iter().sum::<u16>() as usize..]
         }
 
         if width > 0 && height > 0 && video.len() != 0 {
-            total_bytes += self.decode_video(width, height, &input, video, (width * 2) as usize, 0)
+            total_bytes += self
+                .decode_video(width, height, &input, video, (width * 2) as usize, 0)
                 .map_err(|_| ChdError::DecompressionError)?;
         }
 
-
-        Ok(DecompressLength::new(meta_size as usize + total_bytes, input.len()))
+        Ok(DecompressLength::new(
+            meta_size as usize + total_bytes,
+            input.len(),
+        ))
     }
 }
 
 impl AVHuffCodec {
-    fn decode_audio(&mut self, samples: u32, input: &[u8], dest: &mut [Option<&mut [u8]>], xor: usize, ch_sizes: &[u16], tree_size: u32) -> Result<usize, AVHuffError> {
+    fn decode_audio(
+        &mut self,
+        samples: u32,
+        input: &[u8],
+        dest: &mut [Option<&mut [u8]>],
+        xor: usize,
+        ch_sizes: &[u16],
+        tree_size: u32,
+    ) -> Result<usize, AVHuffError> {
         match tree_size {
             0xffff => {
                 let mut source = input;
@@ -243,20 +267,22 @@ impl AVHuffCodec {
                                 match frame_read.read_next_or_eof(buf) {
                                     Ok(Some(block)) => {
                                         for (l, r) in block.stereo_samples() {
-                                            cursor.write_i16::<BigEndian>(l as i16)
+                                            cursor
+                                                .write_i16::<BigEndian>(l as i16)
                                                 .map_err(|_| AVHuffError::InvalidParameter)?;
-                                            cursor.write_i16::<BigEndian>(r as i16)
+                                            cursor
+                                                .write_i16::<BigEndian>(r as i16)
                                                 .map_err(|_| AVHuffError::InvalidParameter)?;
                                             bytes_written += 4;
                                         }
                                         buf = block.into_buffer();
                                     }
-                                    _ => return Err(AVHuffError::InvalidData)
+                                    _ => return Err(AVHuffError::InvalidData),
                                 }
                             }
                             total_bytes_written += len;
                         }
-                        None => ()
+                        None => (),
                     }
                     self.buffer = buf;
                     // increase slice..
@@ -300,13 +326,15 @@ impl AVHuffCodec {
                 let mut bytes_written = 0;
                 let mut bit_reader = BitReader::new(&source[..tree_size as usize]);
                 // todo: should be HuffmanCodec (huffman8bit)
-                let mut hi_decoder = DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
+                let mut hi_decoder =
+                    DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
                 bit_reader.align(1)?;
-                let mut lo_decoder = DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
+                let mut lo_decoder =
+                    DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {
-                    return Err(AVHuffError::InvalidData)
+                    return Err(AVHuffError::InvalidData);
                 }
 
                 source = &source[tree_size as usize..];
@@ -319,7 +347,8 @@ impl AVHuffCodec {
                             let mut bit_reader = BitReader::new(&source);
 
                             for _sample in 0..samples {
-                                let mut delta: u16 = (hi_decoder.decode_one(&mut bit_reader)? << 8) as u16;
+                                let mut delta: u16 =
+                                    (hi_decoder.decode_one(&mut bit_reader)? << 8) as u16;
                                 delta |= lo_decoder.decode_one(&mut bit_reader)? as u16;
 
                                 let new_sample = prev_sample + delta;
@@ -341,9 +370,17 @@ impl AVHuffCodec {
         }
     }
 
-    fn decode_video(&self, width: u32, height: u32, input: &[u8], dest: &mut [u8], stride: usize, xor: usize) -> Result<usize, AVHuffError> {
+    fn decode_video(
+        &self,
+        width: u32,
+        height: u32,
+        input: &[u8],
+        dest: &mut [u8],
+        stride: usize,
+        xor: usize,
+    ) -> Result<usize, AVHuffError> {
         if input[0] & 0x80 == 0 {
-            return Err(AVHuffError::InvalidData)
+            return Err(AVHuffError::InvalidData);
         }
 
         // decode losslessly
@@ -379,10 +416,8 @@ impl AVHuffCodec {
         // unsure about this bounds check.
         bit_reader.align(1)?;
         if bit_reader.remaining() != 0 {
-            return Err(AVHuffError::InvalidData)
+            return Err(AVHuffError::InvalidData);
         }
         Ok(bytes_written)
     }
 }
-
-

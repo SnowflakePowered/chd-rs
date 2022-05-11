@@ -1,5 +1,5 @@
-use num_traits::ToPrimitive;
 use crate::Result;
+use num_traits::ToPrimitive;
 
 #[cfg(feature = "verify_block_crc")]
 use crate::ChdError;
@@ -27,19 +27,21 @@ pub(crate) trait ChdBlockChecksum {
     ///
     /// This function should only be used to verify decompressed hunks. If the `verify_block_crc`
     /// feature is not enabled, this function always returns `Ok`.
-    fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R>;
+    fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R)
+        -> Result<R>;
 }
 
 impl ChdBlockChecksum for Crc<u16> {
     #[inline(always)]
     #[allow(unused_variables)]
-    fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R> {
-
+    fn verify_block_checksum<C: ToPrimitive, R>(
+        crc: Option<C>,
+        buf: &[u8],
+        result: R,
+    ) -> Result<R> {
         #[cfg(feature = "verify_block_crc")]
         match crc.and_then(|f| f.to_u16()) {
-            Some(crc) if CRC16.checksum(buf) != crc => {
-                Err(ChdError::DecompressionError)
-            }
+            Some(crc) if CRC16.checksum(buf) != crc => Err(ChdError::DecompressionError),
             _ => Ok(result),
         }
 
@@ -51,12 +53,14 @@ impl ChdBlockChecksum for Crc<u16> {
 impl ChdBlockChecksum for Crc<u32> {
     #[inline(always)]
     #[allow(unused_variables)]
-    fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R) -> Result<R> {
+    fn verify_block_checksum<C: ToPrimitive, R>(
+        crc: Option<C>,
+        buf: &[u8],
+        result: R,
+    ) -> Result<R> {
         #[cfg(feature = "verify_block_crc")]
         match crc.and_then(|f| f.to_u32()) {
-            Some(crc) if CRC32.checksum(buf) != crc => {
-                Err(ChdError::DecompressionError)
-            }
+            Some(crc) if CRC32.checksum(buf) != crc => Err(ChdError::DecompressionError),
             _ => Ok(result),
         }
 

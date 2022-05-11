@@ -1,12 +1,15 @@
 //! Helpers and adapters for reading CHD files and hunks.
-
-use std::io::{BufRead, Cursor, Read, Seek, SeekFrom};
-use crate::{ChdError, ChdFile, ChdHunk};
+//!
+//! These are not super well optimized and should only be used for convenience.
+//! The fastest way to read hunks is [`ChdHunk::read_hunk_in`](crate::chdfile::ChdHunk::read_hunk_in),
+//! which does not double-buffer, but does not provide a Seek implementation.
 use crate::error::Result;
+use crate::{ChdError, ChdFile, ChdHunk};
+use std::io::{BufRead, Cursor, Read, Seek, SeekFrom};
 
 /// Buffered `BufRead + Seek` adapter for [`ChdHunk`](crate::chdfile::ChdHunk).
 pub struct ChdHunkBufReader {
-    inner: Cursor<Vec<u8>>
+    inner: Cursor<Vec<u8>>,
 }
 
 impl ChdHunkBufReader {
@@ -24,7 +27,11 @@ impl ChdHunkBufReader {
     /// reacquired with [`ChdHunkBufReader::into_inner`](crate::read::ChdHunkBufReader::into_inner).
     ///
     /// The hunk contents are immediately buffered from the stream upon creation.
-    pub fn new_in<F: Read + Seek>(hunk: &mut ChdHunk<F>, cmp_buffer: &mut Vec<u8>, mut buffer: Vec<u8>) -> Result<Self> {
+    pub fn new_in<F: Read + Seek>(
+        hunk: &mut ChdHunk<F>,
+        cmp_buffer: &mut Vec<u8>,
+        mut buffer: Vec<u8>,
+    ) -> Result<Self> {
         let len = hunk.len();
         buffer.resize(len, 0);
         hunk.read_hunk_in(cmp_buffer, &mut buffer)?;
@@ -67,11 +74,10 @@ pub struct ChdFileReader<F: Read + Seek> {
     current_hunk: u32,
     cmp_buf: Vec<u8>,
     buf_read: Option<ChdHunkBufReader>,
-    eof: bool
+    eof: bool,
 }
 
-impl <F: Read + Seek> ChdFileReader<F> {
-
+impl<F: Read + Seek> ChdFileReader<F> {
     /// Create a new `ChdFileReader` from an opened [`ChdFile`](crate::ChdFile).
     pub fn new(chd: ChdFile<F>) -> Self {
         ChdFileReader {
@@ -79,15 +85,15 @@ impl <F: Read + Seek> ChdFileReader<F> {
             current_hunk: 0,
             cmp_buf: Vec::new(),
             buf_read: None,
-            eof: false
+            eof: false,
         }
     }
 }
 
-impl <F: Read + Seek> Read for ChdFileReader<F> {
+impl<F: Read + Seek> Read for ChdFileReader<F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.eof {
-            return Ok(0)
+            return Ok(0);
         }
 
         if self.current_hunk == 0 && self.buf_read.is_none() {
@@ -97,9 +103,9 @@ impl <F: Read + Seek> Read for ChdFileReader<F> {
                 // never was a hunk to begin with.
                 Err(ChdError::HunkOutOfRange) => {
                     self.eof = true;
-                    return Ok(0)
+                    return Ok(0);
                 }
-                Err(e) => return Err(e.into())
+                Err(e) => return Err(e.into()),
             };
             let buf = Vec::new();
             self.buf_read = Some(ChdHunkBufReader::new_in(&mut hunk, &mut self.cmp_buf, buf)?)
@@ -113,18 +119,20 @@ impl <F: Read + Seek> Read for ChdFileReader<F> {
                     // never was a hunk to begin with.
                     Err(ChdError::HunkOutOfRange) => {
                         self.eof = true;
-                        return Ok(0)
+                        return Ok(0);
                     }
-                    Err(e) => return Err(e.into())
+                    Err(e) => return Err(e.into()),
                 };
                 let inner = self.buf_read.take();
-                self.buf_read = Some(ChdHunkBufReader::new_in(&mut hunk, &mut self.cmp_buf, inner.unwrap().into_inner())?);
+                self.buf_read = Some(ChdHunkBufReader::new_in(
+                    &mut hunk,
+                    &mut self.cmp_buf,
+                    inner.unwrap().into_inner(),
+                )?);
                 self.read(buf)
             }
-            Ok(r) => {
-                Ok(r)
-            }
-            Err(e) => Err(e)
+            Ok(r) => Ok(r),
+            Err(e) => Err(e),
         }
     }
 }

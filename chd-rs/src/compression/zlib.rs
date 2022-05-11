@@ -1,11 +1,9 @@
-use crate::compression::{
-    CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec,
-};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};
 
-/// Zlib Deflate codec
+/// Zlib Deflate codec.
 pub struct ZlibCodec {
     engine: Decompress,
 }

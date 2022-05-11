@@ -8,6 +8,11 @@
 //! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
 
+#[cfg(feature = "avhuff")]
+use crate::compression::codecs::AVHuffCodec;
+use crate::compression::codecs::{
+    CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, RawFlacCodec, ZlibCodec,
+};
 use crate::compression::{CompressionCodec, InternalCodec};
 use crate::error::{ChdError, Result};
 use crate::make_tag;
@@ -19,9 +24,6 @@ use num_traits::FromPrimitive;
 use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use crate::compression::codecs::{CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, ZlibCodec, RawFlacCodec};
-#[cfg(feature = "avhuff")]
-use crate::compression::codecs::AVHuffCodec;
 
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
@@ -104,9 +106,9 @@ impl CodecType {
             #[cfg(feature = "avhuff")]
             CodecType::AV | CodecType::AVHuffV5 => {
                 AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            },
+            }
             #[allow(unreachable_patterns)]
-            _ => Err(ChdError::UnsupportedFormat)
+            _ => Err(ChdError::UnsupportedFormat),
         }
     }
 }
@@ -369,7 +371,7 @@ impl ChdHeader {
     }
 
     /// Returns the size of each hunk in the CHD file in bytes.
-    pub const fn hunk_bytes(&self) -> u32 {
+    pub const fn hunk_size(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.hunk_bytes,
             ChdHeader::V2Header(c) => c.hunk_bytes,
@@ -437,26 +439,26 @@ impl ChdHeader {
     pub(crate) fn create_compression_codecs(&self) -> Result<Vec<Box<dyn CompressionCodec>>> {
         match self {
             ChdHeader::V1Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
+                .map(|e| e.init(self.hunk_size()))
                 .ok_or(ChdError::UnsupportedFormat)?
                 .map(|e| vec![e]),
             ChdHeader::V2Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
+                .map(|e| e.init(self.hunk_size()))
                 .ok_or(ChdError::UnsupportedFormat)?
                 .map(|e| vec![e]),
             ChdHeader::V3Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
+                .map(|e| e.init(self.hunk_size()))
                 .ok_or(ChdError::UnsupportedFormat)?
                 .map(|e| vec![e]),
             ChdHeader::V4Header(c) => CodecType::from_u32(c.compression)
-                .map(|e| e.init(self.hunk_bytes()))
+                .map(|e| e.init(self.hunk_size()))
                 .ok_or(ChdError::UnsupportedFormat)?
                 .map(|e| vec![e]),
             ChdHeader::V5Header(c) => c
                 .compression
                 .map(CodecType::from_u32)
                 .map(|f| f.ok_or(ChdError::UnsupportedFormat))
-                .map(|f| f.and_then(|f| f.init(self.hunk_bytes())))
+                .map(|f| f.and_then(|f| f.init(self.hunk_size())))
                 .into_iter()
                 .collect(),
         }
@@ -489,7 +491,7 @@ impl ChdHeader {
         }
 
         // require valid hunk size
-        if self.hunk_bytes() == 0 || self.hunk_bytes() >= 65536 * 256 {
+        if self.hunk_size() == 0 || self.hunk_size() >= 65536 * 256 {
             return false;
         }
 

@@ -1,3 +1,4 @@
+// None (copy) codec
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::Result;
 use crate::header::CodecType;

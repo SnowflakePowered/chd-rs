@@ -1,3 +1,6 @@
+/// Implementation of the MAME CHD Huffman Decoder.
+///
+/// For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
 use crate::const_assert;
 use bitreader::{BitReader, BitReaderError};
 use std::cmp::Ordering;
@@ -53,7 +56,9 @@ pub struct HuffmanNode<'a> {
     weight: u32,
     bits: u32,
     num_bits: u8,
-    _phantom: PhantomData<&'a HuffmanNode<'a>>, // want this phantomdata to ensure we can only compare nodes with the same lifetimes.
+    // Huffman nodes are parameterized over a lifetime to allow comparisons only for
+    // nodes belonging to the same decoder.
+    _phantom: PhantomData<&'a HuffmanNode<'a>>,
 }
 
 impl<'a> PartialEq for HuffmanNode<'a> {
@@ -64,7 +69,7 @@ impl<'a> PartialEq for HuffmanNode<'a> {
 
 impl<'a> PartialOrd for HuffmanNode<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // todo check impl
+        // todo: check impl with MAME
         if self.weight != other.weight {
             //  node2->weight - node1->weight;
             return Some(other.weight.cmp(&self.weight));
@@ -85,6 +90,7 @@ pub struct HuffmanDecoder<
     'a,
     const NUM_CODES: usize,
     const MAX_BITS: u8,
+    // todo: [feature(generic_const_exprs)] will obsolete this.
     const LOOKUP_ARRAY_LEN: usize,
 > {
     lookup_array: [LookupValue; LOOKUP_ARRAY_LEN],
@@ -96,6 +102,8 @@ pub(crate) const fn lookup_length<const MAX_BITS: u8>() -> usize {
     1 << MAX_BITS
 }
 
+/// Get the number of bits used to decode a Huffman tree
+/// from a Huffman-encoded bitstream.
 const fn rle_full_bits<const NUM_CODES: usize>() -> u8 {
     let mut temp = NUM_CODES - 9;
     let mut full_bits = 0;
@@ -144,7 +152,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
             let node_bits = reader.read_u8(Self::RLE_NUM_BITS)?;
             if node_bits == 1 {
-                // double 1 is just a 1
+                // Double 1 is just a 1
                 decoder.huffnode_array[curr_node].num_bits = node_bits;
                 curr_node += 1;
                 continue;
@@ -169,6 +177,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
     /// Import pre-encoded Huffman tree from the bitstream.
     pub fn from_huffman_tree(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
+        // Parse the small tree
         let mut small_huf = HuffmanDecoder::<24, 6, { lookup_length::<6>() }>::new();
 
         small_huf.huffnode_array[0].num_bits = reader.read_u8(3)?;
@@ -188,6 +197,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         small_huf.assign_canonical_codes()?;
         small_huf.build_lookup_table();
 
+        // Process the rest of the data referring to the small tree.
         let mut new_huffman = Self::new();
         let mut last: u32 = 0;
         let mut curr_node = 0;
@@ -242,13 +252,13 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
     }
 
     fn assign_canonical_codes(&mut self) -> Result<(), HuffmanError> {
-        // todo: use iterators
         let mut curr_start = 0;
 
-        // technically we need the histogram but not if we're read only
+        // Since we're read-only we don't need to keep the histogram around
+        // once we're done here.
         let mut histogram = [0u32; 33];
 
-        // Fill in histogram of bit lengths
+        // Fill in histogram of bit lengths.
         for curr_code in 0..NUM_CODES {
             let node = &self.huffnode_array[curr_code];
             if node.num_bits > MAX_BITS {
@@ -259,7 +269,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             }
         }
 
-        // Determine starting code number of code lengths
+        // Determine starting code number of code lengths.
         for code_len in (1..33).rev() {
             let next_start = (curr_start + histogram[code_len]) >> 1;
             if code_len != 1 && next_start * 2 != (curr_start + histogram[code_len]) {
@@ -269,7 +279,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             curr_start = next_start
         }
 
-        // Assign codes
+        // Assign codes.
         for curr_code in 0..NUM_CODES {
             let node = &mut self.huffnode_array[curr_code];
             if node.num_bits > 0 {
@@ -295,7 +305,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
                 let dest_idx = (node.bits << shift) as usize;
                 let destend_idx = (((node.bits + 1) << shift) - 1) as usize;
 
-                // fill matching entries
+                // Fill matching entries
                 for lookup in &mut self.lookup_array[dest_idx..=destend_idx] {
                     *lookup = value
                 }

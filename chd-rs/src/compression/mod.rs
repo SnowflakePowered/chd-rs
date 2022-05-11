@@ -17,16 +17,16 @@ mod flac_header;
 mod huff;
 
 pub mod codecs {
+    #[cfg(feature = "avhuff")]
+    pub use crate::compression::avhuff::AVHuffCodec;
     pub use crate::compression::cdrom::CdLzCodec;
     pub use crate::compression::cdrom::CdZlCodec;
     pub use crate::compression::flac::CdFlCodec;
-    pub use crate::compression::none::NoneCodec;
-    pub use crate::compression::zlib::ZlibCodec;
-    pub use crate::compression::lzma::LzmaCodec;
     pub use crate::compression::flac::RawFlacCodec;
     pub use crate::compression::huff::HuffmanCodec;
-    #[cfg(feature = "avhuff")]
-    pub use crate::compression::avhuff::AVHuffCodec;
+    pub use crate::compression::lzma::LzmaCodec;
+    pub use crate::compression::none::NoneCodec;
+    pub use crate::compression::zlib::ZlibCodec;
 }
 
 // unstable(trait_alias)

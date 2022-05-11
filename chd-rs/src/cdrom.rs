@@ -1,3 +1,7 @@
+/// Constants for CD-ROM decoding.
+
+/* The following constants are present in headers, but are unused for this implementation. */
+
 // pub const CD_TRACK_PADDING: u32 = 4;
 // pub const CD_MAX_TRACKS: u32 = 99;    /* AFAIK the theoretical limit */
 // pub const CD_METADATA_WORDS: u32 = 1 + (CD_MAX_TRACKS * 6);

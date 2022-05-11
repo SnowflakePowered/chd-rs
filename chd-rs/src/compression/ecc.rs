@@ -1,3 +1,4 @@
+/// CD ROM ECC calculation helpers.
 use crate::cdrom::{CD_MAX_SECTOR_DATA, CD_MODE_OFFSET, CD_SYNC_NUM_BYTES, CD_SYNC_OFFSET};
 
 const ECC_P_OFFSET: usize = 0x81c;
@@ -735,14 +736,21 @@ fn ecc_compute_bytes<const ROWLEN: usize>(
     (val1, val2)
 }
 
+/// A CD sector that contains ECC P and Q codes.
+///
+/// This trait is only implemented for `&mut [u8; CD_MAX_SECTOR_DATA as usize]`.
 pub(crate) trait ErrorCorrectedSector {
+    /// Reset the ECC P and Q codes to 0 within a sector
     fn clear_ecc(&mut self);
+
+    /// Write ECC codes into the sector.
     fn generate_ecc(&mut self);
+
+    /// Verify the ECC P and Q codes to 0 within a sector
     fn verify_ecc(&self) -> bool;
 }
 
 impl ErrorCorrectedSector for &mut [u8; CD_MAX_SECTOR_DATA as usize] {
-    /// Reset the ECC P and Q codes to 0 within a sector
     fn clear_ecc(&mut self) {
         self[ECC_P_OFFSET..][..2 * ECC_P_NUM_BYTES].fill(0);
         self[ECC_Q_OFFSET..][..2 * ECC_Q_NUM_BYTES].fill(0);
@@ -765,7 +773,6 @@ impl ErrorCorrectedSector for &mut [u8; CD_MAX_SECTOR_DATA as usize] {
         }
     }
 
-    /// Verify the ECC P and Q codes to 0 within a sector
     fn verify_ecc(&self) -> bool {
         // verify P bytes
         for (idx, row) in ECC_P_OFF.iter().enumerate() {

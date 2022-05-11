@@ -1,9 +1,9 @@
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::{ChdError, Result};
+use crate::header::CodecType;
 use lzma_rs_headerless::decode::lzma::LzmaParams;
 use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
-use crate::header::CodecType;
 
 /// LZMA codec with default CHD parameters
 pub struct LzmaCodec {
@@ -12,7 +12,10 @@ pub struct LzmaCodec {
 
 impl CompressionCodec for LzmaCodec {}
 
-// LzmaEnc.c LzmaEncProps_Normalize
+/// MAME/libchdr uses an ancient LZMA 19.00.
+///
+/// To match the proper dictionary size, we copy the algorithm from
+/// [`LzmaEnc::LzmaEncProps_Normalize`](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L52).
 fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
     let mut dict_size = if level <= 5 {
         1 << (level * 2 + 14)
@@ -42,7 +45,10 @@ fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
 }
 
 impl CompressionCodecType for LzmaCodec {
-    fn codec_type(&self) -> CodecType where Self: Sized {
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized,
+    {
         CodecType::LzmaV5
     }
 }
@@ -53,13 +59,14 @@ impl InternalCodec for LzmaCodec {
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
-        // LZMA 19.0 uses lc = 3, lp = 0, pb = 2
+        // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
+        // is that the chunks are encoded with the defaults used in LZMA 19.0.
+        // These defaults are lc = 3, lp = 0, pb = 2.
         let params = LzmaParams::new(3, 0, 2, get_lzma_dict_size(9, hunk_size), None);
 
         Ok(LzmaCodec { params })
     }
 
-    // not sure if this works but
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressLength> {
         let mut read = Cursor::new(input);
         let len = output.len();
