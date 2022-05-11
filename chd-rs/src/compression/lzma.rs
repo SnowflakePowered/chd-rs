@@ -5,6 +5,7 @@ use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
 use crate::header::CodecType;
 
+/// LZMA codec with default CHD parameters
 pub struct LzmaCodec {
     params: LzmaParams,
 }

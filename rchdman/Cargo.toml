@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chd = { path = "../chd-rs" }
+chd = { path = "../chd-rs", features = ["verify_block_crc"]}
 clap = { version = "3", features = ["derive"] }
 anyhow = "1"
 thousands = "0.2.0"

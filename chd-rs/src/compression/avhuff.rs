@@ -1,5 +1,9 @@
-// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
-// Needs a lot of work and clean up to be more descriptive.
+/// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
+/// Needs a lot of work and clean up to be more descriptive.
+/// !WARNING!: Do not refer to this codec as documentative. It is most likely broken.
+/// It is here as a WIP and is not up to the standards of the rest of chd-rs.
+/// Unlike the other codecs, it is completely untested, and the `avhuff` feature
+/// should be considered unstable.
 use std::io::Cursor;
 use std::mem;
 use bitreader::{BitReader, BitReaderError};

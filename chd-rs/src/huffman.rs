@@ -1,9 +1,9 @@
+use crate::const_assert;
 use bitreader::{BitReader, BitReaderError};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
-use crate::const_assert;
 
 type LookupValue = u16;
 
@@ -32,19 +32,11 @@ impl Display for HuffmanError {
     }
 }
 
-impl From<bitreader::BitReaderError> for HuffmanError {
+impl From<BitReaderError> for HuffmanError {
     fn from(err: BitReaderError) -> Self {
         match err {
-            BitReaderError::NotEnoughData {
-                position: _,
-                length: _,
-                requested: _,
-            } => HuffmanError::InputBufferTooSmall,
-            BitReaderError::TooManyBitsForType {
-                position: _,
-                requested: _,
-                allowed: _,
-            } => HuffmanError::TooManyBits,
+            BitReaderError::NotEnoughData { .. } => HuffmanError::InputBufferTooSmall,
+            BitReaderError::TooManyBitsForType { .. } => HuffmanError::TooManyBits,
         }
     }
 }
@@ -89,7 +81,12 @@ impl<'a> PartialOrd for HuffmanNode<'a> {
 ///
 /// MAX_BITS must be less than or equal to 24.
 /// LOOKUP_ARRAY_LEN must be equal to huffman::lookup_length::<MAX_BITS>().
-pub struct HuffmanDecoder<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usize> {
+pub struct HuffmanDecoder<
+    'a,
+    const NUM_CODES: usize,
+    const MAX_BITS: u8,
+    const LOOKUP_ARRAY_LEN: usize,
+> {
     lookup_array: [LookupValue; LOOKUP_ARRAY_LEN],
     huffnode_array: [HuffmanNode<'a>; NUM_CODES],
 }
@@ -109,7 +106,9 @@ const fn rle_full_bits<const NUM_CODES: usize>() -> u8 {
     full_bits
 }
 
-impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usize> HuffmanDecoder<'a, NUM_CODES, MAX_BITS, LOOKUP_ARRAY_LEN> {
+impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usize>
+    HuffmanDecoder<'a, NUM_CODES, MAX_BITS, LOOKUP_ARRAY_LEN>
+{
     const RLE_NUM_BITS: u8 = match MAX_BITS {
         0..=7 => 3,  // < 8
         8..=15 => 4, // >= 8
@@ -128,9 +127,8 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         }
     }
 
-    pub fn from_tree_rle(
-        reader: &mut BitReader<'_>,
-    ) -> Result<Self, HuffmanError> {
+    /// Import RLE encoded Huffman tree from the bit stream.
+    pub fn from_tree_rle(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
         let mut decoder = HuffmanDecoder::new();
 
         let mut curr_node = 0;
@@ -169,8 +167,9 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         Ok(decoder)
     }
 
+    /// Import pre-encoded Huffman tree from the bitstream.
     pub fn from_huffman_tree(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
-        let mut small_huf = HuffmanDecoder::<24, 6, {lookup_length::<6>()}>::new();
+        let mut small_huf = HuffmanDecoder::<24, 6, { lookup_length::<6>() }>::new();
 
         small_huf.huffnode_array[0].num_bits = reader.read_u8(3)?;
         let start = reader.read_u8(3)? + 1;
@@ -181,7 +180,8 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
                 small_huf.huffnode_array[idx as usize].num_bits = 0;
             } else {
                 count = reader.read_u8(3)?;
-                small_huf.huffnode_array[idx as usize].num_bits = if count == 7 { 0 } else { count };
+                small_huf.huffnode_array[idx as usize].num_bits =
+                    if count == 7 { 0 } else { count };
             }
         }
 
@@ -189,7 +189,6 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         small_huf.build_lookup_table();
 
         let mut new_huffman = Self::new();
-
         let mut last: u32 = 0;
         let mut curr_node = 0;
         while curr_node < NUM_CODES {
@@ -224,8 +223,19 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         Ok(new_huffman)
     }
 
+    /// Decode a single code from the Huffman bitstream
     pub fn decode_one(&self, reader: &mut BitReader<'a>) -> Result<u32, HuffmanError> {
-        let bits = reader.peek_u32(MAX_BITS)?;
+        // The MAME bitstream.h shifts in zeroes when there are less than MAX_BITS
+        // left in the bitstream. We have to explicitly handle this case since
+        // bitreader will error on not enough data.
+        let bits = match reader.peek_u32(MAX_BITS) {
+            Ok(r) => Ok(r),
+            Err(e @ BitReaderError::TooManyBitsForType { .. }) => Err(e),
+            Err(e @ BitReaderError::NotEnoughData { length: 0, .. }) => Err(e),
+            Err(BitReaderError::NotEnoughData {
+                length: remainder, ..
+            }) => Ok(reader.peek_u32(remainder as u8)? << (MAX_BITS - remainder as u8)),
+        }?;
         let lookup = self.lookup_array[bits as usize];
         reader.skip((lookup & 0x1f) as u64)?;
         Ok(lookup as u32 >> 5)

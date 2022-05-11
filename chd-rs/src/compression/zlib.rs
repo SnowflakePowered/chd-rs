@@ -5,6 +5,7 @@ use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};
 
+/// Zlib Deflate codec
 pub struct ZlibCodec {
     engine: Decompress,
 }

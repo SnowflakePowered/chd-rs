@@ -18,7 +18,6 @@ struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
     _ordering: PhantomData<T>,
 }
 
-// what I really want is specialization for Channels = 2 ...
 impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNELS> {
     fn is_lossy(&self) -> bool
     where
@@ -68,6 +67,7 @@ impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNEL
 
                     // This is generic over number of assumed channels, but is broken effectively
                     // for any value other than 2.
+                    // What we really want here is specialization for CHANNELS = 2 ...
                     #[cfg(feature = "nonstandard_channel_count")]
                     for sample in 0..block.len() / block.channels() {
                         for channel in 0..block.channels() {
