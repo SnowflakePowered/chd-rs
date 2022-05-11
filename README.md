@@ -70,9 +70,9 @@ see the [`chd::compression`](https://github.com/SnowflakePowered/chd-rs/tree/mas
 * Deflate (`CHD_CODEC_ZLIB`)
 * FLAC (`CHD_CODEC_FLAC`)
 * Huffman (`CHD_CODEC_HUFF`)
-* CD LZMA (`CHD_CODEC_CDLZ`)
-* CD Deflate (`CHD_CODEC_CDZL`)
-* CD FLAC (`CHD_CODEC_CDFL`)
+* CD LZMA (`CHD_CODEC_CD_LZMA`)
+* CD Deflate (`CHD_CODEC_CD_ZLIB`)
+* CD FLAC (`CHD_CODEC_CD_FLAC`)
 
 #### AVHuff support
 ⚠️*AVHuff support is a work in progress and likely incorrect as of 0.0.4* ⚠️
