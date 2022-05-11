@@ -1,6 +1,6 @@
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::header::CodecType;
-use crate::huffman::{HuffmanDecoder, HuffmanError};
+use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder, HuffmanError};
 use crate::{huffman, ChdError};
 use bitreader::{BitReader, BitReaderError};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -71,7 +71,7 @@ struct DeltaRleDecoder<'a> {
 
 impl<'a> DeltaRleDecoder<'a> {
     pub fn new(
-        huff: HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_length::<16>() }>,
+        huff: DeltaRleHuffman<'a>,
     ) -> Self {
         Self {
             huffman: huff,
@@ -327,10 +327,10 @@ impl AVHuffCodec {
                 let mut bit_reader = BitReader::new(&source[..tree_size as usize]);
                 // todo: should be HuffmanCodec (huffman8bit)
                 let mut hi_decoder =
-                    DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
+                    Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
                 bit_reader.align(1)?;
                 let mut lo_decoder =
-                    DeltaRleDecoder::new(DeltaRleHuffman::from_tree_rle(&mut bit_reader)?);
+                    Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {

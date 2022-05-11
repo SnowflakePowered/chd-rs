@@ -45,7 +45,7 @@ impl From<BitReaderError> for HuffmanError {
 }
 
 #[derive(Default, Clone, Copy)]
-pub struct HuffmanNode<'a> {
+struct HuffmanNode<'a> {
     // Parent and count are needed for write but not for read only.
     #[cfg(feature = "write")]
     parent: usize,
@@ -81,6 +81,11 @@ impl<'a> PartialOrd for HuffmanNode<'a> {
         return Some(self.bits.cmp(&other.bits));
     }
 }
+
+// The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
+// I prefer to make explicit the parameters at type instantiation for
+// clarity purposes.
+pub type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { lookup_length::<16>() }>;
 
 /// Allocation free CHD huffman decoder.
 ///

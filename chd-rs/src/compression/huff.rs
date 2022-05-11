@@ -1,14 +1,8 @@
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
 use crate::error::Result;
 use crate::header::CodecType;
-use crate::huffman;
-use crate::huffman::HuffmanDecoder;
+use crate::huffman::Huffman8BitDecoder;
 use bitreader::BitReader;
-
-// The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
-// I prefer to make explicit the parameters at type instantiation for
-// clarity purposes.
-type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { huffman::lookup_length::<16>() }>;
 
 /// MAME Huffman Codec.
 pub struct HuffmanCodec;
