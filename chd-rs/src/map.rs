@@ -246,6 +246,7 @@ impl UncompressedEntryProof {
 }
 
 impl ChdMap {
+    /// Gets the number of entries in the CHD Map.
     pub fn len(&self) -> usize {
         match self {
             ChdMap::V5(m) => {
@@ -261,6 +262,7 @@ impl ChdMap {
         }
     }
 
+    /// Gets the `MapEntry` for the specified hunk number if it exists.
     pub fn get_entry(&self, hunk_num: usize) -> Option<MapEntry> {
         match self {
             ChdMap::V5(m) => {
@@ -285,15 +287,17 @@ impl ChdMap {
         }
     }
 
+    /// Reads the hunk map from the provided stream given the parameters in the header,
+    /// which must have the same stream provenance as the input header.
     pub fn try_read_map<F: Read + Seek>(header: &ChdHeader, mut file: F) -> Result<ChdMap> {
         match header {
-            ChdHeader::V5Header(v5) => Ok(ChdMap::V5(map::read_map_v5(
+            ChdHeader::V5Header(v5) => Ok(ChdMap::V5(read_map_v5(
                 v5,
                 &mut file,
                 header.is_compressed(),
             )?)),
             ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => {
-                Ok(ChdMap::Legacy(LegacyMapData(map::read_map_legacy::<
+                Ok(ChdMap::Legacy(LegacyMapData(read_map_legacy::<
                     _,
                     V3_MAP_ENTRY_SIZE,
                 >(
@@ -301,7 +305,7 @@ impl ChdMap {
                 )?)))
             }
             ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => {
-                Ok(ChdMap::Legacy(LegacyMapData(map::read_map_legacy::<
+                Ok(ChdMap::Legacy(LegacyMapData(read_map_legacy::<
                     _,
                     V1_MAP_ENTRY_SIZE,
                 >(
