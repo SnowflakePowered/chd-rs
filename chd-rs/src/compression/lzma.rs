@@ -20,7 +20,7 @@ use std::io::Cursor;
 ///
 /// ## Buffer Restrictions
 /// Each compressed LZMA hunk decompresses to a hunk-sized chunk.
-/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
 /// ```rust
 /// fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {

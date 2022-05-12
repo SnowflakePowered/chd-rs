@@ -87,7 +87,7 @@ pub type CdLzCodec = CdCodec<LzmaCodec, ZlibCodec>;
 /// ## Buffer Restrictions
 /// Each compressed CDZL hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple of
 /// 2448, the size of each CD frame.
-/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
 pub type CdZlCodec = CdCodec<ZlibCodec, ZlibCodec>;
 

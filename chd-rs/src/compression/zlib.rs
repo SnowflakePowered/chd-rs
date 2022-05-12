@@ -10,7 +10,7 @@ use flate2::{Decompress, FlushDecompress};
 ///
 /// ## Buffer Restrictions
 /// Each compressed Deflate hunk decompresses to a hunk-sized chunk.
-/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
 pub struct ZlibCodec {
     engine: Decompress,

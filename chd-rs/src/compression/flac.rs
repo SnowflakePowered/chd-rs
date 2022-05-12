@@ -186,7 +186,7 @@ impl CodecImplementation for RawFlacCodec {
 /// ## Buffer Restrictions
 /// Each compressed CDFL hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple
 /// of 2448, the size of each CD frame. The input buffer must contain enough samples to fill
-/// the number of CD sectors that can fit into the hunk-sized output buffer.
+/// the number of CD sectors that can fit into the output buffer.
 pub struct CdFlCodec {
     // cdfl always writes in big endian.
     engine: FlacCodec<BigEndian>,

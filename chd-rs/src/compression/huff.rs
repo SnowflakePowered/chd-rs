@@ -4,7 +4,7 @@ use crate::header::CodecType;
 use crate::huffman::Huffman8BitDecoder;
 use bitreader::BitReader;
 
-/// MAME Huffman 8-bit decompression codec.
+/// MAME 8-bit Huffman (huff) decompression codec.
 ///
 /// ## Format Details
 /// The Huffman codec uses a Huffman-encoded Huffman tree with the
@@ -18,7 +18,7 @@ use bitreader::BitReader;
 /// for more details.
 /// ## Buffer Restrictions
 /// Each compressed Huffman hunk decompresses to a hunk-sized chunk.
-/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
 pub struct HuffmanCodec;
 impl CodecImplementation for HuffmanCodec {

@@ -87,6 +87,16 @@ mod huffman;
 
 #[cfg(feature = "codec_api")]
 /// Implementations of decompression codecs used in MAME CHD.
+///
+/// Each codec may have restrictions on the hunk size, lengths and contents
+/// of the buffer. If [`decompress`](crate::codecs::CodecImplementation::decompress) is called
+/// with buffers that do not satisfy the constraints, it may return [`CompressionError`](crate::ChdError),
+/// or panic, especially if the output buffer does not satisfy length requirements.
+///
+/// Because codecs are allowed to be used outside of a hunk-sized granularity, such as in
+/// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
+/// do not check the length of the output buffer against the hunk size. It is up to the caller
+/// of [`decompress`](crate::codecs::CodecImplementation::decompress) to uphold length invariants.
 pub mod codecs {
     pub use crate::compression::codecs::*;
     pub use crate::compression::{CompressionCodec,
