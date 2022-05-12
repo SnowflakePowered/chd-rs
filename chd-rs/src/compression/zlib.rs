@@ -1,14 +1,22 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};
 
-/// Zlib Deflate codec.
+/// Deflate (zlib) decompression codec.
+///
+/// ## Format Details
+/// CHD compresses Deflate hunks without a zlib header.
+///
+/// ## Buffer Restrictions
+/// Each compressed Deflate hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// when decompressed.
 pub struct ZlibCodec {
     engine: Decompress,
 }
 
-impl InternalCodec for ZlibCodec {
+impl CodecImplementation for ZlibCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -19,7 +27,7 @@ impl InternalCodec for ZlibCodec {
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         self.engine.reset(false);
         let status = self
             .engine
@@ -35,10 +43,10 @@ impl InternalCodec for ZlibCodec {
             return Err(ChdError::DecompressionError);
         }
 
-        return Ok(DecompressLength::new(
+        Ok(DecompressResult::new(
             total_out as usize,
             self.engine.total_in() as usize,
-        ));
+        ))
     }
 }
 

@@ -1,11 +1,53 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use lzma_rs_headerless::decode::lzma::LzmaParams;
 use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
 
-/// LZMA codec with default CHD parameters
+/// LZMA (lzma) decompression codec.
+///
+/// ## Format Details
+/// CHD compresses LZMA hunks without an xz stream header using
+/// the default compression settings for LZMA 19.0. These settings are
+///
+/// * Literal Context Bits (`lc`): 3
+/// * Literal Position Bits (`lp`): 0
+/// * Position Bits (`pb`): 2
+///
+/// The dictionary size is determined via the following algorithm with a level of 9, and a
+/// reduction size of hunk size.
+///
+/// ## Buffer Restrictions
+/// Each compressed LZMA hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// when decompressed.
+/// ```rust
+/// fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
+///     let mut dict_size = if level <= 5 {
+///         1 << (level * 2 + 14)
+///     } else if level <= 7 {
+///         1 << 25
+///     } else {
+///        1 << 26
+///     };
+///
+///     // This does the same thing as LzmaEnc.c when determining dict_size
+///     if dict_size > reduce_size {
+///         for i in 11..=30 {
+///             if reduce_size <= (2u32 << i) {
+///                 dict_size = 2u32 << i;
+///                 break;
+///             }
+///             if reduce_size <= (3u32 << i) {
+///                 dict_size = 3u32 << i;
+///                 break;
+///             }
+///         }
+///     }
+///     dict_size
+/// }
+/// ```
 pub struct LzmaCodec {
     params: LzmaParams,
 }
@@ -29,6 +71,7 @@ fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
     if dict_size > reduce_size {
         // might be worth converting this to a while loop for const
         // depends if we can const-propagate hunk_size.
+        // todo: #[feature(const_inherent_unchecked_arith)
         for i in 11..=30 {
             if reduce_size <= (2u32 << i) {
                 dict_size = 2u32 << i;
@@ -53,7 +96,7 @@ impl CompressionCodecType for LzmaCodec {
     }
 }
 
-impl InternalCodec for LzmaCodec {
+impl CodecImplementation for LzmaCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -62,12 +105,13 @@ impl InternalCodec for LzmaCodec {
         // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
         // is that the chunks are encoded with the defaults used in LZMA 19.0.
         // These defaults are lc = 3, lp = 0, pb = 2.
-        let params = LzmaParams::new(3, 0, 2, get_lzma_dict_size(9, hunk_size), None);
+        let params = LzmaParams::new(3, 0, 2,
+                                     get_lzma_dict_size(9, hunk_size), None);
 
         Ok(LzmaCodec { params })
     }
 
-    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
         let mut read = Cursor::new(input);
         let len = output.len();
         if let Ok(_) = lzma_decompress_with_params(
@@ -76,7 +120,7 @@ impl InternalCodec for LzmaCodec {
             None,
             self.params.with_size(len as u64),
         ) {
-            Ok(DecompressLength::new(len, read.position() as usize))
+            Ok(DecompressResult::new(len, read.position() as usize))
         } else {
             Err(ChdError::DecompressionError)
         }

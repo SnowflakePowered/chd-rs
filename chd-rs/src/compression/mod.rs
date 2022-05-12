@@ -30,56 +30,71 @@ pub mod codecs {
 }
 
 // unstable(trait_alias)
-/// Marker trait for a public user exposed codec that is used to decode CHDs.
-pub trait CompressionCodec: InternalCodec + CompressionCodecType {}
+/// Marker trait for a codec that can be used to decompress a compressed hunk.
+pub trait CompressionCodec: CodecImplementation + CompressionCodecType {}
 
-/// A codec that has a externally known type.
+/// Trait for a codec that implements a known CHD codec type.
 pub trait CompressionCodecType {
+    /// Returns the known [`CodecType`](crate::header::CodecType) that this
+    /// codec implements.
     fn codec_type(&self) -> CodecType
     where
         Self: Sized;
 }
 
-/// A compression codec used to decompress.
-pub trait InternalCodec {
+/// Trait for a CHD decompression codec implementation.
+pub trait CodecImplementation {
+    /// Returns whethere is codec is lossy or not.
     fn is_lossy(&self) -> bool
     where
         Self: Sized;
-    fn new(hunk_bytes: u32) -> Result<Self>
+
+    /// Creates a new instance of this codec for the provided hunk size.
+    fn new(hunk_size: u32) -> Result<Self>
     where
         Self: Sized;
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength>;
+
+    /// Decompress compressed bytes from the input buffer into the
+    /// output buffer.
+    ///
+    /// Usually the output buffer must have the exact
+    /// length as `hunk_size`, but this may be dependent on the codec
+    /// implementation.
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult>;
 }
 
+/// The result of a chunk decompression operation.
 #[derive(Copy, Clone, Default)]
-pub struct DecompressLength {
+pub struct DecompressResult {
     bytes_out: usize,
     bytes_read: usize,
 }
 
-impl Add for DecompressLength {
-    type Output = DecompressLength;
+impl Add for DecompressResult {
+    type Output = DecompressResult;
 
     fn add(self, rhs: Self) -> Self::Output {
-        DecompressLength {
+        DecompressResult {
             bytes_out: self.total_out() + rhs.total_out(),
             bytes_read: self.total_in() + rhs.total_in(),
         }
     }
 }
 
-impl DecompressLength {
-    pub fn new(out: usize, read: usize) -> Self {
-        DecompressLength {
+impl DecompressResult {
+    pub(crate) fn new(out: usize, read: usize) -> Self {
+        DecompressResult {
             bytes_out: out,
             bytes_read: read,
         }
     }
 
+    /// Returns the total number of decompressed bytes written to the output buffer.
     pub fn total_out(&self) -> usize {
         self.bytes_out
     }
 
+    /// Returns the total number of bytes read from the compressed input buffer.
     pub fn total_in(&self) -> usize {
         self.bytes_read
     }

@@ -1,6 +1,6 @@
-/// Implementation of the MAME CHD Huffman Decoder.
-///
-/// For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
+//! Implementation of the MAME CHD Huffman Decoder.
+//!
+//! For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
 use crate::const_assert;
 use bitreader::{BitReader, BitReaderError};
 use std::cmp::Ordering;
@@ -10,13 +10,20 @@ use std::marker::PhantomData;
 
 type LookupValue = u16;
 
+/// Error type for Huffman decoding.
 #[derive(Debug)]
 pub enum HuffmanError {
+    /// Too many bits used to initialize the decoder or read a value.
     TooManyBits,
+    /// The provided bitstream does not contain a valid MAME static Huffman tree.
     InvalidData,
+    /// The input buffer is too small to read another Huffman code from.
     InputBufferTooSmall,
+    /// The output buffer is too small to write to.
     OutputBufferTooSmall,
+    /// There is an internal inconsistency within the Huffman tree.
     InternalInconsistency,
+    /// The tree has too many contexts.
     TooManyContexts,
 }
 
@@ -85,12 +92,12 @@ impl<'a> PartialOrd for HuffmanNode<'a> {
 // The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
 // I prefer to make explicit the parameters at type instantiation for
 // clarity purposes.
-pub type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { lookup_length::<16>() }>;
+pub type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { lookup_len::<16>() }>;
 
 /// Allocation free CHD huffman decoder.
 ///
-/// MAX_BITS must be less than or equal to 24.
-/// LOOKUP_ARRAY_LEN must be equal to huffman::lookup_length::<MAX_BITS>().
+/// `MAX_BITS` must be less than or equal to 24.
+/// `LOOKUP_ARRAY_LEN` must be equal to `lookup_len::<MAX_BITS>()`.
 pub struct HuffmanDecoder<
     'a,
     const NUM_CODES: usize,
@@ -102,8 +109,8 @@ pub struct HuffmanDecoder<
     huffnode_array: [HuffmanNode<'a>; NUM_CODES],
 }
 
-/// Get the size of the lookup array for a given MAX_BITS
-pub(crate) const fn lookup_length<const MAX_BITS: u8>() -> usize {
+/// Get the size of the lookup array for a given `MAX_BITS`
+pub const fn lookup_len<const MAX_BITS: u8>() -> usize {
     1 << MAX_BITS
 }
 
@@ -132,7 +139,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
     fn new() -> Self {
         const_assert!(MAX_BITS: u8 => MAX_BITS <= 24u8);
-        const_assert!(MAX_BITS: u8, LOOKUP_ARRAY_LEN: usize => LOOKUP_ARRAY_LEN == lookup_length::<MAX_BITS>());
+        const_assert!(MAX_BITS: u8, LOOKUP_ARRAY_LEN: usize => LOOKUP_ARRAY_LEN == lookup_len::<MAX_BITS>());
 
         HuffmanDecoder {
             lookup_array: [0u16; LOOKUP_ARRAY_LEN],
@@ -183,7 +190,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
     /// Import pre-encoded Huffman tree from the bitstream.
     pub fn from_huffman_tree(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
         // Parse the small tree
-        let mut small_huf = HuffmanDecoder::<24, 6, { lookup_length::<6>() }>::new();
+        let mut small_huf = HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::new();
 
         small_huf.huffnode_array[0].num_bits = reader.read_u8(3)?;
         let start = reader.read_u8(3)? + 1;

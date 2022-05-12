@@ -14,6 +14,62 @@
 //! * Huffman (Huff)
 //!
 //! AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
+//!
+//! ## Iterating over hunks
+//! Because [`ChdHunk`](crate::ChdHunk) keeps a mutable reference to its owning
+//! [`ChdFile`](crate::ChdFile), direct iteration of hunks is not possible without
+//! Generic Associated Types. Instead, the hunk indices should be iterated over.
+//!
+//! ```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::ChdFile;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let hunk_count = chd.header().hunk_count();
+//! let hunk_size = chd.header().hunk_size();
+//!
+//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
+//! let mut hunk_buf = vec![0u8; hunk_size as usize];
+//! // buffer to store compressed data.
+//! let mut cmp_buf = Vec::new();
+//!
+//! for hunk_num in 0..hunk_count {
+//!     let mut hunk = chd.hunk(hunk_num)?;
+//!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+//! }
+//! ```
+//!
+//! ## Iterating over Metadata
+//! Metadata in a CHD file consists of a list of entries that contain offsets to the
+//! byte data of the metadata contents in the CHD file. The individual metadata entries
+//! can be iterated directly, but a reference to the source stream has to be provided to
+//! read the data.
+//! ```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::ChdFile;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let entries = chd.metadata()?;
+//! for entry in entries {
+//!     let metadata = entry.read(&mut f)?;
+//! }
+//!```
+//! chd-rs provides a helper to retrieve all metadata content at once for convenience.
+//! ```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::ChdFile;
+//! use chd::metadata::ChdMetadata;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let entries = chd.metadata()?;
+//! let metadatas: Vec<ChdMetadata> = entries.try_into()?;
+//!```
 #![forbid(unsafe_code)]
 
 mod error;
@@ -22,7 +78,22 @@ mod block_hash;
 mod cdrom;
 mod chdfile;
 mod compression;
+
+#[cfg(feature = "huffman_api")]
+pub mod huffman;
+
+#[cfg(not(feature = "huffman_api"))]
 mod huffman;
+
+#[cfg(feature = "codec_api")]
+/// Implementations of decompression codecs used in MAME CHD.
+pub mod codecs {
+    pub use crate::compression::codecs::*;
+    pub use crate::compression::{CompressionCodec,
+                                 CompressionCodecType,
+                                 CodecImplementation,
+                                 DecompressResult};
+}
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
     return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32);
@@ -55,11 +126,9 @@ mod tests {
     use crate::metadata::ChdMetadata;
     use crate::read::{ChdFileReader, ChdHunkBufReader};
     use crate::ChdFile;
-    use bencher::Bencher;
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::{BufReader, Read, Write};
-    use std::process::Termination;
 
     #[test]
     fn read_metas_test() {
@@ -67,6 +136,8 @@ mod tests {
         let mut chd = ChdFile::open(&mut f, None).expect("file");
 
         let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
+
+        let metadata: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().unwrap();
         let meta_datas: Vec<_> = metadatas
             .into_iter()
             .map(|s| String::from_utf8(s.value).unwrap())

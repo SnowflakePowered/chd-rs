@@ -18,6 +18,8 @@ verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 want_subcode = []
 want_raw_data_sector = []
 avhuff = []
+huffman_api = []
+codec_api = []
 
 [dependencies]
 byteorder = "1"

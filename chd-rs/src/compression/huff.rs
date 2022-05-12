@@ -1,12 +1,27 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::error::Result;
 use crate::header::CodecType;
 use crate::huffman::Huffman8BitDecoder;
 use bitreader::BitReader;
 
-/// MAME Huffman Codec.
+/// MAME Huffman 8-bit decompression codec.
+///
+/// ## Format Details
+/// The Huffman codec uses a Huffman-encoded Huffman tree with the
+/// the default Huffman settings of
+/// * `NUM_BITS`: 256
+/// * `MAX_BITS`: 16
+///
+/// The last decoded code from the input buffer may not contain enough bits for a full
+/// byte is reconstructed by shifting zero-bits in from the right. See the source code for
+/// [huffman.rs](https://github.com/SnowflakePowered/chd-rs/blob/575cc2330b0c6eb444e8773068295510147ffa6b/chd-rs/src/huffman.rs#L242)
+/// for more details.
+/// ## Buffer Restrictions
+/// Each compressed Huffman hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
+/// when decompressed.
 pub struct HuffmanCodec;
-impl InternalCodec for HuffmanCodec {
+impl CodecImplementation for HuffmanCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -15,7 +30,7 @@ impl InternalCodec for HuffmanCodec {
         Ok(HuffmanCodec)
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         let mut bit_reader = BitReader::new(input);
         let decoder = Huffman8BitDecoder::from_huffman_tree(&mut bit_reader)?;
 
@@ -23,7 +38,7 @@ impl InternalCodec for HuffmanCodec {
             output[i] = decoder.decode_one(&mut bit_reader)? as u8;
         }
 
-        Ok(DecompressLength::new(
+        Ok(DecompressResult::new(
             output.len(),
             ((input.len() * 8) - bit_reader.remaining() as usize) / 8,
         ))

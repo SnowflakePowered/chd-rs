@@ -1,3 +1,8 @@
+///! FLAC header helpers ported from the reference MAME implementation.
+///! Because claxon can do headerless frame reads, chd-rs does not need this.
+///! It is left here as a reference but this file is normally not compiled into
+///! the module tree.
+
 /// Determine FLAC block size from 16-65535, and clamped to 2048 for sweet spot
 const fn flac_optimal_size(bytes: u32) -> u32 {
     let mut hunkbytes = bytes / 4;

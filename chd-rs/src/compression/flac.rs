@@ -7,19 +7,20 @@ use claxon::frame::FrameReader;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 use crate::compression::zlib::ZlibCodec;
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 
 /// Generic block decoder for FLAC.
 ///
 /// Defaults assume 2 channel interleaved FLAC.
+/// The byte order determines the endianness of the output data.
 struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
     buffer: Vec<i32>,
-    _ordering: PhantomData<T>,
+    _byteorder: PhantomData<T>,
 }
 
-impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNELS> {
+impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, CHANNELS> {
     fn is_lossy(&self) -> bool
     where
         Self: Sized,
@@ -37,11 +38,11 @@ impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNEL
 
         Ok(FlacCodec {
             buffer: Vec::new(),
-            _ordering: PhantomData::default(),
+            _byteorder: PhantomData::default(),
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         let comp_buf = Cursor::new(input);
 
         // Number of samples to write to the buffer.
@@ -96,17 +97,26 @@ impl<T: ByteOrder, const CHANNELS: usize> InternalCodec for FlacCodec<T, CHANNEL
 
         self.buffer = block_buf;
         let bytes_in = frame_read.into_inner().position();
-        Ok(DecompressLength::new(
+        Ok(DecompressResult::new(
             samples_written * 4,
             bytes_in as usize,
         ))
     }
 }
 
-/// Codec for Raw FLAC (flac) compressed hunks.
+/// Raw FLAC (flac) decompression codec.
 ///
-/// MAME Raw FLAC has the first byte as either 'L' or 'B' depending
-/// on the endianness of the output data.
+/// ## Format details
+/// Raw FLAC expects the first byte as either 'L' (0x4C) or 'B' (0x42) to indicate the endianness
+/// of the output data, followed by the compressed FLAC data.
+///
+/// FLAC compressed audio data is assumed to be 2-channel 16-bit signed integer PCM.
+/// The audio data is decompressed in interleaved format, with the left channel first, then
+/// the right channel for each sample, for 32 bits each sample.
+///
+/// ## Buffer Restrictions
+/// Each compressed FLAC hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain enough samples to fill the hunk-sized output buffer.
 pub struct RawFlacCodec {
     be: FlacCodec<BigEndian>,
     le: FlacCodec<LittleEndian>,
@@ -123,7 +133,7 @@ impl CompressionCodecType for RawFlacCodec {
     }
 }
 
-impl InternalCodec for RawFlacCodec {
+impl CodecImplementation for RawFlacCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -135,16 +145,7 @@ impl InternalCodec for RawFlacCodec {
         })
     }
 
-    /// Decompress CD FLAC data from MAME RAW FLAC data.
-    ///
-    /// The first byte indicates the endianness of the data to be written, and not
-    ///
-    /// FLAC data is assumed to be 2-channel interleaved 16-bit PCM. Thus the length of the output
-    /// buffer must be a multiple of 4 to hold 2 bytes per sample, for 2 channels.
-    ///
-    /// The input buffer must also contain enough compressed samples to fill the length of the
-    /// output buffer.
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         match input[0] {
             b'L' => self.le.decompress(&input[1..], output),
             b'B' => self.be.decompress(&input[1..], output),
@@ -153,7 +154,39 @@ impl InternalCodec for RawFlacCodec {
     }
 }
 
-/// Codec for CD Flac
+/// CD-ROM wrapper decompression codec (cdfl) using the FLAC
+/// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
+/// decompression of subcode data.
+///
+/// ## Format Details
+/// FLAC compressed audio data is assumed to be 2-channel 16-bit signed integer PCM.
+/// The audio data is decompressed in interleaved format, with the left channel first, then
+/// the right channel for each sample, for 32 bits each sample.
+///
+/// CD-ROM wrapped FLAC is always written to the output stream in big-endian byte order.
+///
+/// CD-ROM compressed hunks have a layout with all compressed frame data in sequential order,
+/// followed by compressed subcode data.
+///
+/// ```c
+/// [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+/// ```
+/// Unlike CDLZ or CDZL, there is no header before the compressed data begins.
+/// The length of the compressed data is determined by the number of 2448-sized frames
+/// that can fit into the hunk-sized output buffer. Following the FLAC compressed blocks,
+/// the subcode data is a single Deflate stream.
+///
+/// After decompression, the data is swizzled so that each frame is followed by its corresponding
+/// subcode data.
+/// ```c
+/// [Frame0, Subcode0, Frame1, Subcode1, ..., FrameN, SubcodeN]
+/// ```
+/// FLAC compressed frames does not require manual reconstruction of the sync header or ECC bytes.
+///
+/// ## Buffer Restrictions
+/// Each compressed CDFL hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple
+/// of 2448, the size of each CD frame. The input buffer must contain enough samples to fill
+/// the number of CD sectors that can fit into the hunk-sized output buffer.
 pub struct CdFlCodec {
     // cdfl always writes in big endian.
     engine: FlacCodec<BigEndian>,
@@ -169,7 +202,7 @@ impl CompressionCodecType for CdFlCodec {
     }
 }
 
-impl InternalCodec for CdFlCodec {
+impl CodecImplementation for CdFlCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -194,7 +227,7 @@ impl InternalCodec for CdFlCodec {
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressLength> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         let total_frames = output.len() / CD_FRAME_SIZE as usize;
         let frame_res = self.engine.decompress(
             input,
@@ -209,7 +242,7 @@ impl InternalCodec for CdFlCodec {
         )?;
 
         #[cfg(not(feature = "want_subcode"))]
-        let sub_res = DecompressLength::default();
+        let sub_res = DecompressResult::default();
 
         // Decompressed FLAC data has layout
         // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]

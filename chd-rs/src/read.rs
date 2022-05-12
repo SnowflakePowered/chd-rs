@@ -1,8 +1,10 @@
 //! Helpers and adapters for reading CHD files and hunks.
 //!
-//! These are not super well optimized and should only be used for convenience.
-//! The fastest way to read hunks is [`ChdHunk::read_hunk_in`](crate::chdfile::ChdHunk::read_hunk_in),
-//! which does not double-buffer, but does not provide a Seek implementation.
+//! ## Usage
+//! These adapters provide `Read + Seek` implementations over individual hunks and files by keeping
+//! an internal buffer of decompressed hunk data. For the best performance and flexibility,
+//! [`ChdHunk::read_hunk_in`](crate::chdfile::ChdHunk::read_hunk_in) should be used which will
+//! avoid unnecessary buffering.
 use crate::error::Result;
 use crate::{ChdError, ChdFile, ChdHunk};
 use std::io::{BufRead, Cursor, Read, Seek, SeekFrom};
@@ -27,6 +29,12 @@ impl ChdHunkBufReader {
     /// reacquired with [`ChdHunkBufReader::into_inner`](crate::read::ChdHunkBufReader::into_inner).
     ///
     /// The hunk contents are immediately buffered from the stream upon creation.
+    ///
+    /// `cmp_buffer` is used temporarily to hold the compressed data from the hunk. Ownership of
+    /// `buffer` is taken to be used as the internal buffer for this reader.
+    ///
+    /// Unlike [`ChdHunk::read_hunk_in`](crate::chdfile::ChdHunk::read_hunk_in), there are no
+    /// length restrictions on the provided buffers.
     pub fn new_in<F: Read + Seek>(
         hunk: &mut ChdHunk<F>,
         cmp_buffer: &mut Vec<u8>,
@@ -69,6 +77,10 @@ impl BufRead for ChdHunkBufReader {
 }
 
 /// Utility adapter for [`ChdFile`](crate::ChdFile) that implements `Read`.
+///
+/// `ChdFileReader` will allocate and manage intermediate buffers to support
+/// reading at a byte granularity. If performance is a concern, it is recommended
+/// to instead iterate over hunk indices.
 pub struct ChdFileReader<F: Read + Seek> {
     chd: ChdFile<F>,
     current_hunk: u32,

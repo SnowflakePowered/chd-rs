@@ -11,7 +11,7 @@ use num_traits::FromPrimitive;
 use crate::const_assert;
 use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
-use crate::huffman::{lookup_length, HuffmanDecoder};
+use crate::huffman::{lookup_len, HuffmanDecoder};
 
 const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
 const V5_COMPRESSED_MAP_ENTRY_SIZE: usize = 12;
@@ -462,7 +462,8 @@ fn read_map_v5<F: Read + Seek>(
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let decoder = HuffmanDecoder::<16, 8, { lookup_length::<8>() }>::from_tree_rle(&mut bitstream)?;
+    let decoder = HuffmanDecoder::<16, 8, { lookup_len::<8>() }>
+        ::from_tree_rle(&mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;

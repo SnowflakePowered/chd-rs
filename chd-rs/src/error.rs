@@ -14,34 +14,77 @@ use std::str::Utf8Error;
 #[derive(Debug)]
 #[repr(C)]
 pub enum ChdError {
+    /// No error.
+    /// This is only used by the C API bindings.
     None,
+    /// No drive interface.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     NoInterface,
+    /// Unable to allocate the required size of buffer.
     OutOfMemory,
+    /// The file is not a valid CHD file.
     InvalidFile,
+    /// An invalid parameter was provided.
     InvalidParameter,
+    /// The data is invalid.
     InvalidData,
+    /// The file was not found.
     FileNotFound,
+    /// This CHD requires a parent CHD that was not provided.
     RequiresParent,
+    /// The provided file is not writable.
+    /// Since chd-rs does not implement CHD creation, this is unused.
     FileNotWriteable,
+    /// An error occurred when reading this CHD file.
     ReadError,
+    /// An error occurred when writing this CHD file.
+    /// Since chd-rs does not implement CHD creation, this is unused.
     WriteError,
+    /// An error occurred when initializing a codec.
     CodecError,
+    /// The provided parent CHD is invalid.
     InvalidParent,
+    /// The request hunk is out of range for this CHD file.
     HunkOutOfRange,
+    /// An error occurred when decompressing a hunk.
     DecompressionError,
+    /// An error occurred when compressing a hunk.
+    /// Since chd-rs does not implement CHD creation, this is unused.
     CompressionError,
+    /// Could not create the file.
+    /// Since chd-rs does not implement CHD creation, this is unused.
     CantCreateFile,
+    /// Could not verify the CHD.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     CantVerify,
+    /// The requested operation is not supported.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     NotSupported,
+    /// The requested metadata was not found.
+    /// This is only used by the C API bindings.
     MetadataNotFound,
+    /// The metadata has an invalid size.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     InvalidMetadataSize,
+    /// The CHD version of the provided file is not supported by this library.
     UnsupportedVersion,
+    /// Unable to verify the CHD completely.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     VerifyIncomplete,
+    /// The requested metadata is invalid.
     InvalidMetadata,
+    /// The internal state of the decoder/encoder is invalid.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     InvalidState,
+    /// An operation is already pending.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     OperationPending,
+    /// No async operations are allowed.
+    /// This is only for C-compatibility purposes and is otherwise unused.
     NoAsyncOperation,
+    /// Decompressing the CHD requires a codec that is not supported.
     UnsupportedFormat,
+    /// Unknown error.
     Unknown,
 }
 

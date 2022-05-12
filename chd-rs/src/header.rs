@@ -13,7 +13,7 @@ use crate::compression::codecs::AVHuffCodec;
 use crate::compression::codecs::{
     CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, RawFlacCodec, ZlibCodec,
 };
-use crate::compression::{CompressionCodec, InternalCodec};
+use crate::compression::{CompressionCodec, CodecImplementation};
 use crate::error::{ChdError, Result};
 use crate::make_tag;
 use crate::metadata::{ChdMetadataRefIter, KnownMetadata};
@@ -66,17 +66,6 @@ impl CodecType {
     }
 
     /// Initializes the codec for the provided hunk size.
-    ///
-    /// Supported codecs are
-    /// * None
-    /// * Zlib/Zlib+/Zlib V5
-    /// * CDZL (CD Zlib)
-    /// * CDLZ (CD LZMA)
-    /// * CDFL (CD FLAC)
-    /// * FLAC (Raw FLAC)
-    /// * LZMA (Raw LZMA)
-    ///
-    /// AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
     pub(crate) fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
         match self {
             CodecType::None => {

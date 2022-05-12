@@ -1,4 +1,4 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressLength, InternalCodec};
+use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::header::CodecType;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder, HuffmanError};
 use crate::{huffman, ChdError};
@@ -61,7 +61,7 @@ const fn code_to_rle_count(code: u32) -> u32 {
     }
 }
 
-type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_length::<16>() }>;
+type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_len::<16>() }>;
 
 struct DeltaRleDecoder<'a> {
     huffman: DeltaRleHuffman<'a>,
@@ -120,7 +120,7 @@ impl CompressionCodecType for AVHuffCodec {
     }
 }
 
-impl InternalCodec for AVHuffCodec {
+impl CodecImplementation for AVHuffCodec {
     fn is_lossy(&self) -> bool
     where
         Self: Sized,
@@ -136,7 +136,7 @@ impl InternalCodec for AVHuffCodec {
         &mut self,
         mut input: &[u8],
         mut output: &mut [u8],
-    ) -> crate::Result<DecompressLength> {
+    ) -> crate::Result<DecompressResult> {
         // https://github.com/mamedev/mame/blob/master/src/lib/util/avhuff.cpp#L723
         if input.len() < 8 {
             return Err(ChdError::DecompressionError);
@@ -233,7 +233,7 @@ impl InternalCodec for AVHuffCodec {
                 .map_err(|_| ChdError::DecompressionError)?;
         }
 
-        Ok(DecompressLength::new(
+        Ok(DecompressResult::new(
             meta_size as usize + total_bytes,
             input.len(),
         ))
