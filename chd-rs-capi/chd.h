@@ -216,6 +216,8 @@ chd_error chd_get_metadata(const struct chd_file *chd,
 
 chd_error chd_codec_config(const struct chd_file *_chd, int32_t _param, void *_config);
 
+chd_error chd_read_header(const char *filename, struct chd_header *header);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif // __cplusplus
