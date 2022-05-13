@@ -51,7 +51,7 @@ to verify hunk checksums.
 
 ```toml
 [dependencies]
-chd = { version  "0.0.4", features = ["verify_block_crc"] }
+chd = { version  "0.0.5", features = ["verify_block_crc"] }
 ```
 
 ### Supported Codecs
@@ -75,14 +75,18 @@ see the [`chd::compression`](https://github.com/SnowflakePowered/chd-rs/tree/mas
 * CD FLAC (`CHD_CODEC_CD_FLAC`)
 
 #### AVHuff support
-⚠️*AVHuff support is a work in progress and likely incorrect as of 0.0.4* ⚠️
+⚠️*AVHuff support is a work in progress and likely incorrect as of 0.0.5* ⚠️
 
 Experimental, and probably incorrect [AV Huffman (AVHU)](https://github.com/SnowflakePowered/chd-rs/blob/master/chd-rs/src/compression/avhuff.rs)
 support can be enabled with the `avhuff` feature. **Do not rely on its correctness as of 0.0.4**. The implementation of the AVHU codec
 will be verified and cleaned up before the 0.1 release.
 
+#### Codecs and Huffman API 
+By default, the codecs and static Huffman implementations are not exposed as part of the public API, 
+but can be enabled with the `codec_api` and `huffman_api` features respectively.
+
 ## `libchdr` API (WIP)
-⚠️*The C API is incomplete and heavily work in progress as of 0.0.4.* ⚠️
+⚠️*The C API is incomplete and heavily work in progress as of 0.0.5.* ⚠️
 
 chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h). 
 It makes no guarantees of ABI compatibility, and if your project links dynamically with libchdr, the output library will not work. However, chd-rs provides 

@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "docsrs", feature(doc_cfg, doc_cfg_hide))]
 //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
 //! for CHD V1-5.
 //!
@@ -97,6 +98,7 @@ mod huffman;
 /// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
 /// do not check the length of the output buffer against the hunk size. It is up to the caller
 /// of [`decompress`](crate::codecs::CodecImplementation::decompress) to uphold length invariants.
+#[cfg_attr(feature = "docsrs", doc(cfg(codec_api)))]
 pub mod codecs {
     pub use crate::compression::codecs::*;
     pub use crate::compression::{CompressionCodec,

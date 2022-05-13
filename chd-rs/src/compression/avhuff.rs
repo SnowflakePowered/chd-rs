@@ -1,3 +1,11 @@
+/// AV Huffman (avhu) decompression codec.
+///
+/// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
+/// Needs a lot of work and clean up to be more descriptive.
+/// !WARNING!: Do not refer to this codec as documentative. It is most likely broken.
+/// It is here as a WIP and is not up to the standards of the rest of chd-rs.
+/// Unlike the other codecs, it is completely untested, and the `avhuff` feature
+/// should be considered unstable.
 use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
 use crate::header::CodecType;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder, HuffmanError};
@@ -5,12 +13,7 @@ use crate::{huffman, ChdError};
 use bitreader::{BitReader, BitReaderError};
 use byteorder::{BigEndian, WriteBytesExt};
 use claxon::frame::FrameReader;
-/// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
-/// Needs a lot of work and clean up to be more descriptive.
-/// !WARNING!: Do not refer to this codec as documentative. It is most likely broken.
-/// It is here as a WIP and is not up to the standards of the rest of chd-rs.
-/// Unlike the other codecs, it is completely untested, and the `avhuff` feature
-/// should be considered unstable.
+
 use std::io::Cursor;
 use std::mem;
 
