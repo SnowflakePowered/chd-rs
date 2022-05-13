@@ -65,6 +65,18 @@ pub struct V5MapData(Vec<u8>, bool, u32);
 /// Opaque type for a legacy map.
 pub struct LegacyMapData(Vec<LegacyMapEntry>);
 
+impl From<V5MapData> for Vec<u8> {
+    fn from(map: V5MapData) -> Self {
+        map.0
+    }
+}
+
+impl From<&V5MapData> for Vec<u8> {
+    fn from(map: &V5MapData) -> Self {
+        map.0.clone()
+    }
+}
+
 /// A CHD V1-V4 map entry.
 pub struct LegacyMapEntry {
     offset: u64,      // offset within file of data

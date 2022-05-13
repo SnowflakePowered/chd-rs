@@ -1,0 +1,18 @@
+language = "C"
+cpp_compat = true
+include_guard = "__CHD_H__"
+pragma_once = true
+
+[parse]
+parse_deps = true
+include = ["chd"]
+
+[enum]
+rename_variants = "ScreamingSnakeCase"
+prefix_with_name = true
+
+[export]
+include = ["ChdError"]
+
+[export.rename]
+"ChdError" = "chd_error"

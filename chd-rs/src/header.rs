@@ -104,6 +104,7 @@ impl CodecType {
 
 /// The CHD header version.
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum Version {
     /// CHD version 1.
     ChdV1 = 1,
@@ -122,6 +123,7 @@ pub enum Version {
 ///
 /// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
 /// of this struct.
+#[derive(Clone)]
 pub struct HeaderV1 {
     /// The CHD version (1, or 2).
     pub version: Version,
@@ -164,6 +166,7 @@ pub struct HeaderV1 {
 ///
 /// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
 /// of this struct.
+#[derive(Clone)]
 pub struct HeaderV3 {
     /// The CHD version (3).
     pub version: Version,
@@ -201,6 +204,7 @@ pub struct HeaderV3 {
 ///
 /// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
 /// of this struct.
+#[derive(Clone)]
 pub struct HeaderV4 {
     /// The CHD version (4).
     pub version: Version,
@@ -235,6 +239,7 @@ pub struct HeaderV4 {
 ///
 /// While all members of this struct are public, prefer the `ChdHeader` API over the fields
 /// of this struct.
+#[derive(Clone)]
 pub struct HeaderV5 {
     /// The CHD version (4).
     pub version: Version,
@@ -267,7 +272,7 @@ pub struct HeaderV5 {
     /// The total number of hunks in the CHD file.
     pub hunk_count: u32,
     /// The size of each map entry in bytes.
-    pub map_entry_bytes: i32,
+    pub map_entry_bytes: u32,
 }
 
 /// A CHD header of unspecified version.
@@ -508,7 +513,7 @@ impl ChdHeader {
             return false;
         }
         // obsolete field checks are done by type system
-        return true;
+        true
     }
 
     /// Validate the compression types of the CHD file can be read.
@@ -571,7 +576,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
     let version = reader.read_u32::<BigEndian>()?;
 
     // ensure version is known and header size match up
-    return match (version, length) {
+    match (version, length) {
         (1, CHD_V1_HEADER_SIZE) => Ok(ChdHeader::V1Header(read_v1_header(
             &mut reader,
             version,
@@ -595,7 +600,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
         (5, CHD_V5_HEADER_SIZE) => Ok(ChdHeader::V5Header(read_v5_header(&mut reader, length)?)),
         (1 | 2 | 3 | 4 | 5, _) => Err(ChdError::InvalidData),
         _ => Err(ChdError::UnsupportedVersion),
-    };
+    }
 }
 
 fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<HeaderV1> {
