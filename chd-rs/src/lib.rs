@@ -1,4 +1,6 @@
 #![cfg_attr(feature = "docsrs", feature(doc_cfg, doc_cfg_hide))]
+#![cfg_attr(not(feature = "owning_iterators"), forbid(unsafe_code))]
+
 //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
 //! for CHD V1-5.
 //!
@@ -42,7 +44,29 @@
 //! }
 //! ```
 //!
-//! ## Iterating over Metadata
+//! With the `owning_iterators` feature (enabled by default), hunks can be iterated over
+//! more easily, but owning iterators are implemented with `unsafe`.
+//! ```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::ChdFile;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let hunk_count = chd.header().hunk_count();
+//! let hunk_size = chd.header().hunk_size();
+//!
+//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
+//! let mut hunk_buf = vec![0u8; hunk_size as usize];
+//! // buffer to store compressed data.
+//! let mut cmp_buf = Vec::new();
+//!
+//! for mut hunk in chd.hunks() {
+//!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+//! }
+//! ```
+//!
+//! ## Iterating over metadata
 //! Metadata in a CHD file consists of a list of entries that contain offsets to the
 //! byte data of the metadata contents in the CHD file. The individual metadata entries
 //! can be iterated directly, but a reference to the source stream has to be provided to
@@ -54,7 +78,7 @@
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
 //! let mut chd = ChdFile::open(&mut f, None)?;
-//! let entries = chd.metadata()?;
+//! let entries = chd.metadata_refs()?;
 //! for entry in entries {
 //!     let metadata = entry.read(&mut f)?;
 //! }
@@ -68,11 +92,26 @@
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
 //! let mut chd = ChdFile::open(&mut f, None)?;
-//! let entries = chd.metadata()?;
+//! let entries = chd.metadata_refs()?;
 //! let metadatas: Vec<ChdMetadata> = entries.try_into()?;
 //!```
-#![forbid(unsafe_code)]
-
+//! With the `owning_iterators` feature (enabled by default), metadata can be iterated over
+//! more easily, but owning iterators are implemented with `unsafe`.
+//! ```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::ChdFile;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = ChdFile::open(&mut f, None)?;
+//!
+//! for mut meta in chd.metadata()? {
+//!     let contents = meta.read()?;
+//!
+//!     // Not all metadata contents may be valid UTF8
+//!     println!("{}", String::from_utf8(contents.value)?)
+//! }
+//! ```
 mod error;
 
 mod block_hash;
@@ -147,9 +186,7 @@ mod tests {
         let mut f = File::open(".testimages/Test.chd").expect("");
         let mut chd = ChdFile::open(&mut f, None).expect("file");
 
-        let metadatas: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().expect("");
-
-        let metadata: Vec<ChdMetadata> = chd.metadata().unwrap().try_into().unwrap();
+        let metadatas: Vec<ChdMetadata> = chd.metadata_refs().unwrap().try_into().expect("");
         let meta_datas: Vec<_> = metadatas
             .into_iter()
             .map(|s| String::from_utf8(s.value).unwrap())
@@ -186,5 +223,29 @@ mod tests {
         read.read_to_end(&mut buf).expect("can read to end");
         let mut f_out = File::create(".testimages/out.bin").expect("");
         f_out.write_all(&buf).expect("did not write")
+    }
+
+    #[test]
+    fn hunk_iter_test() {
+        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut hunk_buf = chd.get_hunksized_buffer();
+        let mut comp_buf = Vec::new();
+        for mut hunk in chd.hunks() {
+            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+                .expect("hunk could not be read");
+        }
+    }
+
+    #[test]
+    fn metadata_iter_test() {
+        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        for mut meta in chd.metadata()
+            .expect("metadata could not be read") {
+            let contents = meta.read()
+                .expect("metadata entry could not be read");
+            println!("{:?}", String::from_utf8(contents.value));
+        }
     }
 }

@@ -227,7 +227,7 @@ fn main() -> anyhow::Result<()> {
             // hash
             print_hash(chd.header());
 
-            if let Some(Ok(metadata)) = chd.metadata().map(|f| f.try_into_vec()) {
+            if let Some(Ok(metadata)) = chd.metadata_refs().map(|f| f.try_into_vec()) {
                 for meta in metadata {
                     let tag = to_fourcc(meta.metatag);
                     if let Ok(tag) = tag {

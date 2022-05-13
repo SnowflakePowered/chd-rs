@@ -46,6 +46,7 @@ impl KnownMetadata {
 }
 
 /// A complete CHD metadata entry with contents read into memory.
+#[derive(Debug)]
 pub struct ChdMetadata {
     /// The FourCC metadata tag.
     pub metatag: u32,
@@ -192,6 +193,57 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
             s.curr = Some(new.clone());
             Ok(new)
         }
-        return next_inner(self).ok();
+        next_inner(self).ok()
+    }
+}
+
+#[cfg(feature = "owning_iterators")]
+#[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
+/// An iterator over the metadata entries of a file.
+pub struct ChdMetadataIter<'a, F: Read + Seek + 'a> {
+    inner: ChdMetadataRefIter<'a, F>
+}
+
+impl <'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
+    pub(crate) fn new(inner: ChdMetadataRefIter<'a, F>) -> Self {
+        ChdMetadataIter {
+            inner
+        }
+    }
+}
+
+#[cfg(feature = "owning_iterators")]
+#[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
+/// A metadata entry for a CHD file containing a reference
+/// to the source file.
+pub struct ChdMetadataEntry<'a, F: Read + Seek + 'a> {
+    meta_ref: ChdMetadataRef,
+    file: &'a mut F
+}
+
+#[cfg(feature = "owning_iterators")]
+impl <'a, F: Read + Seek + 'a> ChdMetadataEntry<'a, F> {
+    /// Read the contents of the metadata from the input stream.
+    pub fn read(&mut self) -> Result<ChdMetadata> {
+        self.meta_ref.read(self.file)
+    }
+}
+
+#[cfg(feature = "owning_iterators")]
+impl <'a, F: Read + Seek + 'a> Iterator for ChdMetadataIter<'a, F> {
+    type Item = ChdMetadataEntry<'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+            .map(|meta_ref| {
+                let file = self.inner.file as *mut F;
+                ChdMetadataEntry {
+                    meta_ref,
+                    // SAFETY: need an unbound lifetime to get 'a.
+                    // todo: test under miri to confirm soundness
+                    // todo: need GATs to do this safely.
+                    file: unsafe { file.as_mut().unwrap_unchecked() },
+                }
+            })
     }
 }

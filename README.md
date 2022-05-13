@@ -85,6 +85,12 @@ will be verified and cleaned up before the 0.1 release.
 By default, the codecs and static Huffman implementations are not exposed as part of the public API, 
 but can be enabled with the `codec_api` and `huffman_api` features respectively.
 
+#### Usage of `unsafe`
+The codecs and CHD file format is implemented in pure, safe Rust. To allow for easier
+iteration of hunks and metadata, `unsafe` is used sparingly to satisfy lifetime requirements.
+These iterators can be disabled by building the crate without the `owning_iterators` feature to
+forbid unsafe code in this crate.
+
 ## `libchdr` API (WIP)
 ⚠️*The C API is incomplete and heavily work in progress as of 0.0.5.* ⚠️
 

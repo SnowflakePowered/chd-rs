@@ -9,7 +9,7 @@ use crate::header::CodecType;
 use std::convert::TryFrom;
 
 /// CD-ROM wrapper decompression codec (cdlz) that uses the [LZMA codec](crate::codecs::LzmaCodec)
-/// for decompression of sector data and the [DEFLATE codec](crate::codecs::ZlibCodec) for
+/// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
 /// decompression of subcode data.
 ///
 /// ## Format Details
