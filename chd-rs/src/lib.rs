@@ -14,7 +14,7 @@
 //! * CDFL (CD FLAC)
 //! * FLAC (Raw FLAC)
 //! * LZMA (Raw LZMA)
-//! * Huffman (Huff)
+//! * Huff (MAME Static Huffman)
 //!
 //! AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
 //!

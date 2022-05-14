@@ -97,14 +97,14 @@ impl<'a> DeltaRleDecoder<'a> {
         }
 
         let data = self.huffman.decode_one(reader)?;
-        return if data < 0x100 {
+        if data < 0x100 {
             self.prev_data += data as u8;
             Ok(self.prev_data as u32)
         } else {
             self.rle_count = code_to_rle_count(data);
             self.rle_count -= 1;
             Ok(self.prev_data as u32)
-        };
+        }
     }
 }
 
