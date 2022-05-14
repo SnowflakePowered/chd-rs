@@ -5,6 +5,7 @@ use chd::{ChdError, ChdFile};
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
+use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 use std::slice;
@@ -161,15 +162,19 @@ pub extern "C" fn chd_codec_config(
 }
 
 #[no_mangle]
-pub extern "C" fn chd_read_header(filename: *const c_char, header: *mut chd_header) -> chd_error {
+/// Read CHD header data from the file into the pointed struct.
+pub extern "C" fn chd_read_header(filename: *const c_char, header: *mut MaybeUninit<chd_header>) -> chd_error {
     let chd = ffi_open_chd(filename, None);
     match chd {
         Ok(chd) => {
             let chd_header = ffi_chd_get_header(&chd);
-            unsafe {
-                *header = chd_header;
+            match unsafe { header.as_mut() } {
+                None => ChdError::InvalidParameter,
+                Some(header) => {
+                    header.write(chd_header);
+                    ChdError::None
+                }
             }
-            ChdError::None
         }
         Err(e) => e
     }
