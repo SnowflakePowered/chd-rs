@@ -1,5 +1,5 @@
 [package]
-name = "chd-rs-capi"
+name = "chd-capi"
 version = "0.1.0"
 edition = "2021"
 

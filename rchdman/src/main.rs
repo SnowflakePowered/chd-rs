@@ -171,12 +171,12 @@ fn benchmark(p: impl AsRef<Path>) {
     // for hunk_num in 13478..hunk_count {
     let mut cmp_buf = Vec::new();
     let mut bytes = 0;
-    for hunk_num in 0..hunk_count {
-        let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+    for (hunk_num, mut hunk) in chd.hunks().enumerate() {
         bytes += hunk
             .read_hunk_in(&mut cmp_buf, &mut hunk_buf)
-            .expect(format!("could not read_hunk {}", hunk_num).as_str());
+            .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
     }
+
     let time = Instant::now().saturating_duration_since(start);
     println!("Read {} bytes in {} seconds", bytes, time.as_secs_f64());
     println!(

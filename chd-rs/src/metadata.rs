@@ -11,10 +11,10 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 /// A list of well-known metadata tags.
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive, Copy, Clone)]
 #[repr(u32)]
 pub enum KnownMetadata {
-    None = 0,
+    Wildcard = 0,
     HardDisk = make_tag(b"GDDD"),
     HardDiskIdent = make_tag(b"IDNT"),
     HardDiskKey = make_tag(b"KEY "),
@@ -45,6 +45,17 @@ impl KnownMetadata {
     }
 }
 
+/// Trait for structs that contain or represent tagged metadata.
+pub trait ChdMetadataTag {
+    fn metatag(&self) -> u32;
+}
+
+impl ChdMetadataTag for KnownMetadata {
+    fn metatag(&self) -> u32 {
+        *self as u32
+    }
+}
+
 /// A complete CHD metadata entry with contents read into memory.
 #[derive(Debug)]
 pub struct ChdMetadata {
@@ -57,7 +68,13 @@ pub struct ChdMetadata {
     /// The index of this metadata entry relative to the beginning of the metadata section.
     pub index: u32,
     /// The length of this metadata entry.
-    pub length: u64,
+    pub length: u32,
+}
+
+impl ChdMetadataTag for ChdMetadata {
+    fn metatag(&self) -> u32 {
+        self.metatag
+    }
 }
 
 /// A reference to a metadata entry within the CHD file.
@@ -67,7 +84,7 @@ pub struct ChdMetadataRef {
     offset: u64,
     next: u64,
     prev: u64,
-    pub(crate) length: u64,
+    pub(crate) length: u32,
     pub(crate) metatag: u32,
     pub(crate) flags: u8,
     pub(crate) index: u32,
@@ -92,6 +109,12 @@ impl ChdMetadataRef {
             index: self.index,
             length: self.length,
         })
+    }
+}
+
+impl ChdMetadataTag for ChdMetadataRef {
+    fn metatag(&self) -> u32 {
+        self.metatag
     }
 }
 
@@ -180,7 +203,7 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
                 offset: s.curr_offset,
                 next,
                 prev: 0,
-                length: length as u64,
+                length,
                 metatag,
                 flags: flags as u8,
                 index,
@@ -219,6 +242,13 @@ impl <'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
 pub struct ChdMetadataEntry<'a, F: Read + Seek + 'a> {
     meta_ref: ChdMetadataRef,
     file: &'a mut F
+}
+
+#[cfg(feature = "owning_iterators")]
+impl <'a, F: Read + Seek + 'a>ChdMetadataTag for ChdMetadataEntry<'a, F> {
+    fn metatag(&self) -> u32 {
+        self.meta_ref.metatag
+    }
 }
 
 #[cfg(feature = "owning_iterators")]

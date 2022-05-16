@@ -13,6 +13,7 @@ use crate::header::chd_header;
 
 pub const CHD_OPEN_READ: i32 = 1;
 pub const CHD_OPEN_READWRITE: i32 = 2;
+
 pub trait SeekRead: Read + Seek {}
 impl<R: Read + Seek> SeekRead for BufReader<R> {}
 
@@ -20,6 +21,7 @@ impl<R: Read + Seek> SeekRead for BufReader<R> {}
 pub type chd_file = ChdFile<Box<dyn SeekRead>>;
 
 pub use chd::ChdError as chd_error;
+use chd::metadata::{ChdMetadata, ChdMetadataTag, KnownMetadata};
 
 fn ffi_takeown_chd(chd: *mut chd_file) -> Box<ChdFile<Box<dyn SeekRead>>> {
     unsafe {
@@ -72,11 +74,13 @@ pub extern "C" fn chd_open_file(
 }
 
 #[no_mangle]
+/// Close a CHD file.
 pub extern "C" fn chd_close(chd: *mut chd_file) {
     unsafe { drop(Box::from_raw(chd)) }
 }
 
 #[no_mangle]
+/// Returns an error string for the corresponding CHD error.
 pub extern "C" fn chd_error_string(err: chd_error) -> *const c_char {
     // SAFETY: This will leak, but this is much safer than
     // potentially allowing the C caller to corrupt internal state
@@ -98,6 +102,7 @@ fn ffi_chd_get_header(chd: &chd_file) -> chd_header {
     }
 }
 #[no_mangle]
+/// Returns a pointer to the extracted CHD header data.
 pub extern "C" fn chd_get_header(chd: *const chd_file) -> *const chd_header {
     match unsafe { chd.as_ref() } {
         Some(chd) => {
@@ -138,9 +143,22 @@ pub extern "C" fn chd_read(chd: *mut chd_file, hunknum: u32, buffer: *mut c_void
     }
 }
 
+fn find_metadata(chd: &mut chd_file, search_tag: u32, mut search_index: u32) -> Result<ChdMetadata, ChdError>{
+    for mut entry
+        in chd.metadata().ok_or(ChdError::MetadataNotFound)? {
+        if entry.metatag() == search_tag || entry.metatag() == KnownMetadata::Wildcard.metatag() {
+            if search_index == 0 {
+                return Ok(entry.read()?)
+            }
+            search_index -= 1;
+        }
+    }
+    Err(ChdError::MetadataNotFound)
+}
 #[no_mangle]
+/// Get indexed metadata of the given search tag and index.
 pub extern "C" fn chd_get_metadata(
-    chd: *const chd_file,
+    chd: *mut chd_file,
     searchtag: u32,
     searchindex: u32,
     output: *mut c_void,
@@ -149,10 +167,67 @@ pub extern "C" fn chd_get_metadata(
     result_tag: *mut u32,
     result_flags: *mut u8,
 ) -> chd_error {
-    todo!()
+    match unsafe { chd.as_mut() } {
+        Some(chd) => {
+            let entry = find_metadata(chd, searchtag, searchindex);
+            match (entry, searchtag) {
+                (Ok(meta), _) => {
+                    unsafe {
+                        let output_len = std::cmp::min(output_len, meta.value.len() as u32);
+                        std::ptr::copy_nonoverlapping(meta.value.as_ptr() as *const c_void,
+                        output, output_len as usize);
+
+                        if !result_tag.is_null() {
+                            result_tag.write(meta.metatag)
+                        }
+                        if !result_len.is_null() {
+                            result_len.write(meta.length)
+                        }
+                        if !result_flags.is_null() {
+                            result_flags.write(meta.flags)
+                        }
+                    }
+                    chd_error::None
+                }
+                (Err(_), tag) => unsafe {
+                    if (tag == KnownMetadata::HardDisk.metatag() || tag == KnownMetadata::Wildcard.metatag())
+                        && searchindex == 0 {
+                        let header = chd.header();
+                        if let ChdHeader::V1Header(header) = header {
+                            let fake_meta = format!("CYLS:{},HEADS:{},SECS:{},BPS:{}",
+                                header.cylinders,
+                                header.heads,
+                                header.sectors,
+                                header.hunk_bytes / header.hunk_size
+                            );
+                            let cstring = CString::from_vec_unchecked(fake_meta.into_bytes());
+                            let bytes = cstring.into_bytes_with_nul();
+                            let len = bytes.len();
+                            let output_len = std::cmp::min(output_len, len as u32);
+
+                            std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_void,
+                                                          output, output_len as usize);
+                            if !result_tag.is_null() {
+                                result_tag.write(KnownMetadata::HardDisk.metatag())
+                            }
+                            if !result_len.is_null() {
+                                result_len.write(len as u32)
+                            }
+                            return chd_error::None
+                        }
+                    }
+                    chd_error::MetadataNotFound
+                }
+            }
+        }
+        None => chd_error::InvalidParameter
+    }
 }
 
 #[no_mangle]
+/// Set codec internal parameters.
+///
+/// This function is not supported and always returns CHDERR_INVALID_PARAMETER.
 pub extern "C" fn chd_codec_config(
     _chd: *const chd_file,
     _param: i32,

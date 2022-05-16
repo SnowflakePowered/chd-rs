@@ -192,10 +192,19 @@ chd_error chd_open_file(const char *filename,
                         struct chd_file *parent,
                         struct chd_file **out);
 
+/**
+ * Close a CHD file.
+ */
 void chd_close(struct chd_file *chd);
 
+/**
+ * Returns an error string for the corresponding CHD error.
+ */
 const char *chd_error_string(chd_error err);
 
+/**
+ * Returns a pointer to the extracted CHD header data.
+ */
 const struct chd_header *chd_get_header(const struct chd_file *chd);
 
 /**
@@ -205,7 +214,10 @@ const struct chd_header *chd_get_header(const struct chd_file *chd);
  */
 chd_error chd_read(struct chd_file *chd, uint32_t hunknum, void *buffer);
 
-chd_error chd_get_metadata(const struct chd_file *chd,
+/**
+ * Get indexed metadata of the given search tag and index.
+ */
+chd_error chd_get_metadata(struct chd_file *chd,
                            uint32_t searchtag,
                            uint32_t searchindex,
                            void *output,
@@ -214,6 +226,11 @@ chd_error chd_get_metadata(const struct chd_file *chd,
                            uint32_t *result_tag,
                            uint8_t *result_flags);
 
+/**
+ * Set codec internal parameters.
+ *
+ * This function is not supported and always returns CHDERR_INVALID_PARAMETER.
+ */
 chd_error chd_codec_config(const struct chd_file *_chd, int32_t _param, void *_config);
 
 /**
