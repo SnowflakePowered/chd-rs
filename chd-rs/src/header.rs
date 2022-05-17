@@ -15,7 +15,7 @@ use crate::compression::codecs::{
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
 use crate::{make_tag, map};
-use crate::metadata::{ChdMetadataRefIter, KnownMetadata};
+use crate::metadata::{MetadataRefIter, KnownMetadata};
 use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -747,7 +747,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     static RE_BPS: OnceCell<Regex> = OnceCell::new();
     let bps_regex: &'static Regex = RE_BPS.get_or_init(|| Regex::new(r"(?-u)(BPS:)(\d+)").unwrap());
 
-    let metas: Vec<_> = ChdMetadataRefIter::from_stream(chd, off).collect();
+    let metas: Vec<_> = MetadataRefIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
         .iter()
         .find(|&e| e.metatag == KnownMetadata::HardDisk as u32)

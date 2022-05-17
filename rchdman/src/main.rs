@@ -10,6 +10,8 @@ use std::io::{BufReader, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thousands::Separable;
+use chd::iter::LendingIterator;
+
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
     if path.exists() && path.is_file() {
@@ -171,10 +173,13 @@ fn benchmark(p: impl AsRef<Path>) {
     // for hunk_num in 13478..hunk_count {
     let mut cmp_buf = Vec::new();
     let mut bytes = 0;
-    for (hunk_num, mut hunk) in chd.hunks().enumerate() {
+    let mut hunk_iter = chd.hunks();
+    let mut hunk_num = 0;
+    while let Some(mut hunk) = hunk_iter.next() {
         bytes += hunk
             .read_hunk_in(&mut cmp_buf, &mut hunk_buf)
             .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
+        hunk_num += 1;
     }
 
     let time = Instant::now().saturating_duration_since(start);
@@ -227,7 +232,7 @@ fn main() -> anyhow::Result<()> {
             // hash
             print_hash(chd.header());
 
-            if let Some(Ok(metadata)) = chd.metadata_refs().map(|f| f.try_into_vec()) {
+            if let Ok(metadata) = chd.metadata_refs().try_into_vec() {
                 for meta in metadata {
                     let tag = to_fourcc(meta.metatag);
                     if let Ok(tag) = tag {

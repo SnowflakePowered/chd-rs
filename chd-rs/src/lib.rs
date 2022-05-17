@@ -132,6 +132,10 @@ pub mod map;
 pub mod metadata;
 pub mod read;
 
+#[cfg(feature = "unstable_lending_iterators")]
+#[cfg_attr(feature = "docsrs", doc(cfg(unstable_lending_iterators)))]
+pub mod iter;
+
 #[cfg(test)]
 mod tests {
     use crate::metadata::ChdMetadata;
@@ -140,13 +144,14 @@ mod tests {
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::{BufReader, Cursor, Read, Write};
+    use crate::iter::LendingIterator;
 
     #[test]
     fn read_metas_test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
         let mut chd = ChdFile::open(&mut f, None).expect("file");
 
-        let metadatas: Vec<ChdMetadata> = chd.metadata_refs().unwrap().try_into().expect("");
+        let metadatas: Vec<ChdMetadata> = chd.metadata_refs().try_into().expect("");
         let meta_datas: Vec<_> = metadatas
             .into_iter()
             .map(|s| String::from_utf8(s.value).unwrap())
@@ -197,6 +202,34 @@ mod tests {
         for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
             hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
                 .expect("hunk could not be read");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "unstable_lending_iterators")]
+    fn hunk_iter_lending_test() {
+        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
+        let mut f_cursor = Cursor::new(f_bytes);
+        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f_cursor, None).expect("file");
+        let mut hunk_buf = chd.get_hunksized_buffer();
+        let mut comp_buf = Vec::new();
+        let mut hunks = chd.hunks();
+        while let Some(mut hunk) = hunks.next() {
+            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+                .expect("hunk could not be read");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "unstable_lending_iterators")]
+    fn metadata_iter_lending_test() {
+        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut metas = chd.metadata();
+        while let Some(mut meta) = metas.next() {
+            let contents = meta.read().expect("metadata entry could not be read");
+            println!("{:?}", String::from_utf8(contents.value));
         }
     }
 

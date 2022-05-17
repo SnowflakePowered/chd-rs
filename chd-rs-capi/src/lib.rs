@@ -142,7 +142,7 @@ fn find_metadata(
     search_tag: u32,
     mut search_index: u32,
 ) -> Result<ChdMetadata, ChdError> {
-    for mut entry in chd.metadata_refs().ok_or(ChdError::MetadataNotFound)? {
+    for entry in chd.metadata_refs() {
         if entry.metatag() == search_tag || entry.metatag() == KnownMetadata::Wildcard.metatag() {
             if search_index == 0 {
                 return entry.read(chd.inner());

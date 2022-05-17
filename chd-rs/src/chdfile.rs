@@ -7,9 +7,10 @@ use crate::map::{
     V5CompressionType,
 };
 
-#[cfg(feature = "owning_iterators")]
-use crate::metadata::ChdMetadataIter;
-use crate::metadata::ChdMetadataRefIter;
+#[cfg(any(feature = "owning_iterators", feature = "unstable_lending_iterators"))]
+use crate::iter::{HunkIter, MetadataIter};
+
+use crate::metadata::MetadataRefIter;
 use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
@@ -63,22 +64,22 @@ impl<F: Read + Seek> ChdFile<F> {
     /// Returns an iterator over references to metadata entries for this CHD file.
     ///
     /// The contents of each metadata entry are lazily read.
-    pub fn metadata_refs(&mut self) -> Option<ChdMetadataRefIter<F>> {
+    pub fn metadata_refs(&mut self) -> MetadataRefIter<F> {
         let offset = self.header().meta_offset();
         if let Some(offset) = offset {
-            Some(ChdMetadataRefIter::from_stream(&mut self.file, offset))
+            MetadataRefIter::from_stream(&mut self.file, offset)
         } else {
-            None
+            MetadataRefIter::dead(&mut self.file)
         }
     }
 
-    #[cfg(feature = "owning_iterators")]
-    #[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
+    #[cfg(any(feature = "owning_iterators", feature = "unstable_lending_iterators"))]
+    #[cfg_attr(feature = "docsrs", doc(cfg(any(owning_iterators,unstable_lending_iterators))))]
     /// Returns an iterator over metadata entries for this CHD file.
     ///
     /// The contents of each metadata entry are lazily read.
-    pub fn metadata(&mut self) -> Option<ChdMetadataIter<F>> {
-        self.metadata_refs().map(ChdMetadataIter::new)
+    pub fn metadata(&mut self) -> MetadataIter<F> {
+        MetadataIter::new(self.metadata_refs())
     }
 
     /// Returns the hunk map of this CHD File.
@@ -106,16 +107,11 @@ impl<F: Read + Seek> ChdFile<F> {
         vec![0u8; hunk_size]
     }
 
-    #[cfg(feature = "owning_iterators")]
-    #[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
+    #[cfg_attr(feature = "docsrs", doc(cfg(any(owning_iterators, unstable_lending_iterators))))]
+    #[cfg(any(feature = "owning_iterators", feature = "unstable_lending_iterators"))]
     /// Returns an iterator over the hunks of this CHD file.
     pub fn hunks(&mut self) -> HunkIter<F> {
-        let last_hunk = self.header.hunk_count();
-        HunkIter {
-            inner: self,
-            last_hunk,
-            current_hunk: 0,
-        }
+        HunkIter::new(self)
     }
 
     /// Consumes the `ChdFile` and returns the underlying reader.
@@ -373,33 +369,5 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     /// Returns the length of this hunk in bytes.
     pub fn len(&self) -> usize {
         self.inner.header.hunk_size() as usize
-    }
-}
-
-#[cfg(feature = "owning_iterators")]
-#[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
-/// Iterator for hunks
-pub struct HunkIter<'a, F: Read + Seek> {
-    inner: &'a mut ChdFile<F>,
-    last_hunk: u32,
-    current_hunk: u32,
-}
-
-#[cfg(feature = "owning_iterators")]
-impl<'a, F: Read + Seek> Iterator for HunkIter<'a, F> {
-    type Item = ChdHunk<'a, F>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_hunk == self.last_hunk {
-            return None;
-        }
-        let curr = self.current_hunk;
-        self.current_hunk += 1;
-        // SAFETY: need an unbound lifetime to get 'a.
-        // todo: test under miri to confirm soundness
-        // todo: need GATs to do this safely.
-        unsafe { (self.inner as *mut ChdFile<F>).as_mut().unwrap_unchecked() }
-            .hunk(curr)
-            .ok()
     }
 }

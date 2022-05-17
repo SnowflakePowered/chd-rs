@@ -32,14 +32,11 @@ impl KnownMetadata {
     /// Returns whether a given tag indicates that the CHD contains CDROM data.
     pub fn is_cdrom(tag: u32) -> bool {
         if let Some(tag) = FromPrimitive::from_u32(tag) {
-            return match tag {
-                KnownMetadata::CdRomOld
+            return matches!(tag, KnownMetadata::CdRomOld
                 | KnownMetadata::CdRomTrack
                 | KnownMetadata::CdRomTrack2
                 | KnownMetadata::GdRomOld
-                | KnownMetadata::GdRomTrack => true,
-                _ => false,
-            };
+                | KnownMetadata::GdRomTrack);
         }
         false
     }
@@ -80,7 +77,7 @@ impl ChdMetadataTag for ChdMetadata {
 /// A reference to a metadata entry within the CHD file.
 #[repr(C)]
 #[derive(Clone)]
-pub struct ChdMetadataRef {
+pub struct MetadataRef {
     offset: u64,
     next: u64,
     prev: u64,
@@ -90,7 +87,7 @@ pub struct ChdMetadataRef {
     pub(crate) index: u32,
 }
 
-impl ChdMetadataRef {
+impl MetadataRef {
     fn read_into<F: Read + Seek>(&self, file: &mut F, buf: &mut [u8]) -> Result<()> {
         file.seek(SeekFrom::Start(self.offset + METADATA_HEADER_SIZE as u64))?;
         file.read_exact(buf)?;
@@ -112,28 +109,39 @@ impl ChdMetadataRef {
     }
 }
 
-impl ChdMetadataTag for ChdMetadataRef {
+impl ChdMetadataTag for MetadataRef {
     fn metatag(&self) -> u32 {
         self.metatag
     }
 }
 
-/// An iterator over the metadata entries of a stream that contains a CHD file.
-pub struct ChdMetadataRefIter<'a, F: Read + Seek + 'a> {
-    file: &'a mut F,
+/// An iterator over references to the metadata entries of a CHD file.
+/// If `unstable_lending_iterators` is enabled, metadata can be
+/// more ergonomically iterated over with [`MetadataIter`](crate::iter::MetadataIter).
+pub struct MetadataRefIter<'a, F: Read + Seek + 'a> {
+    pub(crate) file: &'a mut F,
     curr_offset: u64,
-    curr: Option<ChdMetadataRef>,
+    curr: Option<MetadataRef>,
     // Just use a tuple because we rarely have more than 2 or 3 types of tag.
     indices: Vec<(u32, u32)>,
 }
 
-impl<'a, F: Read + Seek + 'a> ChdMetadataRefIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> MetadataRefIter<'a, F> {
     pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
-        ChdMetadataRefIter {
+        MetadataRefIter {
             file,
             curr_offset: initial_offset,
             curr: None,
             indices: Vec::new(),
+        }
+    }
+
+    pub(crate) fn dead(file: &'a mut F,) -> Self {
+        MetadataRefIter {
+            file,
+            curr_offset: 0,
+            curr: None,
+            indices: Vec::new()
         }
     }
 
@@ -144,7 +152,7 @@ impl<'a, F: Read + Seek + 'a> ChdMetadataRefIter<'a, F> {
     }
 }
 
-impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for ChdMetadataRefIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for MetadataRefIter<'a, F> {
     type Error = ChdError;
 
     fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
@@ -154,9 +162,9 @@ impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for ChdMetadataRefIter<'
     }
 }
 
-impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefIter<'a, F> {
     // really need GATs to do this properly...
-    type Item = ChdMetadataRef;
+    type Item = MetadataRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.curr_offset == 0 {
@@ -164,8 +172,8 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
         }
 
         fn next_inner<'a, F: Read + Seek + 'a>(
-            s: &mut ChdMetadataRefIter<'a, F>,
-        ) -> Result<ChdMetadataRef> {
+            s: &mut MetadataRefIter<'a, F>,
+        ) -> Result<MetadataRef> {
             let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
             let count = s.file.read(&mut raw_header)?;
@@ -199,7 +207,7 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
                 s.indices.push((metatag, 1))
             }
 
-            let mut new = ChdMetadataRef {
+            let mut new = MetadataRef {
                 offset: s.curr_offset,
                 next,
                 prev: 0,
@@ -220,58 +228,3 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
     }
 }
 
-#[cfg(feature = "owning_iterators")]
-#[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
-/// An iterator over the metadata entries of a file.
-pub struct ChdMetadataIter<'a, F: Read + Seek + 'a> {
-    inner: ChdMetadataRefIter<'a, F>,
-}
-
-#[cfg(feature = "owning_iterators")]
-impl<'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
-    pub(crate) fn new(inner: ChdMetadataRefIter<'a, F>) -> Self {
-        ChdMetadataIter { inner }
-    }
-}
-
-#[cfg(feature = "owning_iterators")]
-#[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
-/// A metadata entry for a CHD file containing a reference
-/// to the source file.
-pub struct ChdMetadataEntry<'a, F: Read + Seek + 'a> {
-    meta_ref: ChdMetadataRef,
-    file: &'a mut F,
-}
-
-#[cfg(feature = "owning_iterators")]
-impl<'a, F: Read + Seek + 'a> ChdMetadataTag for ChdMetadataEntry<'a, F> {
-    fn metatag(&self) -> u32 {
-        self.meta_ref.metatag
-    }
-}
-
-#[cfg(feature = "owning_iterators")]
-impl<'a, F: Read + Seek + 'a> ChdMetadataEntry<'a, F> {
-    /// Read the contents of the metadata from the input stream.
-    pub fn read(&mut self) -> Result<ChdMetadata> {
-        self.meta_ref.read(self.file)
-    }
-}
-
-#[cfg(feature = "owning_iterators")]
-impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataIter<'a, F> {
-    type Item = ChdMetadataEntry<'a, F>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|meta_ref| {
-            let file = self.inner.file as *mut F;
-            ChdMetadataEntry {
-                meta_ref,
-                // SAFETY: need an unbound lifetime to get 'a.
-                // todo: test under miri to confirm soundness
-                // todo: need GATs to do this safely.
-                file: unsafe { file.as_mut().unwrap_unchecked() },
-            }
-        })
-    }
-}

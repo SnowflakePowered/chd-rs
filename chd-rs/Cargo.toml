@@ -13,7 +13,7 @@ keywords = ["mame", "chd", "decompression"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["want_subcode", "want_raw_data_sector"]
+default = ["want_subcode", "want_raw_data_sector", "unstable_lending_iterators"]
 verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 want_subcode = []
 want_raw_data_sector = []
@@ -22,6 +22,7 @@ huffman_api = []
 codec_api = []
 docsrs = []
 owning_iterators = []
+unstable_lending_iterators = []
 
 [dependencies]
 byteorder = "1"
