@@ -1,5 +1,7 @@
 // None (copy) codec
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::error::Result;
 use crate::header::CodecType;
 use std::io::Write;

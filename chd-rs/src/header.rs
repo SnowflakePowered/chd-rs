@@ -13,14 +13,14 @@ use crate::compression::codecs::AVHuffCodec;
 use crate::compression::codecs::{
     CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, RawFlacCodec, ZlibCodec,
 };
-use crate::compression::{CompressionCodec, CodecImplementation};
+use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
 use crate::make_tag;
 use crate::metadata::{ChdMetadataRefIter, KnownMetadata};
 use byteorder::{BigEndian, ReadBytesExt};
-use lazy_static::lazy_static;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+use once_cell::sync::OnceCell;
 use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
@@ -737,9 +737,8 @@ fn read_v4_header<T: Read + Seek, F: Read + Seek>(
 }
 
 fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
-    lazy_static! {
-        static ref RE_BPS: Regex = Regex::new(r"(?-u)(BPS:)(\d+)").unwrap();
-    }
+    static RE_BPS: OnceCell<Regex> = OnceCell::new();
+    let bps_regex: &'static Regex = RE_BPS.get_or_init(|| Regex::new(r"(?-u)(BPS:)(\d+)").unwrap());
 
     let metas: Vec<_> = ChdMetadataRefIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
@@ -747,10 +746,10 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         .find(|&e| e.metatag == KnownMetadata::HardDisk as u32)
     {
         if let Ok(text) = hard_disk.read(chd) {
-            let caps = RE_BPS
+            let caps = bps_regex
                 .captures(&text.value)
                 .and_then(|c| c.get(1))
-                .and_then(|c| Some(c.as_bytes()))
+                .map(|c| c.as_bytes())
                 .and_then(|c| std::str::from_utf8(c).ok())
                 .and_then(|c| c.parse::<u32>().ok());
             // Only return this if we can parse it properly. Fallback to cdrom otherwise.

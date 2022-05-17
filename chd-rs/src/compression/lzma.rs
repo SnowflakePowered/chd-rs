@@ -1,4 +1,6 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use lzma_rs_headerless::decode::lzma::LzmaParams;
@@ -105,8 +107,7 @@ impl CodecImplementation for LzmaCodec {
         // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
         // is that the chunks are encoded with the defaults used in LZMA 19.0.
         // These defaults are lc = 3, lp = 0, pb = 2.
-        let params = LzmaParams::new(3, 0, 2,
-                                     get_lzma_dict_size(9, hunk_size), None);
+        let params = LzmaParams::new(3, 0, 2, get_lzma_dict_size(9, hunk_size), None);
 
         Ok(LzmaCodec { params })
     }

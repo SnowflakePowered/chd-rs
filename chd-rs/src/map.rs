@@ -474,8 +474,7 @@ fn read_map_v5<F: Read + Seek>(
     file.read_exact(&mut compressed[..])?;
 
     let mut bitstream = BitReader::new(&compressed[..]);
-    let decoder = HuffmanDecoder::<16, 8, { lookup_len::<8>() }>
-        ::from_tree_rle(&mut bitstream)?;
+    let decoder = HuffmanDecoder::<16, 8, { lookup_len::<8>() }>::from_tree_rle(&mut bitstream)?;
 
     let mut rep_count = 0;
     let mut last_cmp = 0;

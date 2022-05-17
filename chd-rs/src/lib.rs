@@ -140,10 +140,9 @@ mod huffman;
 #[cfg_attr(feature = "docsrs", doc(cfg(codec_api)))]
 pub mod codecs {
     pub use crate::compression::codecs::*;
-    pub use crate::compression::{CompressionCodec,
-                                 CompressionCodecType,
-                                 CodecImplementation,
-                                 DecompressResult};
+    pub use crate::compression::{
+        CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+    };
 }
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
@@ -227,11 +226,11 @@ mod tests {
 
     #[test]
     fn hunk_iter_test() {
-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+        let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
-        for mut hunk in chd.hunks() {
+        for mut hunk in chd.hunks().skip(7000) {
             hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
                 .expect("hunk could not be read");
         }
@@ -241,10 +240,8 @@ mod tests {
     fn metadata_iter_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");
-        for mut meta in chd.metadata()
-            .expect("metadata could not be read") {
-            let contents = meta.read()
-                .expect("metadata entry could not be read");
+        for mut meta in chd.metadata().expect("metadata could not be read") {
+            let contents = meta.read().expect("metadata entry could not be read");
             println!("{:?}", String::from_utf8(contents.value));
         }
     }

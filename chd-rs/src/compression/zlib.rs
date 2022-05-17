@@ -1,4 +1,6 @@
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};

@@ -7,7 +7,9 @@ use claxon::frame::FrameReader;
 
 use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
 use crate::compression::zlib::ZlibCodec;
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 

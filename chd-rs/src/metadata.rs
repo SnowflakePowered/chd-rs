@@ -224,14 +224,12 @@ impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataRefIter<'a, F> {
 #[cfg_attr(feature = "docsrs", doc(cfg(owning_iterators)))]
 /// An iterator over the metadata entries of a file.
 pub struct ChdMetadataIter<'a, F: Read + Seek + 'a> {
-    inner: ChdMetadataRefIter<'a, F>
+    inner: ChdMetadataRefIter<'a, F>,
 }
 
-impl <'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
     pub(crate) fn new(inner: ChdMetadataRefIter<'a, F>) -> Self {
-        ChdMetadataIter {
-            inner
-        }
+        ChdMetadataIter { inner }
     }
 }
 
@@ -241,18 +239,18 @@ impl <'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
 /// to the source file.
 pub struct ChdMetadataEntry<'a, F: Read + Seek + 'a> {
     meta_ref: ChdMetadataRef,
-    file: &'a mut F
+    file: &'a mut F,
 }
 
 #[cfg(feature = "owning_iterators")]
-impl <'a, F: Read + Seek + 'a>ChdMetadataTag for ChdMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> ChdMetadataTag for ChdMetadataEntry<'a, F> {
     fn metatag(&self) -> u32 {
         self.meta_ref.metatag
     }
 }
 
 #[cfg(feature = "owning_iterators")]
-impl <'a, F: Read + Seek + 'a> ChdMetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> ChdMetadataEntry<'a, F> {
     /// Read the contents of the metadata from the input stream.
     pub fn read(&mut self) -> Result<ChdMetadata> {
         self.meta_ref.read(self.file)
@@ -260,20 +258,19 @@ impl <'a, F: Read + Seek + 'a> ChdMetadataEntry<'a, F> {
 }
 
 #[cfg(feature = "owning_iterators")]
-impl <'a, F: Read + Seek + 'a> Iterator for ChdMetadataIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> Iterator for ChdMetadataIter<'a, F> {
     type Item = ChdMetadataEntry<'a, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-            .map(|meta_ref| {
-                let file = self.inner.file as *mut F;
-                ChdMetadataEntry {
-                    meta_ref,
-                    // SAFETY: need an unbound lifetime to get 'a.
-                    // todo: test under miri to confirm soundness
-                    // todo: need GATs to do this safely.
-                    file: unsafe { file.as_mut().unwrap_unchecked() },
-                }
-            })
+        self.inner.next().map(|meta_ref| {
+            let file = self.inner.file as *mut F;
+            ChdMetadataEntry {
+                meta_ref,
+                // SAFETY: need an unbound lifetime to get 'a.
+                // todo: test under miri to confirm soundness
+                // todo: need GATs to do this safely.
+                file: unsafe { file.as_mut().unwrap_unchecked() },
+            }
+        })
     }
 }

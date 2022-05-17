@@ -1,7 +1,7 @@
-use std::mem;
+use crate::chd_file;
 use chd::header::{ChdHeader, HeaderV1, HeaderV3, HeaderV4, HeaderV5};
 use chd::map::ChdMap;
-use crate::chd_file;
+use std::mem;
 
 const CHD_MD5_BYTES: usize = 16;
 const CHD_SHA1_BYTES: usize = 20;
@@ -33,7 +33,7 @@ pub struct chd_header {
     obsolete_cylinders: u32,
     obsolete_sectors: u32,
     obsolete_heads: u32,
-    obsolete_hunksize: u32
+    obsolete_hunksize: u32,
 }
 
 impl From<&HeaderV1> for chd_header {
@@ -61,7 +61,7 @@ impl From<&HeaderV1> for chd_header {
             obsolete_cylinders: header.cylinders,
             obsolete_sectors: header.sectors,
             obsolete_heads: header.heads,
-            obsolete_hunksize: header.hunk_size
+            obsolete_hunksize: header.hunk_size,
         }
     }
 }
@@ -91,7 +91,7 @@ impl From<&HeaderV3> for chd_header {
             obsolete_cylinders: 0,
             obsolete_sectors: 0,
             obsolete_heads: 0,
-            obsolete_hunksize: 0
+            obsolete_hunksize: 0,
         }
     }
 }
@@ -121,7 +121,7 @@ impl From<&HeaderV4> for chd_header {
             obsolete_cylinders: 0,
             obsolete_sectors: 0,
             obsolete_heads: 0,
-            obsolete_hunksize: 0
+            obsolete_hunksize: 0,
         }
     }
 }
@@ -129,13 +129,11 @@ impl From<&HeaderV4> for chd_header {
 pub(crate) fn get_v5_header(chd: &chd_file) -> chd_header {
     let header: HeaderV5 = match chd.header() {
         ChdHeader::V5Header(h) => h.clone(),
-        _ => unreachable!()
+        _ => unreachable!(),
     };
     let mut map_data: Vec<u8> = match chd.map() {
-        ChdMap::V5(map) => {
-            map.into()
-        }
-        _ => unreachable!()
+        ChdMap::V5(map) => map.into(),
+        _ => unreachable!(),
     };
     let version = header.version;
     let map_ptr = map_data.as_mut_ptr();
@@ -165,6 +163,6 @@ pub(crate) fn get_v5_header(chd: &chd_file) -> chd_header {
         obsolete_cylinders: 0,
         obsolete_sectors: 0,
         obsolete_heads: 0,
-        obsolete_hunksize: 0
+        obsolete_hunksize: 0,
     }
 }

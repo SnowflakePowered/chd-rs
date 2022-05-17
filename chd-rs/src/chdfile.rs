@@ -7,11 +7,11 @@ use crate::map::{
     V5CompressionType,
 };
 
+use crate::metadata::{ChdMetadataIter, ChdMetadataRefIter};
 use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use crate::metadata::{ChdMetadataIter, ChdMetadataRefIter};
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct ChdFile<F: Read + Seek> {
@@ -112,7 +112,7 @@ impl<F: Read + Seek> ChdFile<F> {
         HunkIter {
             inner: self,
             last_hunk,
-            current_hunk: 0
+            current_hunk: 0,
         }
     }
 
@@ -375,24 +375,24 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
 pub struct HunkIter<'a, F: Read + Seek> {
     inner: &'a mut ChdFile<F>,
     last_hunk: u32,
-    current_hunk: u32
+    current_hunk: u32,
 }
 
 #[cfg(feature = "owning_iterators")]
-impl <'a, F: Read + Seek> Iterator for HunkIter<'a, F> {
+impl<'a, F: Read + Seek> Iterator for HunkIter<'a, F> {
     type Item = ChdHunk<'a, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_hunk == self.last_hunk {
-            return None
+            return None;
         }
         let curr = self.current_hunk;
         self.current_hunk += 1;
         // SAFETY: need an unbound lifetime to get 'a.
         // todo: test under miri to confirm soundness
         // todo: need GATs to do this safely.
-        unsafe {
-            (self.inner as *mut ChdFile<F>).as_mut().unwrap_unchecked()
-        }.hunk(curr).ok()
+        unsafe { (self.inner as *mut ChdFile<F>).as_mut().unwrap_unchecked() }
+            .hunk(curr)
+            .ok()
     }
 }

@@ -6,7 +6,9 @@
 /// It is here as a WIP and is not up to the standards of the rest of chd-rs.
 /// Unlike the other codecs, it is completely untested, and the `avhuff` feature
 /// should be considered unstable.
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::header::CodecType;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder, HuffmanError};
 use crate::{huffman, ChdError};
@@ -73,9 +75,7 @@ struct DeltaRleDecoder<'a> {
 }
 
 impl<'a> DeltaRleDecoder<'a> {
-    pub fn new(
-        huff: DeltaRleHuffman<'a>,
-    ) -> Self {
+    pub fn new(huff: DeltaRleHuffman<'a>) -> Self {
         Self {
             huffman: huff,
             rle_count: 0,
@@ -331,11 +331,9 @@ impl AVHuffCodec {
                 let mut bytes_written = 0;
                 let mut bit_reader = BitReader::new(&source[..tree_size as usize]);
                 // todo: should be HuffmanCodec (huffman8bit)
-                let mut hi_decoder =
-                    Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
+                let mut hi_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
                 bit_reader.align(1)?;
-                let mut lo_decoder =
-                    Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
+                let mut lo_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {

@@ -3,7 +3,9 @@ use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SY
 use crate::compression::ecc::ErrorCorrectedSector;
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
-use crate::compression::{CompressionCodec, CompressionCodecType, DecompressResult, CodecImplementation};
+use crate::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use std::convert::TryFrom;
@@ -158,7 +160,8 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         #[cfg(feature = "want_subcode")]
         let sub_res = self.sub_engine.decompress(
             &input[header_bytes + sector_compressed_len as usize..],
-            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..][..frames * CD_MAX_SUBCODE_DATA as usize],
+            &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+                [..frames * CD_MAX_SUBCODE_DATA as usize],
         )?;
 
         #[cfg(not(feature = "want_subcode"))]
