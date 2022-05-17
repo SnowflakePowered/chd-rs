@@ -227,6 +227,7 @@ pub struct ChdMetadataIter<'a, F: Read + Seek + 'a> {
     inner: ChdMetadataRefIter<'a, F>,
 }
 
+#[cfg(feature = "owning_iterators")]
 impl<'a, F: Read + Seek + 'a> ChdMetadataIter<'a, F> {
     pub(crate) fn new(inner: ChdMetadataRefIter<'a, F>) -> Self {
         ChdMetadataIter { inner }

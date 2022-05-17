@@ -7,7 +7,9 @@ use crate::map::{
     V5CompressionType,
 };
 
-use crate::metadata::{ChdMetadataIter, ChdMetadataRefIter};
+#[cfg(feature = "owning_iterators")]
+use crate::metadata::ChdMetadataIter;
+use crate::metadata::ChdMetadataRefIter;
 use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
@@ -119,6 +121,11 @@ impl<F: Read + Seek> ChdFile<F> {
     /// Consumes the `ChdFile` and returns the underlying reader.
     pub fn into_inner(self) -> F {
         self.file
+    }
+
+    /// Returns a mutable reference to the inner stream.
+    pub fn inner(&mut self) -> &mut F {
+        &mut self.file
     }
 }
 

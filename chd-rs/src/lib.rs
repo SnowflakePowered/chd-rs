@@ -44,28 +44,6 @@
 //! }
 //! ```
 //!
-//! With the `owning_iterators` feature (enabled by default), hunks can be iterated over
-//! more easily, but owning iterators are implemented with `unsafe`.
-//! ```rust
-//! use std::fs::File;
-//! use std::io::BufReader;
-//! use chd::ChdFile;
-//!
-//! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = ChdFile::open(&mut f, None)?;
-//! let hunk_count = chd.header().hunk_count();
-//! let hunk_size = chd.header().hunk_size();
-//!
-//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
-//! let mut hunk_buf = vec![0u8; hunk_size as usize];
-//! // buffer to store compressed data.
-//! let mut cmp_buf = Vec::new();
-//!
-//! for mut hunk in chd.hunks() {
-//!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
-//! }
-//! ```
-//!
 //! ## Iterating over metadata
 //! Metadata in a CHD file consists of a list of entries that contain offsets to the
 //! byte data of the metadata contents in the CHD file. The individual metadata entries
@@ -95,23 +73,6 @@
 //! let entries = chd.metadata_refs()?;
 //! let metadatas: Vec<ChdMetadata> = entries.try_into()?;
 //!```
-//! With the `owning_iterators` feature (enabled by default), metadata can be iterated over
-//! more easily, but owning iterators are implemented with `unsafe`.
-//! ```rust
-//! use std::fs::File;
-//! use std::io::BufReader;
-//! use chd::ChdFile;
-//!
-//! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = ChdFile::open(&mut f, None)?;
-//!
-//! for mut meta in chd.metadata()? {
-//!     let contents = meta.read()?;
-//!
-//!     // Not all metadata contents may be valid UTF8
-//!     println!("{}", String::from_utf8(contents.value)?)
-//! }
-//! ```
 mod error;
 
 mod block_hash;
@@ -225,6 +186,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "owning_iterators")]
     fn hunk_iter_test() {
         let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
         let mut f_cursor = Cursor::new(f_bytes);
@@ -239,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "owning_iterators")]
     fn metadata_iter_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");
