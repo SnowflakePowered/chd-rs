@@ -108,7 +108,7 @@ dependencies = [
  "claxon",
  "crc 3.0.0",
  "flate2",
- "lzma-rs-headerless 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lzma-rs-headerless 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -316,19 +316,20 @@ dependencies = [
 
 [[package]]
 name = "lzma-rs-headerless"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
  "env_logger",
  "log",
+ "rust-lzma",
 ]
 
 [[package]]
 name = "lzma-rs-headerless"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ace830963c56ba4170d7ecc292f330220544dac3e6d741c7812bbb2595a72b09"
+checksum = "11aa5831db4a739ec9e7b206c8281653ae8ec5e84fc4b2882a5f65c4f7d0ec0d"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
@@ -381,6 +382,12 @@ name = "os_str_bytes"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e22443d1643a904602595ba1cd8f7d896afe56d26712531c5ff73a15b2fbf64"
+
+[[package]]
+name = "pkg-config"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 
 [[package]]
 name = "proc-macro-error"
@@ -469,6 +476,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "rust-lzma"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "895dc04daeaeee338bb96e229797902ed3f0675bfc59d5b42e0f0b0c13ac54da"
+dependencies = [
+ "pkg-config",
 ]
 
 [[package]]

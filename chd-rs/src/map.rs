@@ -13,8 +13,8 @@ use crate::error::{ChdError, Result};
 use crate::header::{ChdHeader, HeaderV5};
 use crate::huffman::{lookup_len, HuffmanDecoder};
 
-const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
-const V5_COMPRESSED_MAP_ENTRY_SIZE: usize = 12;
+pub(crate) const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
+pub(crate) const V5_COMPRESSED_MAP_ENTRY_SIZE: usize = 12;
 const V3_MAP_ENTRY_SIZE: usize = 16; // V3-V4
 const V1_MAP_ENTRY_SIZE: usize = 8; // V1-V2
 const MAP_ENTRY_FLAG_TYPE_MASK: u8 = 0x0f; // type of hunk

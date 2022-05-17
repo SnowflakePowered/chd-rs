@@ -7,7 +7,6 @@
 //!
 //! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
-
 #[cfg(feature = "avhuff")]
 use crate::compression::codecs::AVHuffCodec;
 use crate::compression::codecs::{
@@ -15,7 +14,7 @@ use crate::compression::codecs::{
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
-use crate::make_tag;
+use crate::{make_tag, map};
 use crate::metadata::{ChdMetadataRefIter, KnownMetadata};
 use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
@@ -624,9 +623,17 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
     let sectors = header.read_u32::<BigEndian>()?;
     header.read_exact(&mut md5)?;
     header.read_exact(&mut parent_md5)?;
+
     let logical_bytes =
         (cylinders as u64) * (heads as u64) * (sectors as u64) * (sector_length as u64);
-    let hunk_bytes = sector_length * hunk_size;
+
+    // verify assumptions about hunk sizes.
+    let hunk_bytes: u32 = u32::try_from(sector_length as u64 * hunk_size as u64)
+        .map_err(|_| ChdError::InvalidData)?;
+    if hunk_bytes == 0 || hunk_size == 0 {
+        return Err(ChdError::InvalidData);
+    }
+
     let unit_bytes = hunk_bytes / hunk_size;
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
     Ok(HeaderV1 {
@@ -776,18 +783,27 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
     let map_offset = header.read_u64::<BigEndian>()?;
     let meta_offset = header.read_u64::<BigEndian>()?;
     let hunk_bytes = header.read_u32::<BigEndian>()?;
-    let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
     let unit_bytes = header.read_u32::<BigEndian>()?;
+
+    // guard divide by zero
+    if hunk_bytes == 0 || unit_bytes == 0 {
+        return Err(ChdError::InvalidData)
+    }
+
+    let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
     header.seek(SeekFrom::Start(84))?;
     header.read_exact(&mut sha1)?;
     header.read_exact(&mut parent_sha1)?;
     header.seek(SeekFrom::Start(64))?;
     header.read_exact(&mut raw_sha1)?;
-    let map_entry_bytes = match compression[0] != CodecType::None as u32 {
-        true => 12,
-        false => 4,
+    let map_entry_bytes = match CodecType::from_u32(compression[0]) {
+        // uncompressed map entries are 4 bytes long
+        Some(CodecType::None) => map::V5_UNCOMPRESSED_MAP_ENTRY_SIZE as u32,
+        Some(_) => map::V5_COMPRESSED_MAP_ENTRY_SIZE as u32,
+        None => return Err(ChdError::UnsupportedFormat)
     };
+
     Ok(HeaderV5 {
         version: Version::ChdV5,
         length,

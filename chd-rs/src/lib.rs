@@ -178,7 +178,7 @@ mod tests {
     use crate::ChdFile;
     use std::convert::TryInto;
     use std::fs::File;
-    use std::io::{BufReader, Read, Write};
+    use std::io::{BufReader, Cursor, Read, Write};
 
     #[test]
     fn read_metas_test() {
@@ -204,7 +204,7 @@ mod tests {
         // 13478 breaks now with decmp error.
         // for hunk_num in 13478..hunk_count {
         let mut cmp_buf = Vec::new();
-        for hunk_num in 0..hunk_count {
+        for hunk_num in 7830..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             let read = ChdHunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
@@ -226,11 +226,13 @@ mod tests {
 
     #[test]
     fn hunk_iter_test() {
-        let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
+        let mut f_cursor = Cursor::new(f_bytes);
+        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f_cursor, None).expect("file");
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
-        for mut hunk in chd.hunks().skip(7000) {
+        for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
             hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
                 .expect("hunk could not be read");
         }
