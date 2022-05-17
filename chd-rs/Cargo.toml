@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
@@ -21,7 +21,7 @@ avhuff = []
 huffman_api = []
 codec_api = []
 docsrs = []
-owning_iterators = []
+unsound_owning_iterators = []
 unstable_lending_iterators = []
 
 [dependencies]

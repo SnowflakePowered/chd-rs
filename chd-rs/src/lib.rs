@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "docsrs", feature(doc_cfg, doc_cfg_hide))]
-#![cfg_attr(not(feature = "owning_iterators"), forbid(unsafe_code))]
+// `unsound_owning_iterators` is quite literally unsound, so we don't need to condition on that.
+#![forbid(unsafe_code)]
 
 //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
 //! for CHD V1-5.
@@ -191,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "owning_iterators")]
+    #[cfg(feature = "unsound_owning_iterators")]
     fn hunk_iter_test() {
         let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
         let mut f_cursor = Cursor::new(f_bytes);
@@ -234,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "owning_iterators")]
+    #[cfg(feature = "unsound_owning_iterators")]
     fn metadata_iter_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");

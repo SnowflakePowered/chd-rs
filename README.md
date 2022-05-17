@@ -24,26 +24,6 @@ read hunks.
 The size of the destination buffer must be exactly `chd.header().hunk_size()` to decompress with
 `hunk.read_hunk_in`, which takes the output slice and a buffer to hold compressed data.
 
-With the `owning_iterators` feature enabled, hunks can be iterated ergonomically.
-```rust
-fn main() -> Result<()> {
-    let mut f = BufReader::new(File::open("image.chd")?;
-    let mut chd = ChdFile::open_stream(&mut f, None)?;
-
-    // buffer to store decompressed hunks
-    // equivalent to vec![0u8; chd.header().hunk_size() as usize]
-    let mut out_buf = chd.get_hunksized_buffer();
-
-    // buffer for temporary compressed
-    let mut temp_buf = Vec::new();
-
-    for mut hunk in chd.hunks() {
-        hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
-    }
-}
-```
-
-Without `owning_iterators`, hunk iteration can be done without using unsafe.
 ```rust
 fn main() -> Result<()> {
     let mut f = BufReader::new(File::open("image.chd")?;
@@ -58,6 +38,26 @@ fn main() -> Result<()> {
     let mut temp_buf = Vec::new();
     for hunk_num in 0..hunk_count {
         let mut hunk = chd.hunk(hunk_num)?;
+        hunk.read_hunk_in(&mut temp_buf, &mut out_buf)?;
+    }
+}
+```
+
+With `unstable_lending_iterators`, hunks can be slightly more ergonomically iterated over
+albeit with a `while let` loop.
+
+```rust
+fn main() -> Result<()> {
+    let mut f = BufReader::new(File::open("image.chd")?;
+    let mut chd = ChdFile::open_stream(&mut f, None)?;
+    
+    // buffer to store decompressed hunks
+    let mut out_buf = chd.get_hunksized_buffer();
+    
+    // buffer for temporary compressed
+    let mut temp_buf = Vec::new();
+    let mut hunk_iter = chd.hunks();
+    while let Some(mut hunk) = hunk_iter.next() {
         hunk.read_hunk_in(&mut temp_buf, &mut out_buf)?;
     }
 }
@@ -105,12 +105,6 @@ will be verified and cleaned up before the 0.1 release.
 #### Codecs and Huffman API 
 By default, the codecs and static Huffman implementations are not exposed as part of the public API, 
 but can be enabled with the `codec_api` and `huffman_api` features respectively.
-
-#### Usage of `unsafe`
-The codecs and CHD file format is implemented in pure, safe Rust. To allow for easier
-iteration of hunks and metadata, `unsafe` is used sparingly to satisfy lifetime requirements.
-These iterators can be disabled by building the crate without the `owning_iterators` feature to
-forbid unsafe code in this crate.
 
 ## `libchdr` API (WIP)
 ⚠️*The C API is incomplete and heavily work in progress as of 0.0.5.* ⚠️

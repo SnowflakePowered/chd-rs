@@ -60,7 +60,7 @@ impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
     }
 }
 
-#[cfg(feature = "owning_iterators")]
+#[cfg(feature = "unsound_owning_iterators")]
 impl<'a, F: Read + Seek> Iterator for HunkIter<'a, F> {
     type Item = ChdHunk<'a, F>;
 
@@ -128,7 +128,7 @@ impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
     }
 }
 
-#[cfg(feature = "owning_iterators")]
+#[cfg(feature = "unsound_owning_iterators")]
 impl<'a, F: Read + Seek + 'a> Iterator for MetadataIter<'a, F> {
     type Item = MetadataEntry<'a, F>;
 
