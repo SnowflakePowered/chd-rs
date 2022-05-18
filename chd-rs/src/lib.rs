@@ -171,7 +171,7 @@ mod tests {
         // 13478 breaks now with decmp error.
         // for hunk_num in 13478..hunk_count {
         let mut cmp_buf = Vec::new();
-        for hunk_num in 7830..hunk_count {
+        for hunk_num in 0..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             let read = ChdHunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
@@ -209,10 +209,10 @@ mod tests {
     #[test]
     #[cfg(feature = "unstable_lending_iterators")]
     fn hunk_iter_lending_test() {
-        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
-        let mut f_cursor = Cursor::new(f_bytes);
-        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f_cursor, None).expect("file");
+        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+        // let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
         let mut hunks = chd.hunks();

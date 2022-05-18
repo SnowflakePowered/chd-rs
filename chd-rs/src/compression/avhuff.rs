@@ -69,7 +69,7 @@ const fn code_to_rle_count(code: u32) -> u32 {
 type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_len::<16>() }>;
 
 struct DeltaRleDecoder<'a> {
-    huffman: DeltaRleHuffman<'a>,
+    huffman: Box<DeltaRleHuffman<'a>>,
     rle_count: u32,
     prev_data: u8,
 }
@@ -77,7 +77,7 @@ struct DeltaRleDecoder<'a> {
 impl<'a> DeltaRleDecoder<'a> {
     pub fn new(huff: DeltaRleHuffman<'a>) -> Self {
         Self {
-            huffman: huff,
+            huffman: Box::new(huff),
             rle_count: 0,
             prev_data: 0,
         }
@@ -98,7 +98,8 @@ impl<'a> DeltaRleDecoder<'a> {
 
         let data = self.huffman.decode_one(reader)?;
         if data < 0x100 {
-            self.prev_data += data as u8;
+            self.prev_data = self.prev_data.wrapping_add(data as u8);
+            // self.prev_data += (data as u8);
             Ok(self.prev_data as u32)
         } else {
             self.rle_count = code_to_rle_count(data);
@@ -206,8 +207,9 @@ impl CodecImplementation for AVHuffCodec {
 
         let video = rest;
 
-        input = &input[10 * 2 * channels as usize..];
+        input = &input[10 + 2 * channels as usize..];
 
+        // good up to here
         if meta_size > 0 {
             meta.copy_from_slice(&input[..meta_size as usize]);
             input = &input[meta_size as usize..];
@@ -227,7 +229,11 @@ impl CodecImplementation for AVHuffCodec {
                 )
                 .map_err(|_| ChdError::DecompressionError)?;
 
-            input = &input[tree_size as usize + ch_comp_sizes.iter().sum::<u16>() as usize..]
+            if tree_size != 0xffff {
+                input = &input[tree_size as usize..];
+            } else {
+                input = &input[ch_comp_sizes.iter().sum::<u16>() as usize..]
+            }
         }
 
         if width > 0 && height > 0 && video.len() != 0 {
@@ -271,14 +277,11 @@ impl AVHuffCodec {
                             while bytes_written < len {
                                 match frame_read.read_next_or_eof(buf) {
                                     Ok(Some(block)) => {
-                                        for (l, r) in block.stereo_samples() {
+                                        for sample in block.channel(0) {
                                             cursor
-                                                .write_i16::<BigEndian>(l as i16)
+                                                .write_i16::<BigEndian>(*sample as i16)
                                                 .map_err(|_| AVHuffError::InvalidParameter)?;
-                                            cursor
-                                                .write_i16::<BigEndian>(r as i16)
-                                                .map_err(|_| AVHuffError::InvalidParameter)?;
-                                            bytes_written += 4;
+                                            bytes_written += 2;
                                         }
                                         buf = block.into_buffer();
                                     }
