@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::header::CodecType;
-use std::ops::Add;
+use std::ops::{Add, AddAssign};
 
 mod cdrom;
 mod ecc;
@@ -79,6 +79,13 @@ impl Add for DecompressResult {
             bytes_out: self.total_out() + rhs.total_out(),
             bytes_read: self.total_in() + rhs.total_in(),
         }
+    }
+}
+
+impl AddAssign for DecompressResult {
+    fn add_assign(&mut self, rhs: Self) {
+        self.bytes_read += rhs.bytes_read;
+        self.bytes_out += rhs.bytes_out;
     }
 }
 

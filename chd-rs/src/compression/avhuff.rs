@@ -146,7 +146,8 @@ impl CodecImplementation for AVHuffCodec {
             return Err(ChdError::DecompressionError);
         }
 
-        let mut total_bytes = 0;
+        let mut total_written = 0;
+        let mut total_read = 0;
         // todo: cursorize
         let meta_size: u32 = input[0] as u32;
         let channels: u32 = input[1] as u32;
@@ -191,6 +192,7 @@ impl CodecImplementation for AVHuffCodec {
         output[11] = height as u8;
 
         output = &mut output[12..];
+        total_written += 12;
 
         let (meta, mut rest) = output.split_at_mut(meta_size as usize);
         // workaround for Option<&mut [u8]> not being Copy.
@@ -208,17 +210,20 @@ impl CodecImplementation for AVHuffCodec {
         let video = rest;
 
         input = &input[10 + 2 * channels as usize..];
+        total_read += 10 + 2 * channels as usize;
 
         // good up to here
         if meta_size > 0 {
             meta.copy_from_slice(&input[..meta_size as usize]);
             input = &input[meta_size as usize..];
+            total_read += meta_size as usize;
         }
 
+        let mut result = DecompressResult::new(total_written, total_read);
         // todo: use DecompressLength
         if channels > 0 {
             // todo: bounds
-            total_bytes += self
+            let audio_res = self
                 .decode_audio(
                     samples,
                     input,
@@ -229,23 +234,23 @@ impl CodecImplementation for AVHuffCodec {
                 )
                 .map_err(|_| ChdError::DecompressionError)?;
 
+            result += audio_res;
             if tree_size != 0xffff {
+                assert_eq!(audio_res.bytes_read, tree_size as usize);
                 input = &input[tree_size as usize..];
             } else {
+                assert_eq!(audio_res.bytes_read, ch_comp_sizes.iter().sum::<u16>() as usize);
                 input = &input[ch_comp_sizes.iter().sum::<u16>() as usize..]
             }
         }
 
         if width > 0 && height > 0 && video.len() != 0 {
-            total_bytes += self
+            result += self
                 .decode_video(width, height, &input, video, (width * 2) as usize, 0)
                 .map_err(|_| ChdError::DecompressionError)?;
         }
 
-        Ok(DecompressResult::new(
-            meta_size as usize + total_bytes,
-            input.len(),
-        ))
+        Ok(result)
     }
 }
 
@@ -258,12 +263,12 @@ impl AVHuffCodec {
         xor: usize,
         ch_sizes: &[u16],
         tree_size: u32,
-    ) -> Result<usize, AVHuffError> {
+    ) -> Result<DecompressResult, AVHuffError> {
         match tree_size {
             0xffff => {
                 let mut source = input;
-                let mut total_bytes_written = 0;
-                // I have no idea if this is correct.
+                let mut bytes_written = 0;
+                let mut bytes_read = 0;
                 for (channel, channel_dest) in dest.iter_mut().enumerate() {
                     let size = ch_sizes[channel];
                     let mut buf = mem::take(&mut self.buffer);
@@ -288,7 +293,8 @@ impl AVHuffCodec {
                                     _ => return Err(AVHuffError::InvalidData),
                                 }
                             }
-                            total_bytes_written += len;
+                            bytes_read += frame_read.into_inner().position();
+                            bytes_written += len;
                         }
                         None => (),
                     }
@@ -296,7 +302,7 @@ impl AVHuffCodec {
                     // increase slice..
                     source = &source[size as usize..]
                 }
-                Ok(total_bytes_written)
+                Ok(DecompressResult::new(bytes_written, bytes_read as usize))
             }
             0 => {
                 // no huffman length
@@ -327,16 +333,17 @@ impl AVHuffCodec {
 
                     source = &source[size as usize..]
                 }
-                Ok(bytes_written)
+                Ok(DecompressResult::new(bytes_written, bytes_written))
             }
             tree_size => {
                 let mut source = input;
                 let mut bytes_written = 0;
+                let mut bytes_read = 0;
                 let mut bit_reader = BitReader::new(&source[..tree_size as usize]);
                 // todo: should be HuffmanCodec (huffman8bit)
-                let mut hi_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
+                let hi_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
                 bit_reader.align(1)?;
-                let mut lo_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
+                let lo_decoder = Huffman8BitDecoder::from_tree_rle(&mut bit_reader)?;
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {
@@ -344,6 +351,7 @@ impl AVHuffCodec {
                 }
 
                 source = &source[tree_size as usize..];
+                bytes_read += tree_size;
 
                 for (channel, channel_dest) in dest.iter_mut().enumerate() {
                     let size = ch_sizes[channel];
@@ -371,7 +379,7 @@ impl AVHuffCodec {
 
                     source = &source[size as usize..]
                 }
-                Ok(bytes_written)
+                Ok(DecompressResult::new(bytes_written, bytes_read as usize + bytes_written))
             }
         }
     }
@@ -384,7 +392,7 @@ impl AVHuffCodec {
         dest: &mut [u8],
         stride: usize,
         xor: usize,
-    ) -> Result<usize, AVHuffError> {
+    ) -> Result<DecompressResult, AVHuffError> {
         if input[0] & 0x80 == 0 {
             return Err(AVHuffError::InvalidData);
         }
@@ -424,6 +432,6 @@ impl AVHuffCodec {
         if bit_reader.remaining() != 0 {
             return Err(AVHuffError::InvalidData);
         }
-        Ok(bytes_written)
+        Ok(DecompressResult::new(bytes_written, bit_reader.position() as usize/ 8))
     }
 }

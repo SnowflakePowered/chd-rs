@@ -144,7 +144,7 @@ mod tests {
     use crate::ChdFile;
     use std::convert::TryInto;
     use std::fs::File;
-    use std::io::{BufReader, Cursor, Read, Write};
+    use std::io::{BufReader, Read, Write};
     use crate::iter::LendingIterator;
 
     #[test]
@@ -161,21 +161,33 @@ mod tests {
     }
 
     #[test]
-    fn read_hunks_test() {
-        let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
+    fn read_hunk_buffer_test() {
+        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
         let mut chd = ChdFile::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
 
         let mut hunk_buf = Vec::new();
-        // 13439 breaks??
-        // 13478 breaks now with decmp error.
-        // for hunk_num in 13478..hunk_count {
         let mut cmp_buf = Vec::new();
         for hunk_num in 0..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             let read = ChdHunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
             hunk_buf = read.into_inner();
+        }
+    }
+
+    #[test]
+    fn read_hunk_test() {
+        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let hunk_count = chd.header().hunk_count();
+
+        let mut hunk_buf = chd.get_hunksized_buffer();
+        let mut cmp_buf = Vec::new();
+        for hunk_num in 4..hunk_count {
+            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+            hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
+                .expect(format!("could not read_hunk {}", hunk_num).as_str());
         }
     }
 
@@ -216,9 +228,11 @@ mod tests {
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
         let mut hunks = chd.hunks();
+        let mut hunk_num = 0;
         while let Some(mut hunk) = hunks.next() {
             hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
-                .expect("hunk could not be read");
+                .expect(&*format!("hunk {} could not be read", hunk_num));
+            hunk_num += 1;
         }
     }
 
