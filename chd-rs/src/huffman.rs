@@ -110,7 +110,7 @@ pub struct HuffmanDecoder<
     const LOOKUP_ARRAY_LEN: usize,
 > {
     lookup_array: [LookupValue; LOOKUP_ARRAY_LEN],
-    huffnode_array: [HuffmanNode<'a>; NUM_CODES],
+    _node: PhantomData<HuffmanNode<'a>>
 }
 
 /// Get the size of the lookup array for a given `MAX_BITS`
@@ -147,13 +147,13 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
         HuffmanDecoder {
             lookup_array: [0u16; LOOKUP_ARRAY_LEN],
-            huffnode_array: [HuffmanNode::default(); NUM_CODES],
+            _node: PhantomData::default()
         }
     }
 
     /// Import RLE encoded Huffman tree from the bit stream.
     pub fn from_tree_rle(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
-        let mut decoder = HuffmanDecoder::new();
+        let mut huffnode_array = [HuffmanNode::default(); NUM_CODES];
 
         let mut curr_node = 0;
         while curr_node < NUM_CODES {
@@ -161,7 +161,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
             // 1 is an escape code
             if node_bits != 1 {
-                decoder.huffnode_array[curr_node].num_bits = node_bits;
+                huffnode_array[curr_node].num_bits = node_bits;
                 curr_node += 1;
                 continue;
             }
@@ -169,14 +169,14 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             let node_bits = reader.read_u8(Self::RLE_NUM_BITS)?;
             if node_bits == 1 {
                 // Double 1 is just a 1
-                decoder.huffnode_array[curr_node].num_bits = node_bits;
+                huffnode_array[curr_node].num_bits = node_bits;
                 curr_node += 1;
                 continue;
             }
 
             let rep_count = reader.read_u8(Self::RLE_NUM_BITS)? + 3;
             for _ in 0..rep_count {
-                decoder.huffnode_array[curr_node].num_bits = node_bits;
+                huffnode_array[curr_node].num_bits = node_bits;
                 curr_node += 1;
             }
         }
@@ -185,8 +185,9 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             return Err(HuffmanError::InvalidData);
         }
 
-        decoder.assign_canonical_codes()?;
-        decoder.build_lookup_table();
+        let mut decoder = HuffmanDecoder::new();
+        Self::assign_canonical_codes(&mut huffnode_array)?;
+        decoder.build_lookup_table(&huffnode_array);
 
         Ok(decoder)
     }
@@ -195,26 +196,27 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
     pub fn from_huffman_tree(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
         // Parse the small tree
         let mut small_huf = HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::new();
-
-        small_huf.huffnode_array[0].num_bits = reader.read_u8(3)?;
+        let mut huffnode_array = [HuffmanNode::default(); 24];
+        huffnode_array[0].num_bits = reader.read_u8(3)?;
         let start = reader.read_u8(3)? + 1;
         let mut count = 0;
 
         for idx in 1..24 {
             if idx < start || count == 7 {
-                small_huf.huffnode_array[idx as usize].num_bits = 0;
+                huffnode_array[idx as usize].num_bits = 0;
             } else {
                 count = reader.read_u8(3)?;
-                small_huf.huffnode_array[idx as usize].num_bits =
+                huffnode_array[idx as usize].num_bits =
                     if count == 7 { 0 } else { count };
             }
         }
 
-        small_huf.assign_canonical_codes()?;
-        small_huf.build_lookup_table();
+        HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::assign_canonical_codes(&mut huffnode_array)?;
+        small_huf.build_lookup_table(&huffnode_array);
 
         // Process the rest of the data referring to the small tree.
         let mut new_huffman = Self::new();
+        let mut huffnode_array = [HuffmanNode::default(); NUM_CODES];
         let mut last: u32 = 0;
         let mut curr_node = 0;
         while curr_node < NUM_CODES {
@@ -226,14 +228,14 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
                         count += reader.read_u32(Self::RLE_FULL_BITS)?;
                     }
                     while count != 0 && curr_node < NUM_CODES {
-                        new_huffman.huffnode_array[curr_node].num_bits = last as u8;
+                        huffnode_array[curr_node].num_bits = last as u8;
                         curr_node += 1;
                         count -= 1;
                     }
                 }
                 _ => {
                     last = value - 1;
-                    new_huffman.huffnode_array[curr_node].num_bits = last as u8;
+                    huffnode_array[curr_node].num_bits = last as u8;
                     curr_node += 1;
                 }
             }
@@ -243,8 +245,8 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             return Err(HuffmanError::InvalidData);
         }
 
-        new_huffman.assign_canonical_codes()?;
-        new_huffman.build_lookup_table();
+        Self::assign_canonical_codes(&mut huffnode_array)?;
+        new_huffman.build_lookup_table(&huffnode_array);
 
         Ok(new_huffman)
     }
@@ -267,7 +269,8 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         Ok(lookup as u32 >> 5)
     }
 
-    fn assign_canonical_codes(&mut self) -> Result<(), HuffmanError> {
+    fn assign_canonical_codes(huffnode_array: &mut [HuffmanNode<'a>; NUM_CODES])
+            -> Result<(), HuffmanError> {
         let mut curr_start = 0;
 
         // Since we're read-only we don't need to keep the histogram around
@@ -276,7 +279,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
         // Fill in histogram of bit lengths.
         for curr_code in 0..NUM_CODES {
-            let node = &self.huffnode_array[curr_code];
+            let node = &huffnode_array[curr_code];
             if node.num_bits > MAX_BITS {
                 return Err(HuffmanError::InternalInconsistency);
             }
@@ -297,7 +300,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
         // Assign codes.
         for curr_code in 0..NUM_CODES {
-            let node = &mut self.huffnode_array[curr_code];
+            let node = &mut huffnode_array[curr_code];
             if node.num_bits > 0 {
                 node.bits = histogram[node.num_bits as usize];
                 histogram[node.num_bits as usize] += 1;
@@ -310,9 +313,9 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         ((code) << 5) | ((bits as u16) & 0x1f)
     }
 
-    fn build_lookup_table(&mut self) {
+    fn build_lookup_table(&mut self, huffnode_array: &[HuffmanNode<'a>; NUM_CODES]) {
         for curr_code in 0..NUM_CODES {
-            let node = &self.huffnode_array[curr_code];
+            let node = &huffnode_array[curr_code];
             if node.num_bits > 0 {
                 // Get entry
                 let value = Self::make_lookup(curr_code as u16, node.num_bits);
