@@ -110,7 +110,11 @@ see the [`chd::compression`](https://github.com/SnowflakePowered/chd-rs/tree/mas
 
 #### Codecs and Huffman API 
 By default, the codecs and static Huffman implementations are not exposed as part of the public API, 
-but can be enabled with the `codec_api` and `huffman_api` features respectively.
+but can be enabled with the `codec_api` and `huffman_api` features respectively. These APIs are subject
+to change but should be considered mostly stable. 
+
+In particular the type signature for [`HuffmanDecoder`](https://github.com/SnowflakePowered/chd-rs/blob/e03e093021f1705d46fe6aaa8b32593489e55467/chd-rs/src/huffman.rs#L110)
+is subject to change once [`generic_const_exprs`](https://github.com/rust-lang/rust/issues/76560) is stabilized.
 
 ## `libchdr` API (WIP)
 ⚠️*The C API is incomplete and heavily work in progress.* ⚠️
