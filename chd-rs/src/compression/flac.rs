@@ -189,22 +189,22 @@ impl CodecImplementation for RawFlacCodec {
 /// Each compressed CDFL hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple
 /// of 2448, the size of each CD frame. The input buffer must contain enough samples to fill
 /// the number of CD sectors that can fit into the output buffer.
-pub struct CdFlCodec {
+pub struct CdFlacCodec {
     // cdfl always writes in big endian.
     engine: FlacCodec<BigEndian>,
     sub_engine: ZlibCodec,
     buffer: Vec<u8>,
 }
 
-impl CompressionCodec for CdFlCodec {}
+impl CompressionCodec for CdFlacCodec {}
 
-impl CompressionCodecType for CdFlCodec {
+impl CompressionCodecType for CdFlacCodec {
     fn codec_type(&self) -> CodecType {
         CodecType::FlacCdV5
     }
 }
 
-impl CodecImplementation for CdFlCodec {
+impl CodecImplementation for CdFlacCodec {
     fn is_lossy(&self) -> bool {
         false
     }
@@ -222,7 +222,7 @@ impl CodecImplementation for CdFlCodec {
         let flac_data_size = max_frames * CD_MAX_SECTOR_DATA;
 
         // neither FlacCodec nor ZlibCodec actually make use of hunk_size.
-        Ok(CdFlCodec {
+        Ok(CdFlacCodec {
             engine: FlacCodec::new(flac_data_size)?,
             sub_engine: ZlibCodec::new(hunk_size)?,
             buffer: vec![0u8; hunk_size as usize],

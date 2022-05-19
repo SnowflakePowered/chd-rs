@@ -115,7 +115,7 @@ pub struct HuffmanDecoder<
     const LOOKUP_ARRAY_LEN: usize,
 > {
     lookup_array: [LookupValue; LOOKUP_ARRAY_LEN],
-    _phantom: PhantomData<HuffmanNode<'a>>
+    _phantom: PhantomData<HuffmanNode<'a>>,
 }
 
 /// Get the size of the lookup array for a given `MAX_BITS`
@@ -152,7 +152,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
         HuffmanDecoder {
             lookup_array: [0u16; LOOKUP_ARRAY_LEN],
-            _phantom: PhantomData::default()
+            _phantom: PhantomData::default(),
         }
     }
 
@@ -211,12 +211,13 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
                 huffnode_array[idx as usize].num_bits = 0;
             } else {
                 count = reader.read_u8(3)?;
-                huffnode_array[idx as usize].num_bits =
-                    if count == 7 { 0 } else { count };
+                huffnode_array[idx as usize].num_bits = if count == 7 { 0 } else { count };
             }
         }
 
-        HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::assign_canonical_codes(&mut huffnode_array)?;
+        HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::assign_canonical_codes(
+            &mut huffnode_array,
+        )?;
         small_huf.build_lookup_table(&huffnode_array);
 
         // Process the rest of the data referring to the small tree.
@@ -274,8 +275,9 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         Ok(lookup as u32 >> 5)
     }
 
-    fn assign_canonical_codes(huffnode_array: &mut [HuffmanNode<'a>; NUM_CODES])
-            -> Result<(), HuffmanError> {
+    fn assign_canonical_codes(
+        huffnode_array: &mut [HuffmanNode<'a>; NUM_CODES],
+    ) -> Result<(), HuffmanError> {
         let mut curr_start = 0;
 
         // Since we're read-only we don't need to keep the histogram around

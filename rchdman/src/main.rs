@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use chd::header::{ChdHeader, CodecType};
+use chd::iter::LendingIterator;
 use chd::map::MapEntry;
 use chd::ChdFile;
 use clap::{Parser, Subcommand};
@@ -10,7 +11,6 @@ use std::io::{BufReader, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thousands::Separable;
-use chd::iter::LendingIterator;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);

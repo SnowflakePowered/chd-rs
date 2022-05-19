@@ -8,13 +8,13 @@
 //! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
 use crate::compression::codecs::{
-    CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, RawFlacCodec, ZlibCodec,
-    AVHuffCodec
+    AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, HuffmanCodec, LzmaCodec, NoneCodec,
+    RawFlacCodec, ZlibCodec,
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
+use crate::metadata::{KnownMetadata, MetadataRefIter};
 use crate::{make_tag, map};
-use crate::metadata::{MetadataRefIter, KnownMetadata};
 use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -73,13 +73,13 @@ impl CodecType {
                 ZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::ZLibCdV5 => {
-                CdZlCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+                CdZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::LzmaCdV5 => {
-                CdLzCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+                CdLzmaCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::FlacCdV5 => {
-                CdFlCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+                CdFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::LzmaV5 => {
                 LzmaCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
@@ -785,7 +785,7 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
 
     // guard divide by zero
     if hunk_bytes == 0 || unit_bytes == 0 {
-        return Err(ChdError::InvalidData)
+        return Err(ChdError::InvalidData);
     }
 
     let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
@@ -799,7 +799,7 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
         // uncompressed map entries are 4 bytes long
         Some(CodecType::None) => map::V5_UNCOMPRESSED_MAP_ENTRY_SIZE as u32,
         Some(_) => map::V5_COMPRESSED_MAP_ENTRY_SIZE as u32,
-        None => return Err(ChdError::UnsupportedFormat)
+        None => return Err(ChdError::UnsupportedFormat),
     };
 
     Ok(HeaderV5 {

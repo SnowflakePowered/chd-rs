@@ -2,13 +2,13 @@ use crate::error::Result;
 use crate::header::CodecType;
 use std::ops::{Add, AddAssign};
 
+mod avhuff;
 mod cdrom;
 mod ecc;
 mod flac;
 mod lzma;
 mod none;
 mod zlib;
-mod avhuff;
 
 #[cfg(feature = "flac_header")]
 mod flac_header;
@@ -16,9 +16,9 @@ mod huff;
 
 pub mod codecs {
     pub use crate::compression::avhuff::AVHuffCodec;
-    pub use crate::compression::cdrom::CdLzCodec;
-    pub use crate::compression::cdrom::CdZlCodec;
-    pub use crate::compression::flac::CdFlCodec;
+    pub use crate::compression::cdrom::CdLzmaCodec;
+    pub use crate::compression::cdrom::CdZlibCodec;
+    pub use crate::compression::flac::CdFlacCodec;
     pub use crate::compression::flac::RawFlacCodec;
     pub use crate::compression::huff::HuffmanCodec;
     pub use crate::compression::lzma::LzmaCodec;

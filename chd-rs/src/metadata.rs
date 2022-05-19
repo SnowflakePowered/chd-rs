@@ -32,11 +32,14 @@ impl KnownMetadata {
     /// Returns whether a given tag indicates that the CHD contains CDROM data.
     pub fn is_cdrom(tag: u32) -> bool {
         if let Some(tag) = FromPrimitive::from_u32(tag) {
-            return matches!(tag, KnownMetadata::CdRomOld
-                | KnownMetadata::CdRomTrack
-                | KnownMetadata::CdRomTrack2
-                | KnownMetadata::GdRomOld
-                | KnownMetadata::GdRomTrack);
+            return matches!(
+                tag,
+                KnownMetadata::CdRomOld
+                    | KnownMetadata::CdRomTrack
+                    | KnownMetadata::CdRomTrack2
+                    | KnownMetadata::GdRomOld
+                    | KnownMetadata::GdRomTrack
+            );
         }
         false
     }
@@ -136,12 +139,12 @@ impl<'a, F: Read + Seek + 'a> MetadataRefIter<'a, F> {
         }
     }
 
-    pub(crate) fn dead(file: &'a mut F,) -> Self {
+    pub(crate) fn dead(file: &'a mut F) -> Self {
         MetadataRefIter {
             file,
             curr_offset: 0,
             curr: None,
-            indices: Vec::new()
+            indices: Vec::new(),
         }
     }
 
@@ -227,4 +230,3 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefIter<'a, F> {
         next_inner(self).ok()
     }
 }
-

@@ -49,7 +49,7 @@ use std::convert::TryFrom;
 /// 2448, the size of each CD frame.
 /// The input buffer must contain exactly enough data to fill the hunk-sized output buffer
 /// when decompressed.
-pub type CdLzCodec = CdCodec<LzmaCodec, ZlibCodec>;
+pub type CdLzmaCodec = CdCodec<LzmaCodec, ZlibCodec>;
 
 /// CD-ROM wrapper decompression codec (cdzl) using the [Deflate codec](crate::codecs::ZlibCodec)
 /// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
@@ -91,22 +91,22 @@ pub type CdLzCodec = CdCodec<LzmaCodec, ZlibCodec>;
 /// 2448, the size of each CD frame.
 /// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
-pub type CdZlCodec = CdCodec<ZlibCodec, ZlibCodec>;
+pub type CdZlibCodec = CdCodec<ZlibCodec, ZlibCodec>;
 
-impl CompressionCodecType for CdLzCodec {
+impl CompressionCodecType for CdLzmaCodec {
     fn codec_type(&self) -> CodecType {
         CodecType::LzmaCdV5
     }
 }
 
-impl CompressionCodecType for CdZlCodec {
+impl CompressionCodecType for CdZlibCodec {
     fn codec_type(&self) -> CodecType {
         CodecType::ZLibCdV5
     }
 }
 
-impl CompressionCodec for CdZlCodec {}
-impl CompressionCodec for CdLzCodec {}
+impl CompressionCodec for CdZlibCodec {}
+impl CompressionCodec for CdLzmaCodec {}
 
 // unstable(adt_const_params): const TYPE: CodecType, but marker traits bring us
 // most of the way.

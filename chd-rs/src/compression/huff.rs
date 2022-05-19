@@ -11,7 +11,7 @@ use bitreader::BitReader;
 /// ## Format Details
 /// The Huffman codec uses a Huffman-encoded Huffman tree with the
 /// the default Huffman settings of
-/// * `NUM_BITS`: 256
+/// * `NUM_CODES`: 256
 /// * `MAX_BITS`: 16
 ///
 /// The last decoded code from the input buffer may not contain enough bits for a full

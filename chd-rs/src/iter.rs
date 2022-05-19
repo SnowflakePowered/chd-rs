@@ -2,9 +2,9 @@
 //! These APIs should be considered unstable and will be replaced with APIs
 //! based around GATs and `LendingIterator` once stabilized. See [rust#44265](https://github.com/rust-lang/rust/issues/44265)
 //! for the tracking issue on GAT stabilization.
+use crate::Result;
 use crate::{ChdFile, ChdHunk};
 use std::io::{Read, Seek};
-use crate::Result;
 
 // Lifted from
 // https://sabrinajewson.org/blog/the-better-alternative-to-lifetime-gats
@@ -19,8 +19,8 @@ mod sealed {
     impl<T> Sealed for Bounds<T> {}
 }
 
+use crate::metadata::{ChdMetadata, ChdMetadataTag, MetadataRef, MetadataRefIter};
 use sealed::{Bounds, Sealed};
-use crate::metadata::{ChdMetadata, MetadataRef, MetadataRefIter, ChdMetadataTag};
 
 /// An iterator interface that lends items from a higher lifetime.
 pub trait LendingIterator: for<'this> LendingIteratorLifetime<'this> {
@@ -34,13 +34,13 @@ pub struct HunkIter<'a, F: Read + Seek> {
     current_hunk: u32,
 }
 
-impl <'a, F: Read + Seek> HunkIter<'a, F> {
+impl<'a, F: Read + Seek> HunkIter<'a, F> {
     pub(crate) fn new(inner: &'a mut ChdFile<F>) -> Self {
         let last_hunk = inner.header().hunk_count();
         HunkIter {
             inner,
             last_hunk,
-            current_hunk: 0
+            current_hunk: 0,
         }
     }
 }
@@ -101,11 +101,10 @@ impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
         if let Some(next) = next {
             Some(MetadataEntry {
                 meta_ref: next,
-                file: self.inner.file
+                file: self.inner.file,
             })
         } else {
             None
         }
     }
 }
-
