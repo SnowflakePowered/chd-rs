@@ -42,9 +42,6 @@ impl<F: Read + Seek> ChdFile<F> {
         }
 
         let map = ChdMap::try_read_map(&header, &mut file)?;
-
-        // todo: hunk cache, not important right now but will need for C compat.
-
         let codecs = header.create_compression_codecs()?;
 
         Ok(ChdFile {

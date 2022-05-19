@@ -60,25 +60,6 @@ impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
     }
 }
 
-#[cfg(feature = "unsound_owning_iterators")]
-impl<'a, F: Read + Seek> Iterator for HunkIter<'a, F> {
-    type Item = ChdHunk<'a, F>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_hunk == self.last_hunk {
-            return None;
-        }
-        let curr = self.current_hunk;
-        self.current_hunk += 1;
-        // SAFETY: need an unbound lifetime to get 'a.
-        // todo: test under miri to confirm soundness
-        // todo: need GATs to do this safely.
-        unsafe { (self.inner as *mut ChdFile<F>).as_mut().unwrap_unchecked() }
-            .hunk(curr)
-            .ok()
-    }
-}
-
 /// An iterator over the metadata entries of a CHD file.
 pub struct MetadataIter<'a, F: Read + Seek + 'a> {
     inner: MetadataRefIter<'a, F>,
@@ -128,19 +109,3 @@ impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
     }
 }
 
-#[cfg(feature = "unsound_owning_iterators")]
-impl<'a, F: Read + Seek + 'a> Iterator for MetadataIter<'a, F> {
-    type Item = MetadataEntry<'a, F>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|meta_ref| {
-            let file = self.inner.file as *mut F;
-            MetadataEntry {
-                meta_ref,
-                // SAFETY: need an unbound lifetime to get 'a.
-                // todo: need GATs to do this safely.
-                file: unsafe { file.as_mut().unwrap_unchecked() },
-            }
-        })
-    }
-}
