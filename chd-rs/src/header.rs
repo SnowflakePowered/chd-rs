@@ -238,7 +238,7 @@ pub struct HeaderV4 {
 /// of this struct.
 #[derive(Clone)]
 pub struct HeaderV5 {
-    /// The CHD version (4).
+    /// The CHD version (5).
     pub version: Version,
     /// The length of the header.
     pub length: u32,
