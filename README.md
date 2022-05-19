@@ -78,7 +78,7 @@ fn main() -> Result<()> {
 A similar API exists for metadata in `ChdFile::metadata`.
 
 
-### Verifying Block Checksums
+### Verifying Hunk Checksums
 By default, chd-rs does not verify the checksums of decompressed hunks for performance. The feature `verify_block_crc` should be enabled 
 to verify hunk checksums.
 
@@ -116,8 +116,7 @@ but can be enabled with the `codec_api` and `huffman_api` features respectively.
 ⚠️*The C API is incomplete and heavily work in progress.* ⚠️
 
 chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h). 
-It makes no guarantees of ABI compatibility, and if your project links dynamically with libchdr, the output library will not work. However, chd-rs provides 
-a `CMakeLists.txt` that will link your project statically against `chd-rs`, and provides mostly the exact same API as libchdr.
+ABI compatibility is detailed below but is untested when compiling as a dynamic library.
 
 ### `core_file*` support
 The functions `chd_open_file`, and `chd_core_file` will not be available unless the feature `unsafe_c_file_streams` is enabled. 
@@ -132,5 +131,9 @@ CMake and Clang to be installed.
 
 ### ABI compatibility
 
-chd-rs makes no guarantees of ABI-compatibility unless otherwise documented, and will only provide source-level
-compatibility with chd.h. Other APIs exposed by libchdr are also not provided.
+chd-rs makes the following ABI-compatibility guarantees compared to libchdr when compiled statically.
+* `chd_error` is ABI and API-compatible with [chd.h](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/include/libchdr/chd.h#L258)
+* `chd_header` is ABI and API-compatible [chd.h](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/include/libchdr/chd.h#L302)
+* `chd_file *` is an opaque pointer. It is **not layout compatible** with [chd.c](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L265)
+* The layout of `core_file *` is user-defined when the `chd_core_file` feature is enabled.
+* Freeing any pointer returned by chd-rs with `free` is undefined behaviour. A `chd_file *` pointer can be safely freed with `chd_close`.
