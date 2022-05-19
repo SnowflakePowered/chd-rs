@@ -13,8 +13,11 @@ use std::io::{Cursor, Read, Write};
 use std::mem;
 use std::ops::DerefMut;
 
+// Length of the decompressed frame header.
 const AVHU_HEADER_LEN: usize = 12;
+// Length of the fixed compressed header, not including the audio stream lengths.
 const AVHU_COMP_HEADER_LEN: usize = 10;
+// Tree size to indicate FLAC compression for channel streams.
 const AVHU_FLAC_TREESIZE: u16 = 0xffff;
 
 #[inline(always)]

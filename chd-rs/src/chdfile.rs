@@ -96,7 +96,7 @@ impl<F: Read + Seek> ChdFile<F> {
     /// Returns a reference to the given hunk in this CHD file.
     ///
     /// If the requested hunk is larger than the number of hunks in the CHD file,
-    /// returns `ChdError::HunkOutofRange`.
+    /// returns `ChdError::HunkOutOfRange`.
     pub fn hunk(&mut self, hunk_num: u32) -> Result<ChdHunk<F>> {
         if hunk_num >= self.header.hunk_count() {
             return Err(ChdError::HunkOutOfRange);
