@@ -1,23 +1,22 @@
 /// AV Huffman (avhu) decompression codec.
 ///
-/// Truly awful implementation of AVHuff as a direct translation from avhuff.cpp.
-/// Needs a lot of work and clean up to be more descriptive.
-/// !WARNING!: Do not refer to this codec as documentative. It is most likely broken.
-/// It is here as a WIP and is not up to the standards of the rest of chd-rs.
-/// Unlike the other codecs, it is completely untested, and the `avhuff` feature
-/// should be considered unstable.
+/// ## Format Details
+///
+/// ## Buffer Restrictions
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
 use crate::header::CodecType;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder, HuffmanError};
-use crate::{huffman, ChdError};
+use crate::{huffman, ChdError, Result};
 use bitreader::{BitReader, BitReaderError};
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use claxon::frame::FrameReader;
 
-use std::io::Cursor;
+use std::io::{Cursor, Read, Write};
 use std::mem;
+use std::ops::DerefMut;
+use arrayvec::ArrayVec;
 
 #[allow(unused)]
 pub enum AVHuffError {
@@ -69,6 +68,7 @@ const fn code_to_rle_count(code: u32) -> u32 {
 type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_len::<16>() }>;
 
 struct DeltaRleDecoder<'a> {
+    // We need three of these and they're too big to store on the stack.
     huffman: Box<DeltaRleHuffman<'a>>,
     rle_count: u32,
     prev_data: u8,
@@ -88,23 +88,21 @@ impl<'a> DeltaRleDecoder<'a> {
     }
 
     #[inline(always)]
-    pub fn decode_one(&mut self, reader: &mut BitReader<'a>) -> Result<u32, AVHuffError> {
-        // I honestly don't know why avhuff.cpp widens u8 to u32, but
-        // there's not much way to test this outside so I'm following it strictly.
+    pub fn decode_one(&mut self, reader: &mut BitReader<'a>) -> Result<u8> {
+        // avhuff.cpp widens this to u32 but we can just keep it as u8
         if self.rle_count != 0 {
             self.rle_count -= 1;
-            return Ok(self.prev_data as u32);
+            return Ok(self.prev_data);
         }
 
         let data = self.huffman.decode_one(reader)?;
         if data < 0x100 {
             self.prev_data = self.prev_data.wrapping_add(data as u8);
-            // self.prev_data += (data as u8);
-            Ok(self.prev_data as u32)
+            Ok(self.prev_data)
         } else {
             self.rle_count = code_to_rle_count(data);
             self.rle_count -= 1;
-            Ok(self.prev_data as u32)
+            Ok(self.prev_data)
         }
     }
 }
@@ -124,14 +122,15 @@ impl CompressionCodecType for AVHuffCodec {
     }
 }
 
-const fn avhuff_get_header(meta_size: u32, channels: u32, samples: u32, width: u32, height: u32) -> [u8; 12] {
-    [b'c', b'h', b'a', b'v',
-        meta_size as u8,
-        channels as u8,
-        (samples >> 8) as u8, samples as u8,
-        (width >> 8) as u8, width as u8,
-        (height >> 8) as u8, height as u8
-    ]
+fn avhuff_write_header(output: &mut [u8; 12], meta_size: u8, channels: u8, samples: u16, width: u16, height: u16) -> Result<DecompressResult> {
+    let mut output = &mut output[..];
+    output.write_all(b"chav")?;
+    output.write_u8(meta_size as u8)?;
+    output.write_u8(channels as u8)?;
+    output.write_u16::<BigEndian>(samples)?;
+    output.write_u16::<BigEndian>(width)?;
+    output.write_u16::<BigEndian>(height)?;
+    Ok(DecompressResult::new(12, 0))
 }
 
 impl CodecImplementation for AVHuffCodec {
@@ -142,7 +141,7 @@ impl CodecImplementation for AVHuffCodec {
         false
     }
 
-    fn new(_hunk_bytes: u32) -> crate::Result<Self> {
+    fn new(_hunk_bytes: u32) -> Result<Self> {
         Ok(AVHuffCodec { buffer: Vec::new() })
     }
 
@@ -150,7 +149,7 @@ impl CodecImplementation for AVHuffCodec {
         &mut self,
         mut input: &[u8],
         output: &mut [u8],
-    ) -> crate::Result<DecompressResult> {
+    ) -> Result<DecompressResult> {
         // https://github.com/mamedev/mame/blob/master/src/lib/util/avhuff.cpp#L723
         if input.len() < 8 {
             return Err(ChdError::DecompressionError);
@@ -160,60 +159,72 @@ impl CodecImplementation for AVHuffCodec {
         let mut total_written = 0;
         let mut total_read = 0;
         // todo: cursorize
-        let meta_size: u32 = input[0] as u32;
-        let channels: u32 = input[1] as u32;
-        let samples: u32 = ((input[2] as u32) << 8) + input[3] as u32;
-        let width: u32 = ((input[4] as u32) << 8) + input[5] as u32;
-        let height: u32 = ((input[6] as u32) << 8) + input[7] as u32;
+
+        let mut input_cursor = Cursor::new(input);
+
+        let meta_size = input_cursor.read_u8()?;
+        let channels = input_cursor.read_u8()?;
+        let samples = input_cursor.read_u16::<BigEndian>()?;
+        let width = input_cursor.read_u16::<BigEndian>()?;
+        let height = input_cursor.read_u16::<BigEndian>()?;
 
         if input.len() < (10 + 2 * channels) as usize {
             return Err(ChdError::DecompressionError);
         }
 
-        let mut ch_comp_sizes = [0u16; 16];
+        // Total expected length of input in bytes
+        let mut total_in: usize = 10 + 2 * channels as usize;
 
-        let mut total_size = 10 + 2 * channels;
-        let tree_size: u32 = ((input[8] as u32) << 8) | input[9] as u32;
-
+        // If the tree size is 0xffff we are dealing with FLAC not Huffman.
+        let tree_size = input_cursor.read_u16::<BigEndian>()?;
         if tree_size != 0xffff {
-            total_size += tree_size;
-        }
-        for ch in 0..channels as usize {
-            let ch_size = ((input[10 + 2 * ch] as u16) << 8) | input[11 + 2 * ch] as u16;
-            ch_comp_sizes[ch] = ch_size;
-            total_size += ch_size as u32;
+            total_in += tree_size as usize;
         }
 
-        if total_size as usize >= input.len() {
+        // sizes of channels in compressed
+        let mut channel_comp_len: ArrayVec<u16, 16> = ArrayVec::new();
+        for _ in 0..channels as usize {
+            let ch_size = input_cursor.read_u16::<BigEndian>()?;
+            channel_comp_len.push(ch_size);
+            total_in += ch_size as usize;
+        }
+
+        if total_in >= input.len() {
             return Err(ChdError::DecompressionError);
         }
 
-        // create header
-        &mut output[..12]
-            .copy_from_slice(&avhuff_get_header(meta_size, channels, samples, width, height));
-        total_written += 12;
+        // Write the MAME compressed AV header.
+        let header = avhuff_write_header(
+            <&mut [u8; 12]>::try_from(&mut output[..12])?,
+            meta_size, channels, samples, width, height)?;
 
-        let (meta, mut rest) = output[12..].split_at_mut(meta_size as usize);
-        // workaround for Option<&mut [u8]> not being Copy.
-        let mut channel_slices: [Option<&mut [u8]>; 16] = [
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None,
-        ];
+        total_written += header.total_out();
 
-        for channel in 0..channels as usize {
-            let (ch_out, next) = rest.split_at_mut(2 * samples as usize);
-            channel_slices[channel] = Some(ch_out);
-            rest = next;
+        // Slice the output into three sections, excluding header.
+        // [metadata] [audio channels] [video]
+
+        // Get the slice in the output that stores metadata.
+        let (out_meta, mut out_rest) = output[12..].split_at_mut(meta_size as usize);
+
+        // Get the slices that each audio channel will decompress into
+        let mut channel_slices: ArrayVec<&mut [u8], 16> = ArrayVec::new();
+        for _ in &channel_comp_len {
+            let (out_channel, next) = out_rest.split_at_mut(2 * samples as usize);
+            channel_slices.push(out_channel);
+            out_rest = next;
         }
 
-        let video = rest;
+        // The remainder stores video data.
+        let video = out_rest;
+
 
         input = &input[10 + 2 * channels as usize..];
         total_read += 10 + 2 * channels as usize;
 
         // good up to here
         if meta_size > 0 {
-            meta.copy_from_slice(&input[..meta_size as usize]);
+            input_cursor.read_exact(out_meta)?;
+            out_meta.copy_from_slice(&input[..meta_size as usize]);
             input = &input[meta_size as usize..];
             total_read += meta_size as usize;
         }
@@ -228,7 +239,7 @@ impl CodecImplementation for AVHuffCodec {
                     input,
                     &mut channel_slices,
                     0,
-                    &ch_comp_sizes[..],
+                    &channel_comp_len[..],
                     tree_size,
                 )
                 .map_err(|_| ChdError::DecompressionError)?;
@@ -238,8 +249,8 @@ impl CodecImplementation for AVHuffCodec {
                 assert_eq!(audio_res.bytes_read, tree_size as usize);
                 input = &input[tree_size as usize..];
             } else {
-                assert_eq!(audio_res.bytes_read, ch_comp_sizes.iter().sum::<u16>() as usize);
-                input = &input[ch_comp_sizes.iter().sum::<u16>() as usize..]
+                assert_eq!(audio_res.bytes_read, channel_comp_len.iter().sum::<u16>() as usize);
+                input = &input[channel_comp_len.iter().sum::<u16>() as usize..]
             }
         }
 
@@ -255,80 +266,83 @@ impl CodecImplementation for AVHuffCodec {
 }
 
 impl AVHuffCodec {
+
+    fn decode_audio_flac(&mut self, inputs: &ArrayVec<& [u8], 16>, outputs: &mut ArrayVec<&mut [u8], 16>)
+        -> Result<DecompressResult> {
+
+        let mut total_written = 0;
+        let mut total_read = 0;
+
+        for (channel_idx, channel_out) in outputs.iter_mut()
+                .map(|d| d.deref_mut()).enumerate() {
+            let mut block_buf = mem::take(&mut self.buffer);
+            let flac_buf = Cursor::new(inputs[channel_idx]);
+            let mut frame_read = FrameReader::new(flac_buf);
+            let out_len = channel_out.len();
+            let mut channel_out = Cursor::new(channel_out);
+            while channel_out.position() < out_len as u64 {
+                match frame_read.read_next_or_eof(block_buf) {
+                    Ok(Some(block)) => {
+                        // Every channel is stored in separate FLAC streams in channel 0
+                        for sample in block.channel(0) {
+                            channel_out
+                                .write_i16::<BigEndian>(*sample as i16)
+                                .map_err(|_| ChdError::DecompressionError)?;
+                        }
+                        block_buf = block.into_buffer();
+                    }
+                    _ => return Err(ChdError::DecompressionError),
+                }
+            }
+            total_read += frame_read.into_inner().position();
+            total_written += out_len;
+
+            self.buffer = block_buf;
+        }
+        Ok(DecompressResult::new(total_written, total_read as usize))
+    }
+
     fn decode_audio(
         &mut self,
-        samples: u32,
-        input: &[u8],
-        dest: &mut [Option<&mut [u8]>],
+        samples: u16,
+        mut input: &[u8],
+        dest: &mut ArrayVec<&mut [u8], 16>,
         xor: usize,
-        ch_sizes: &[u16],
-        tree_size: u32,
-    ) -> Result<DecompressResult, AVHuffError> {
+        ch_comp_sizes: &[u16],
+        tree_size: u16,
+    ) -> Result<DecompressResult> {
         match tree_size {
             0xffff => {
-                let mut source = input;
-                let mut bytes_written = 0;
-                let mut bytes_read = 0;
-                for (channel, channel_dest) in dest.iter_mut().enumerate() {
-                    let size = ch_sizes[channel];
-                    let mut buf = mem::take(&mut self.buffer);
-                    match channel_dest.as_deref_mut() {
-                        Some(channel) => {
-                            let flac_buf = Cursor::new(&source[..size as usize]);
-                            let mut frame_read = FrameReader::new(flac_buf);
-                            let mut bytes_written = 0;
-                            let len = channel.len();
-                            let mut cursor = Cursor::new(channel);
-                            while bytes_written < len {
-                                match frame_read.read_next_or_eof(buf) {
-                                    Ok(Some(block)) => {
-                                        for sample in block.channel(0) {
-                                            cursor
-                                                .write_i16::<BigEndian>(*sample as i16)
-                                                .map_err(|_| AVHuffError::InvalidParameter)?;
-                                            bytes_written += 2;
-                                        }
-                                        buf = block.into_buffer();
-                                    }
-                                    _ => return Err(AVHuffError::InvalidData),
-                                }
-                            }
-                            bytes_read += frame_read.into_inner().position();
-                            bytes_written += len;
-                        }
-                        None => (),
-                    }
-                    self.buffer = buf;
-                    // increase slice..
-                    source = &source[size as usize..]
+                let mut input_slices: ArrayVec<&[u8], 16> = ArrayVec::new();
+                for size in ch_comp_sizes {
+                    let (slice, rest) = input.split_at(*size as usize);
+                    input_slices.push(slice);
+                    input = rest;
                 }
-                Ok(DecompressResult::new(bytes_written, bytes_read as usize))
+                self.decode_audio_flac(&input_slices, dest)
             }
             0 => {
                 // no huffman length
                 let mut source = input;
                 let mut bytes_written = 0;
                 for (channel, channel_dest) in dest.iter_mut().enumerate() {
-                    let size = ch_sizes[channel];
+                    let size = ch_comp_sizes[channel];
                     let mut cur_source = source;
 
-                    match channel_dest.as_deref_mut() {
-                        Some(mut channel) => {
-                            let mut prev_sample = 0;
-                            for _sample in 0..samples {
-                                let delta = (cur_source[0] as u16) << 8 | cur_source[1] as u16;
-                                cur_source = &cur_source[2..];
+                    let mut channel = channel_dest.deref_mut();
 
-                                let new_sample = prev_sample + delta;
-                                prev_sample = new_sample;
-                                // todo:  is this just write_be?
-                                channel[0 ^ xor] = (new_sample >> 8) as u8;
-                                channel[1 ^ xor] = new_sample as u8;
-                                bytes_written += 2;
-                                channel = &mut channel[2..]
-                            }
-                        }
-                        None => {}
+                    let mut prev_sample = 0;
+                    for _sample in 0..samples {
+                        let delta = (cur_source[0] as u16) << 8 | cur_source[1] as u16;
+                        cur_source = &cur_source[2..];
+
+                        let new_sample = prev_sample + delta;
+                        prev_sample = new_sample;
+                        // todo:  is this just write_be?
+                        channel[0 ^ xor] = (new_sample >> 8) as u8;
+                        channel[1 ^ xor] = new_sample as u8;
+                        bytes_written += 2;
+                        channel = &mut channel[2..]
                     }
 
                     source = &source[size as usize..]
@@ -347,34 +361,31 @@ impl AVHuffCodec {
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {
-                    return Err(AVHuffError::InvalidData);
+                    return Err(ChdError::DecompressionError);
                 }
 
                 source = &source[tree_size as usize..];
                 bytes_read += tree_size;
 
                 for (channel, channel_dest) in dest.iter_mut().enumerate() {
-                    let size = ch_sizes[channel];
-                    match channel_dest.as_deref_mut() {
-                        Some(mut channel) => {
-                            let mut prev_sample = 0;
-                            let mut bit_reader = BitReader::new(&source);
+                    let size = ch_comp_sizes[channel];
+                    let mut channel = channel_dest.deref_mut();
 
-                            for _sample in 0..samples {
-                                let mut delta: u16 =
-                                    (hi_decoder.decode_one(&mut bit_reader)? << 8) as u16;
-                                delta |= lo_decoder.decode_one(&mut bit_reader)? as u16;
+                    let mut prev_sample = 0;
+                    let mut bit_reader = BitReader::new(&source);
 
-                                let new_sample = prev_sample + delta;
-                                prev_sample = new_sample;
-                                // todo:  is this just write_be?
-                                channel[0 ^ xor] = (new_sample >> 8) as u8;
-                                channel[1 ^ xor] = new_sample as u8;
-                                bytes_written += 2;
-                                channel = &mut channel[2..]
-                            }
-                        }
-                        None => {}
+                    for _sample in 0..samples {
+                        let mut delta: u16 =
+                            (hi_decoder.decode_one(&mut bit_reader)? << 8) as u16;
+                        delta |= lo_decoder.decode_one(&mut bit_reader)? as u16;
+
+                        let new_sample = prev_sample + delta;
+                        prev_sample = new_sample;
+                        // todo:  is this just write_be?
+                        channel[0 ^ xor] = (new_sample >> 8) as u8;
+                        channel[1 ^ xor] = new_sample as u8;
+                        bytes_written += 2;
+                        channel = &mut channel[2..]
                     }
 
                     source = &source[size as usize..]
@@ -386,15 +397,15 @@ impl AVHuffCodec {
 
     fn decode_video(
         &self,
-        width: u32,
-        height: u32,
+        width: u16,
+        height: u16,
         input: &[u8],
         dest: &mut [u8],
         stride: usize,
         xor: usize,
-    ) -> Result<DecompressResult, AVHuffError> {
+    ) -> Result<DecompressResult> {
         if input[0] & 0x80 == 0 {
-            return Err(AVHuffError::InvalidData);
+            return Err(ChdError::UnsupportedFormat);
         }
 
         // decode losslessly
@@ -430,7 +441,7 @@ impl AVHuffCodec {
         // unsure about this bounds check.
         bit_reader.align(1)?;
         if bit_reader.remaining() != 0 {
-            return Err(AVHuffError::InvalidData);
+            return Err(ChdError::DecompressionError);
         }
         Ok(DecompressResult::new(bytes_written, bit_reader.position() as usize/8))
     }

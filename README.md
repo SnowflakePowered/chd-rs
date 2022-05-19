@@ -42,9 +42,21 @@ fn main() -> Result<()> {
     }
 }
 ```
+For more ergonomic but slower usage, [`chd::read`](https://github.com/SnowflakePowered/chd-rs/blob/master/chd-rs/src/read.rs) provides buffered adapters that implement `Read` and `Seek` at the
+hunk level. A buffered adapter at the file level is also available.
 
-With `unstable_lending_iterators`, hunks can be slightly more ergonomically iterated over
-albeit with a `while let` loop.
+### Lending Iterators
+With `unstable_lending_iterators`, hunks and metadata can be slightly more ergonomically iterated over
+albeit with a `while let` loop. This API is unstable until [Generalized Associated Types](https://github.com/rust-lang/rust/pull/96709)
+and the `LendingIterator` trait is stabilized.
+
+
+```toml
+[dependencies]
+chd = { version = "0.0.7", features = ["unstable_lending_iterators"] }
+```
+
+Then hunks can be iterated like so.
 
 ```rust
 fn main() -> Result<()> {
@@ -63,16 +75,16 @@ fn main() -> Result<()> {
 }
 ```
 
-For more ergonomic but slower usage, [`chd::read`](https://github.com/SnowflakePowered/chd-rs/blob/master/chd-rs/src/read.rs) provides buffered adapters that implement `Read` and `Seek` at the
-hunk level. A buffered adapter at the file level is also available.  
+A similar API exists for metadata in `ChdFile::metadata`.
 
-### Verify Block CRC
-By default, chd-rs does not verify the checksums of decompressed hunks. The feature `verify_block_crc` should be enabled 
+
+### Verifying Block Checksums
+By default, chd-rs does not verify the checksums of decompressed hunks for performance. The feature `verify_block_crc` should be enabled 
 to verify hunk checksums.
 
 ```toml
 [dependencies]
-chd = { version  "0.0.5", features = ["verify_block_crc"] }
+chd = { version = "0.0.7", features = ["verify_block_crc"] }
 ```
 
 ### Supported Codecs
@@ -94,20 +106,14 @@ see the [`chd::compression`](https://github.com/SnowflakePowered/chd-rs/tree/mas
 * CD LZMA (`CHD_CODEC_CD_LZMA`)
 * CD Deflate (`CHD_CODEC_CD_ZLIB`)
 * CD FLAC (`CHD_CODEC_CD_FLAC`)
-
-#### AVHuff support
-⚠️*AVHuff support is a work in progress and likely incorrect as of 0.0.5* ⚠️
-
-Experimental, and probably incorrect [AV Huffman (AVHU)](https://github.com/SnowflakePowered/chd-rs/blob/master/chd-rs/src/compression/avhuff.rs)
-support can be enabled with the `avhuff` feature. **Do not rely on its correctness as of 0.0.4**. The implementation of the AVHU codec
-will be verified and cleaned up before the 0.1 release.
-
+* AV Huffman (`CHD_CODEC_AVHUFF`)
+* 
 #### Codecs and Huffman API 
 By default, the codecs and static Huffman implementations are not exposed as part of the public API, 
 but can be enabled with the `codec_api` and `huffman_api` features respectively.
 
 ## `libchdr` API (WIP)
-⚠️*The C API is incomplete and heavily work in progress as of 0.0.5.* ⚠️
+⚠️*The C API is incomplete and heavily work in progress.* ⚠️
 
 chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h). 
 It makes no guarantees of ABI compatibility, and if your project links dynamically with libchdr, the output library will not work. However, chd-rs provides 

@@ -101,7 +101,12 @@ pub type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { lookup_len::<16>
 /// Allocation free CHD huffman decoder.
 ///
 /// `MAX_BITS` must be less than or equal to 24.
-/// `LOOKUP_ARRAY_LEN` must be equal to `lookup_len::<MAX_BITS>()`.
+/// `LOOKUP_ARRAY_LEN` must be equal to `lookup_len::<MAX_BITS>()`,
+/// which is `2 ** MAX_BITS`.
+///
+/// The Huffman lookup array is stack-allocated. If `MAX_BITS` is too large,
+/// the stack may not be large enough to hold the `HuffmanDecoder`. To free up
+/// stack space, the `HuffmanDecoder` should be boxed.
 pub struct HuffmanDecoder<
     'a,
     const NUM_CODES: usize,
@@ -110,7 +115,7 @@ pub struct HuffmanDecoder<
     const LOOKUP_ARRAY_LEN: usize,
 > {
     lookup_array: [LookupValue; LOOKUP_ARRAY_LEN],
-    _node: PhantomData<HuffmanNode<'a>>
+    _phantom: PhantomData<HuffmanNode<'a>>
 }
 
 /// Get the size of the lookup array for a given `MAX_BITS`
@@ -147,7 +152,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
 
         HuffmanDecoder {
             lookup_array: [0u16; LOOKUP_ARRAY_LEN],
-            _node: PhantomData::default()
+            _phantom: PhantomData::default()
         }
     }
 
@@ -192,7 +197,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         Ok(decoder)
     }
 
-    /// Import pre-encoded Huffman tree from the bitstream.
+    /// Import a pre-encoded Huffman tree from the bitstream.
     pub fn from_huffman_tree(reader: &mut BitReader<'_>) -> Result<Self, HuffmanError> {
         // Parse the small tree
         let mut small_huf = HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::new();

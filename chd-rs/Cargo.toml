@@ -13,11 +13,10 @@ keywords = ["mame", "chd", "decompression"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["want_subcode", "want_raw_data_sector", "unstable_lending_iterators", "avhuff", "verify_block_crc"]
+default = ["want_subcode", "want_raw_data_sector", "verify_block_crc"]
 verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 want_subcode = []
 want_raw_data_sector = []
-avhuff = []
 huffman_api = []
 codec_api = []
 docsrs = []
@@ -34,6 +33,7 @@ lzma-rs-headerless = "0.2.2"
 claxon = "0.4"
 bitreader = "0.3.6"
 crc = "3"
+arrayvec = "0.7.2"
 
 [dev-dependencies]
 bencher = "0.1.5"
@@ -43,5 +43,5 @@ name = "bench"
 harness = false
 
 [package.metadata.docs.rs]
-features = ["default", "codec_api", "huffman_api", "docsrs"]
+features = ["default", "codec_api", "huffman_api", "docsrs", "unstable_lending_iterators"]
 rustdoc-args = ["--cfg", "docsrs"]

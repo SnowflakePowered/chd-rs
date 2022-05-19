@@ -16,8 +16,7 @@
 //! * FLAC (Raw FLAC)
 //! * LZMA (Raw LZMA)
 //! * Huff (MAME Static Huffman)
-//!
-//! AVHuff decompression is experimental and can be enabled with the `avhuff` feature.
+//! * AVHU (AV Huffman)
 //!
 //! ## Iterating over hunks
 //! Because [`ChdHunk`](crate::ChdHunk) keeps a mutable reference to its owning
@@ -145,6 +144,8 @@ mod tests {
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::{BufReader, Read, Write};
+
+    #[cfg(feature = "unstable_lending_iterators")]
     use crate::iter::LendingIterator;
 
     #[test]
@@ -188,6 +189,7 @@ mod tests {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
+            println!("Read hunk {}", hunk_num);
         }
     }
 

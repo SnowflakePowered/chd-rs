@@ -8,8 +8,6 @@ mod flac;
 mod lzma;
 mod none;
 mod zlib;
-
-#[cfg(feature = "avhuff")]
 mod avhuff;
 
 #[cfg(feature = "flac_header")]
@@ -17,8 +15,6 @@ mod flac_header;
 mod huff;
 
 pub mod codecs {
-    #[cfg(feature = "avhuff")]
-    #[doc(hidden)]
     pub use crate::compression::avhuff::AVHuffCodec;
     pub use crate::compression::cdrom::CdLzCodec;
     pub use crate::compression::cdrom::CdZlCodec;

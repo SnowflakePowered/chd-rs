@@ -7,10 +7,9 @@
 //!
 //! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
-#[cfg(feature = "avhuff")]
-use crate::compression::codecs::AVHuffCodec;
 use crate::compression::codecs::{
     CdFlCodec, CdLzCodec, CdZlCodec, HuffmanCodec, LzmaCodec, NoneCodec, RawFlacCodec, ZlibCodec,
+    AVHuffCodec
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
@@ -91,7 +90,6 @@ impl CodecType {
             CodecType::HuffV5 => {
                 HuffmanCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
-            #[cfg(feature = "avhuff")]
             CodecType::AV | CodecType::AVHuffV5 => {
                 AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
