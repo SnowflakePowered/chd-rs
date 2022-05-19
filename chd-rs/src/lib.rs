@@ -184,7 +184,7 @@ mod tests {
 
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut cmp_buf = Vec::new();
-        for hunk_num in 4..hunk_count {
+        for hunk_num in 0..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());

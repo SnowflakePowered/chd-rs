@@ -124,6 +124,16 @@ impl CompressionCodecType for AVHuffCodec {
     }
 }
 
+const fn avhuff_get_header(meta_size: u32, channels: u32, samples: u32, width: u32, height: u32) -> [u8; 12] {
+    [b'c', b'h', b'a', b'v',
+        meta_size as u8,
+        channels as u8,
+        (samples >> 8) as u8, samples as u8,
+        (width >> 8) as u8, width as u8,
+        (height >> 8) as u8, height as u8
+    ]
+}
+
 impl CodecImplementation for AVHuffCodec {
     fn is_lossy(&self) -> bool
     where
@@ -139,13 +149,14 @@ impl CodecImplementation for AVHuffCodec {
     fn decompress(
         &mut self,
         mut input: &[u8],
-        mut output: &mut [u8],
+        output: &mut [u8],
     ) -> crate::Result<DecompressResult> {
         // https://github.com/mamedev/mame/blob/master/src/lib/util/avhuff.cpp#L723
         if input.len() < 8 {
             return Err(ChdError::DecompressionError);
         }
 
+        output.fill(0);
         let mut total_written = 0;
         let mut total_read = 0;
         // todo: cursorize
@@ -177,24 +188,12 @@ impl CodecImplementation for AVHuffCodec {
             return Err(ChdError::DecompressionError);
         }
 
-        // create header (todo: cursorize)
-        output[0] = b'c';
-        output[1] = b'h';
-        output[2] = b'a';
-        output[3] = b'v';
-        output[4] = meta_size as u8;
-        output[5] = channels as u8;
-        output[6] = (samples >> 8) as u8;
-        output[7] = samples as u8;
-        output[8] = (width >> 8) as u8;
-        output[9] = width as u8;
-        output[10] = (height >> 8) as u8;
-        output[11] = height as u8;
-
-        output = &mut output[12..];
+        // create header
+        &mut output[..12]
+            .copy_from_slice(&avhuff_get_header(meta_size, channels, samples, width, height));
         total_written += 12;
 
-        let (meta, mut rest) = output.split_at_mut(meta_size as usize);
+        let (meta, mut rest) = output[12..].split_at_mut(meta_size as usize);
         // workaround for Option<&mut [u8]> not being Copy.
         let mut channel_slices: [Option<&mut [u8]>; 16] = [
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
@@ -250,6 +249,7 @@ impl CodecImplementation for AVHuffCodec {
                 .map_err(|_| ChdError::DecompressionError)?;
         }
 
+        // bytes_out is wrong here. need to fill rest with zeroes.
         Ok(result)
     }
 }
@@ -432,6 +432,6 @@ impl AVHuffCodec {
         if bit_reader.remaining() != 0 {
             return Err(AVHuffError::InvalidData);
         }
-        Ok(DecompressResult::new(bytes_written, bit_reader.position() as usize/ 8))
+        Ok(DecompressResult::new(bytes_written, bit_reader.position() as usize/8))
     }
 }
