@@ -125,8 +125,10 @@ The functions `chd_open_file`, and `chd_core_file` will not be available unless 
 This is because `core_file*` is not an opaque pointer and is a C `FILE*` stream. This allows the underlying file pointer to be changed unsafely beneath 
 the memory safety guarantees of chd-rs. We strongly encourage using `chd_open` instead of `chd_open_file`.  
 
-If you need `core_file*` support, chd-capi should have the `unsafe_c_file_streams` feature enabled. This will attempt to use C `FILE*` streams as the underlying
-stream for a `chd_file*`. This is highly unsafe and not supported on all platforms.
+If you need `core_file*` support, chd-capi should have the `chd_core_file` feature enabled, which will wrap 
+`FILE*` to be usable in Rust with a lightweight wrapper in `libchdcorefile`. If the default implementation
+is not suitable, you may need to implement `libchdcorefile` yourself. The `chd_core_file` feature requires
+CMake and Clang to be installed.
 
 ### ABI compatibility
 

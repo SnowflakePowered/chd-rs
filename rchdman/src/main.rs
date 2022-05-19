@@ -160,6 +160,7 @@ fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
 }
 
 fn benchmark(p: impl AsRef<Path>) {
+    todo!();
     println!("\nchd-rs benchmark tool....");
     let mut f = BufReader::new(File::open(p).expect("could not open file"));
 

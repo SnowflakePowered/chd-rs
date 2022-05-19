@@ -2,3 +2,7 @@
 target/
 FORBIDDEN_TEST/
 /.idea/inspectionProfiles/Project_Default.xml
+
+/chd-rs-capi/libchdcorefile/cmake-build-debug/
+/.idea/
+/.idea/modules.xml

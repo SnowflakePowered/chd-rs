@@ -3,8 +3,8 @@ use chd::header::{ChdHeader, HeaderV1, HeaderV3, HeaderV4, HeaderV5};
 use chd::map::ChdMap;
 use std::mem;
 
-const CHD_MD5_BYTES: usize = 16;
-const CHD_SHA1_BYTES: usize = 20;
+pub const CHD_MD5_BYTES: usize = 16;
+pub const CHD_SHA1_BYTES: usize = 20;
 
 #[repr(C)]
 #[allow(non_camel_case_types)]

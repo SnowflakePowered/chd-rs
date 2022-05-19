@@ -8,8 +8,14 @@ edition = "2021"
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+default = ["chd_core_file"]
+chd_core_file = ["bindgen", "cmake"]
+
 [dependencies]
-chd = { path = "../chd-rs" }
+chd = "0.0.9"
 
 [build-dependencies]
 cbindgen = "0.23.0"
+bindgen = { version = "0.59.2", optional = true }
+cmake = { version =  "0.1.48", optional = true }

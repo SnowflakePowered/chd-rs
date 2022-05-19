@@ -12,6 +12,10 @@
 
 #define CHD_OPEN_READWRITE 2
 
+#define CHD_MD5_BYTES 16
+
+#define CHD_SHA1_BYTES 20
+
 /**
  * Error types that may occur when reading a CHD file or hunk.
  *
@@ -183,14 +187,13 @@ typedef struct chd_header {
   uint32_t obsolete_hunksize;
 } chd_header;
 
+typedef void core_file;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
-chd_error chd_open_file(const char *filename,
-                        int mode,
-                        struct chd_file *parent,
-                        struct chd_file **out);
+chd_error chd_open(const char *filename, int mode, struct chd_file *parent, struct chd_file **out);
 
 /**
  * Close a CHD file.
@@ -237,6 +240,40 @@ chd_error chd_codec_config(const struct chd_file *_chd, int32_t _param, void *_c
  * Read CHD header data from the file into the pointed struct.
  */
 chd_error chd_read_header(const char *filename, struct chd_header *header);
+
+/**
+ * Returns the associated core_file.
+ *
+ * This method has different semantics than `chd_core_file` in libchdr.
+ *
+ * The input `chd_file*` will be dropped, and all prior references to
+ * to the input `chd_file*` are rendered invalid, with the same semantics as `chd_close`.
+ *
+ * The provenance of the `chd_file*` is important to keep in mind.
+ *
+ * If the input `chd_file*` was opened with `chd_open`, the input `chd_file*` will be closed,
+ * and the return value will be undefined. For now it is `NULL`, but this may change in the future.
+ *
+ * If the input `chd_file*` was opened with `chd_open_file` and the `chd_core_file` crate feature
+ * is enabled, this method will return the same pointer as passed to `chd_input_file`, which may
+ * be possible to cast to `FILE*` depending on the implementation of `libchdcorefile` that was
+ * linked.
+ */
+core_file *chd_core_file(struct chd_file *chd);
+
+/**
+ * Open an existing CHD file from an opened `core_file` object.
+ *
+ * Ownership is taken of the `core_file*` object and should not be modified until
+ * `chd_core_file` is called to retake ownership of the `core_file*`.
+ */
+chd_error chd_open_file(core_file *file, int mode, struct chd_file *parent, struct chd_file **out);
+
+/**
+ * Get the name of a particular codec.
+ * This method always returns the string "Unknown"
+ */
+const char *chd_get_codec_name(uint32_t _codec);
 
 #ifdef __cplusplus
 } // extern "C"

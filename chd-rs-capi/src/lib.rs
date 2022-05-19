@@ -1,5 +1,16 @@
+extern crate core;
+
 mod header;
 
+#[cfg(feature = "chd_core_file")]
+mod chdcorefile;
+
+#[cfg(feature = "chd_core_file")]
+#[allow(non_camel_case_types)]
+#[allow(unused)]
+mod chdcorefile_sys;
+
+use std::any::Any;
 use crate::header::chd_header;
 use chd::header::ChdHeader;
 use chd::{ChdError, ChdFile};
@@ -14,14 +25,23 @@ use std::slice;
 pub const CHD_OPEN_READ: i32 = 1;
 pub const CHD_OPEN_READWRITE: i32 = 2;
 
-pub trait SeekRead: Read + Seek {}
-impl<R: Read + Seek> SeekRead for BufReader<R> {}
+pub trait SeekRead: Any + Read + Seek {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<R: Any + Read + Seek> SeekRead for BufReader<R> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 #[allow(non_camel_case_types)]
 pub type chd_file = ChdFile<Box<dyn SeekRead>>;
 
 use chd::metadata::{ChdMetadata, ChdMetadataTag, KnownMetadata};
 pub use chd::ChdError as chd_error;
+use crate::chdcorefile::CoreFile;
+use crate::chdcorefile_sys::core_file;
 
 fn ffi_takeown_chd(chd: *mut chd_file) -> Box<ChdFile<Box<dyn SeekRead>>> {
     unsafe { Box::from_raw(chd) }
@@ -47,7 +67,7 @@ fn ffi_open_chd(
 }
 
 #[no_mangle]
-pub extern "C" fn chd_open_file(
+pub extern "C" fn chd_open(
     filename: *const c_char,
     mode: c_int,
     parent: *mut chd_file,
@@ -264,13 +284,79 @@ pub extern "C" fn chd_read_header(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::assert_eq;
-
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+#[no_mangle]
+#[cfg(feature = "chd_core_file")]
+/// Returns the associated core_file.
+///
+/// This method has different semantics than `chd_core_file` in libchdr.
+///
+/// The input `chd_file*` will be dropped, and all prior references to
+/// to the input `chd_file*` are rendered invalid, with the same semantics as `chd_close`.
+///
+/// The provenance of the `chd_file*` is important to keep in mind.
+///
+/// If the input `chd_file*` was opened with `chd_open`, the input `chd_file*` will be closed,
+/// and the return value will be undefined. For now it is `NULL`, but this may change in the future.
+///
+/// If the input `chd_file*` was opened with `chd_open_file` and the `chd_core_file` crate feature
+/// is enabled, this method will return the same pointer as passed to `chd_input_file`, which may
+/// be possible to cast to `FILE*` depending on the implementation of `libchdcorefile` that was
+/// linked.
+pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_sys::core_file {
+    if chd.is_null() {
+        return std::ptr::null_mut();
     }
+
+    let file = ffi_takeown_chd(chd).into_inner();
+    let file_ref = file.as_any();
+
+    let pointer = match file_ref.downcast_ref::<CoreFile>() {
+        None => std::ptr::null_mut(),
+        Some(file) => {
+            file.0
+        }
+    };
+    std::mem::forget(file);
+    pointer
+}
+
+#[no_mangle]
+#[cfg(feature = "chd_core_file")]
+/// Open an existing CHD file from an opened `core_file` object.
+///
+/// Ownership is taken of the `core_file*` object and should not be modified until
+/// `chd_core_file` is called to retake ownership of the `core_file*`.
+pub extern "C" fn chd_open_file(
+    file: *mut core_file,
+    mode: c_int,
+    parent: *mut chd_file,
+    out: *mut *mut chd_file,
+) -> chd_error {
+    // we don't support READWRITE mode
+    if mode == CHD_OPEN_READWRITE {
+        return chd_error::FileNotWriteable;
+    }
+
+    let parent = if parent.is_null() {
+        None
+    } else {
+        Some(ffi_takeown_chd(parent))
+    };
+
+    let core_file = Box::new(CoreFile(file)) as Box<dyn SeekRead>;
+    let chd = match ChdFile::open(core_file, parent) {
+        Ok(chd) => chd,
+        Err(e) => return e,
+    };
+
+    unsafe { *out = ffi_expose_chd(Box::new(chd)) }
+    chd_error::None
+}
+
+#[no_mangle]
+/// Get the name of a particular codec.
+///
+/// This method always returns the string "Unknown"
+pub extern "C" fn chd_get_codec_name(_codec: u32) -> *const c_char {
+    b"Unknown\0".as_ptr() as *const c_char
 }

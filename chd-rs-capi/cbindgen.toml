@@ -13,6 +13,7 @@ prefix_with_name = true
 
 [export]
 include = ["ChdError"]
+exclude = ["core_fread", "core_fseek", "core_fopen", "core_fclose"]
 
 [export.rename]
 "ChdError" = "chd_error"
