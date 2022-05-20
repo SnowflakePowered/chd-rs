@@ -256,8 +256,7 @@ impl CodecImplementation for AVHuffCodec {
                     &input[result.total_in()..],
                     video,
                     (width * 2) as usize,
-                )
-                .map_err(|_| ChdError::DecompressionError)?;
+                )?;
         }
 
         Ok(result)

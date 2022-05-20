@@ -271,6 +271,7 @@ chd_error chd_open_file(core_file *file, int mode, struct chd_file *parent, stru
 
 /**
  * Get the name of a particular codec.
+ *
  * This method always returns the string "Unknown"
  */
 const char *chd_get_codec_name(uint32_t _codec);

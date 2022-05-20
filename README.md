@@ -18,7 +18,7 @@ LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs) (modified slightly
 is on readability and correctness.
 
 ## Usage
-Open a `ChdFile` with `ChdFile::open_stream`, then iterate hunks from 0 to `chd.header().hunk_count()` to
+Open a `ChdFile` with `ChdFile::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
 read hunks.
 
 The size of the destination buffer must be exactly `chd.header().hunk_size()` to decompress with
@@ -27,7 +27,7 @@ The size of the destination buffer must be exactly `chd.header().hunk_size()` to
 ```rust
 fn main() -> Result<()> {
     let mut f = BufReader::new(File::open("image.chd")?;
-    let mut chd = ChdFile::open_stream(&mut f, None)?;
+    let mut chd = ChdFile::open(&mut f, None)?;
     let hunk_count = chd.header().hunk_count();
     let hunk_size = chd.header().hunk_size();
     
@@ -61,7 +61,7 @@ Then hunks can be iterated like so.
 ```rust
 fn main() -> Result<()> {
     let mut f = BufReader::new(File::open("image.chd")?;
-    let mut chd = ChdFile::open_stream(&mut f, None)?;
+    let mut chd = ChdFile::open(&mut f, None)?;
     
     // buffer to store decompressed hunks
     let mut out_buf = chd.get_hunksized_buffer();
@@ -123,7 +123,7 @@ chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libc
 ABI compatibility is detailed below but is untested when compiling as a dynamic library.
 
 ### `core_file*` support
-The functions `chd_open_file`, and `chd_core_file` will not be available unless the feature `unsafe_c_file_streams` is enabled. 
+The functions `chd_open_file`, and `chd_core_file` will not be available unless the feature `chd_core_file` is enabled. 
 
 This is because `core_file*` is not an opaque pointer and is a C `FILE*` stream. This allows the underlying file pointer to be changed unsafely beneath 
 the memory safety guarantees of chd-rs. We strongly encourage using `chd_open` instead of `chd_open_file`.  
