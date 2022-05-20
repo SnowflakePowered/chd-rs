@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.0.10"
+version = "0.0.11"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
@@ -13,7 +13,7 @@ keywords = ["mame", "chd", "decompression"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["want_subcode", "want_raw_data_sector", "verify_block_crc"]
+default = ["want_subcode", "want_raw_data_sector"]
 verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 want_subcode = []
 want_raw_data_sector = []

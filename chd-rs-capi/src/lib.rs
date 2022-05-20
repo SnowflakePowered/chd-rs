@@ -40,8 +40,6 @@ pub type chd_file = ChdFile<Box<dyn SeekRead>>;
 
 use chd::metadata::{ChdMetadata, ChdMetadataTag, KnownMetadata};
 pub use chd::ChdError as chd_error;
-use crate::chdcorefile::CoreFile;
-use crate::chdcorefile_sys::core_file;
 
 fn ffi_takeown_chd(chd: *mut chd_file) -> Box<ChdFile<Box<dyn SeekRead>>> {
     unsafe { Box::from_raw(chd) }
@@ -327,7 +325,7 @@ pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_s
 /// Ownership is taken of the `core_file*` object and should not be modified until
 /// `chd_core_file` is called to retake ownership of the `core_file*`.
 pub extern "C" fn chd_open_file(
-    file: *mut core_file,
+    file: *mut chdcorefile_sys::core_file,
     mode: c_int,
     parent: *mut chd_file,
     out: *mut *mut chd_file,

@@ -9,7 +9,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [features]
-default = ["chd_core_file"]
+default = []
 chd_core_file = ["bindgen", "cmake"]
 
 [dependencies]

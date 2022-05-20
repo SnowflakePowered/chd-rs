@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -609,7 +609,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.0.10",
+ "chd 0.0.11",
  "clap 3.1.15",
  "hex",
  "num-traits",
