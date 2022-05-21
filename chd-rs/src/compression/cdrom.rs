@@ -21,7 +21,7 @@ use std::convert::TryFrom;
 /// [Header, Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
 /// ```
 ///
-/// The slice of the input buffer from `Frame0` to Frame1` is a single LZMA compressed stream,
+/// The slice of the input buffer from `Frame0` to `Frame1` is a single LZMA compressed stream,
 /// followed by the subcode data which is a single Deflate compressed stream.
 ///
 /// The size of the header is determined by the number of 2448-byte sized frames that can fit
@@ -62,7 +62,7 @@ pub type CdLzmaCodec = CdCodec<LzmaCodec, ZlibCodec>;
 /// [Header, Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
 /// ```
 ///
-/// The slice of the input buffer from `Frame0` to Frame1` is a single Deflate compressed stream,
+/// The slice of the input buffer from `Frame0` to `Frame1` is a single Deflate compressed stream,
 /// followed by the subcode data which is a single Deflate compressed stream.
 ///
 /// The size of the header is determined by the number of 2448-byte sized frames that can fit
