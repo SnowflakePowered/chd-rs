@@ -6,6 +6,7 @@ use crate::header::CodecType;
 use lzma_rs_headerless::decode::lzma::LzmaParams;
 use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
+use lzma_rs_headerless::read::LzmaDecoder;
 
 /// LZMA (lzma) decompression codec.
 ///
@@ -51,7 +52,10 @@ use std::io::Cursor;
 /// }
 /// ```
 pub struct LzmaCodec {
-    params: LzmaParams,
+    // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
+    // is that the chunks are encoded with the defaults used in LZMA 19.0.
+    // These defaults are lc = 3, lp = 0, pb = 2.
+    engine: LzmaDecoder<3, 0, 2>
 }
 
 impl CompressionCodec for LzmaCodec {}
@@ -104,26 +108,18 @@ impl CodecImplementation for LzmaCodec {
     }
 
     fn new(hunk_size: u32) -> Result<Self> {
-        // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
-        // is that the chunks are encoded with the defaults used in LZMA 19.0.
-        // These defaults are lc = 3, lp = 0, pb = 2.
-        let params = LzmaParams::new(3, 0, 2, get_lzma_dict_size(9, hunk_size), None);
-
-        Ok(LzmaCodec { params })
+        Ok(LzmaCodec {
+            engine: LzmaDecoder::new(get_lzma_dict_size(9, hunk_size))
+                .map_err(|_| ChdError::DecompressionError)?
+        })
     }
 
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
         let mut read = Cursor::new(input);
+        self.engine.reset();
         let len = output.len();
-        if let Ok(_) = lzma_decompress_with_params(
-            &mut read,
-            &mut output,
-            None,
-            self.params.with_size(len as u64),
-        ) {
-            Ok(DecompressResult::new(len, read.position() as usize))
-        } else {
-            Err(ChdError::DecompressionError)
-        }
+        self.engine.decompress(&mut read, &mut output)
+            .map_err(|_| ChdError::DecompressionError)?;
+        Ok(DecompressResult::new(len, read.position() as usize))
     }
 }

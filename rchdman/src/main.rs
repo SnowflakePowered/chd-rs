@@ -160,7 +160,6 @@ fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
 }
 
 fn benchmark(p: impl AsRef<Path>) {
-    todo!();
     println!("\nchd-rs benchmark tool....");
     let mut f = BufReader::new(File::open(p).expect("could not open file"));
 
@@ -168,7 +167,7 @@ fn benchmark(p: impl AsRef<Path>) {
     let mut chd = ChdFile::open(&mut f, None).expect("file");
     let hunk_count = chd.header().hunk_count();
     let hunk_size = chd.header().hunk_size() as usize;
-    let mut hunk_buf = vec![0u8; hunk_size];
+    let mut hunk_buf = chd.get_hunksized_buffer();
     // 13439 breaks??
     // 13478 breaks now with decmp error.
     // for hunk_num in 13478..hunk_count {
