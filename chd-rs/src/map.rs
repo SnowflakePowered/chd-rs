@@ -227,7 +227,7 @@ pub enum MapEntry<'a> {
 }
 
 /// A proof that a hunk is compressed.
-/// An instance of this type can only be constructed from an uncompressed hunk.
+/// An instance of this type can only be constructed from an compressed hunk.
 pub(crate) struct CompressedEntryProof(u64, u32);
 impl CompressedEntryProof {
     /// Returns the offset to the compressed data of this hunk.
