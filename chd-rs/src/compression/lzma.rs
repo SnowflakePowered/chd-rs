@@ -3,10 +3,8 @@ use crate::compression::{
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
-use lzma_rs_headerless::decode::lzma::LzmaParams;
-use lzma_rs_headerless::lzma_decompress_with_params;
 use std::io::Cursor;
-use lzma_rs_headerless::read::LzmaDecoder;
+use lzma_rs_headerless::decompress::LzmaDecoder;
 
 /// LZMA (lzma) decompression codec.
 ///
@@ -109,7 +107,7 @@ impl CodecImplementation for LzmaCodec {
 
     fn new(hunk_size: u32) -> Result<Self> {
         Ok(LzmaCodec {
-            engine: LzmaDecoder::new(get_lzma_dict_size(9, hunk_size))
+            engine: LzmaDecoder::new(get_lzma_dict_size(9, hunk_size), None)
                 .map_err(|_| ChdError::DecompressionError)?
         })
     }
