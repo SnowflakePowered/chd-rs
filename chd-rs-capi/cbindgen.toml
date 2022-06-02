@@ -2,6 +2,7 @@ language = "C"
 cpp_compat = true
 include_guard = "__CHD_H__"
 pragma_once = true
+usize_is_size_t = true
 
 [parse]
 parse_deps = true

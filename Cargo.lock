@@ -153,26 +153,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chd"
-version = "0.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01e904275628edd8a9fce3c3114bfb026ee91d7ca34d4eeee11ca10c1712b402"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc 3.0.0",
- "flate2",
- "lzma-rs-headerless 0.2.2",
- "num-derive",
- "num-traits",
- "once_cell",
- "regex",
-]
-
-[[package]]
-name = "chd"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -181,7 +162,26 @@ dependencies = [
  "claxon",
  "crc 3.0.0",
  "flate2",
- "lzma-rs-headerless 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lzma-rs-headerless 0.4.0",
+ "num-derive",
+ "num-traits",
+ "once_cell",
+ "regex",
+]
+
+[[package]]
+name = "chd"
+version = "0.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e90042472036f7e63bb80b19d49524f35e3c23819a27c27e99dd4aa70ccd4054"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc 3.0.0",
+ "flate2",
+ "lzma-rs-headerless 0.4.0",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -194,7 +194,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.0.9",
+ "chd 0.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "cmake",
 ]
 
@@ -467,33 +467,23 @@ dependencies = [
 
 [[package]]
 name = "lzma-rs-headerless"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11aa5831db4a739ec9e7b206c8281653ae8ec5e84fc4b2882a5f65c4f7d0ec0d"
-dependencies = [
- "byteorder",
- "crc 1.8.1",
-]
-
-[[package]]
-name = "lzma-rs-headerless"
-version = "0.4.0"
-dependencies = [
- "byteorder",
- "crc 1.8.1",
- "env_logger 0.8.4",
- "log",
- "rust-lzma",
-]
-
-[[package]]
-name = "lzma-rs-headerless"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c17afedc8ea88806491304c765cc3fd4ca8323a6b2e548cbd0e61883d06eb78e"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
+]
+
+[[package]]
+name = "lzma-rs-headerless"
+version = "0.4.1-api-alpha"
+dependencies = [
+ "byteorder",
+ "crc 1.8.1",
+ "env_logger 0.8.4",
+ "log",
+ "rust-lzma",
 ]
 
 [[package]]
@@ -619,7 +609,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.0.11",
+ "chd 0.0.12",
  "clap 3.1.15",
  "hex",
  "num-traits",

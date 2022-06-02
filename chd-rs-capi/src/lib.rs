@@ -16,7 +16,7 @@ use chd::header::ChdHeader;
 use chd::{ChdError, ChdFile};
 use std::ffi::{CStr, CString};
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Cursor, Read, Seek};
 use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
@@ -30,6 +30,12 @@ pub trait SeekRead: Any + Read + Seek {
 }
 
 impl<R: Any + Read + Seek> SeekRead for BufReader<R> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl SeekRead for Cursor<Vec<u8>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -305,10 +311,10 @@ pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_s
         return std::ptr::null_mut();
     }
 
-    let file = ffi_takeown_chd(chd).into_inner();
+    let (file, _) = ffi_takeown_chd(chd).into_inner();
     let file_ref = file.as_any();
 
-    let pointer = match file_ref.downcast_ref::<CoreFile>() {
+    let pointer = match file_ref.downcast_ref::<crate::chdcorefile::CoreFile>() {
         None => std::ptr::null_mut(),
         Some(file) => {
             file.0
@@ -341,7 +347,7 @@ pub extern "C" fn chd_open_file(
         Some(ffi_takeown_chd(parent))
     };
 
-    let core_file = Box::new(CoreFile(file)) as Box<dyn SeekRead>;
+    let core_file = Box::new(crate::chdcorefile::CoreFile(file)) as Box<dyn SeekRead>;
     let chd = match ChdFile::open(core_file, parent) {
         Ok(chd) => chd,
         Err(e) => return e,
@@ -352,9 +358,109 @@ pub extern "C" fn chd_open_file(
 }
 
 #[no_mangle]
+#[cfg(feature = "chd_virtio")]
+/// Open an existing CHD file from an opened `core_file` object.
+///
+/// Ownership is taken of the `core_file*` object and should not be modified until
+/// `chd_core_file` is called to retake ownership of the `core_file*`.
+pub extern "C" fn chd_open_core_file(
+    file: *mut chdcorefile_sys::core_file,
+    mode: c_int,
+    parent: *mut chd_file,
+    out: *mut *mut chd_file,
+) -> chd_error {
+    chd_open_file(file, mode, parent, out)
+}
+
+#[no_mangle]
 /// Get the name of a particular codec.
 ///
 /// This method always returns the string "Unknown"
 pub extern "C" fn chd_get_codec_name(_codec: u32) -> *const c_char {
     b"Unknown\0".as_ptr() as *const c_char
+}
+
+#[cfg(feature = "chd_precache")]
+use std::io::SeekFrom;
+
+#[cfg(feature = "chd_precache")]
+pub const PRECACHE_CHUNK_SIZE: usize =  16 * 1024 * 1024;
+
+#[no_mangle]
+#[cfg(feature = "chd_precache")]
+pub extern "C" fn chd_precache_progress(chd: *mut chd_file,
+                                               progress: Option<unsafe extern "C" fn(pos: usize, total: usize,
+                                                                              param: *mut c_void)>, param: *mut c_void)
+                                               -> chd_error {
+    let chd_file = if let Some(chd) = unsafe { chd.as_mut() } {
+        chd
+    } else {
+        return chd_error::InvalidParameter
+    };
+
+    // if the inner is already a cursor over Vec<u8>, then it's already cached.
+    if chd_file.inner().as_any().is::<Cursor<Vec<u8>>>() {
+        return chd_error::None;
+    }
+
+    let file = chd_file.inner();
+    let length = if let Ok(length) = file.seek(SeekFrom::End(0)) {
+        length as usize
+    } else {
+        return chd_error::ReadError;
+    };
+
+    let mut buffer = Vec::new();
+    if let Err(_) = buffer.try_reserve_exact(length as usize) {
+        return chd_error::OutOfMemory;
+    }
+    let mut done: usize = 0;
+    let mut last_update_done: usize = 0;
+    let update_interval: usize = (length + 99) / 100;
+
+    if let Err(_) = file.seek(SeekFrom::Start(0)) {
+        return chd_error::ReadError;
+    }
+
+    while done < length {
+        let req_count = std::cmp::max(length - done, PRECACHE_CHUNK_SIZE);
+
+        // todo: this is kind of sus...
+        if let Err(_) = file.read_exact(&mut buffer[done..req_count]) {
+            return chd_error::ReadError;
+        }
+
+        done += req_count;
+        if let Some(progress) = progress {
+            if (done - last_update_done) >= update_interval && done != length {
+                last_update_done = done;
+                unsafe {
+                    progress(done, length, param);
+                }
+            }
+        }
+    }
+
+    // replace underlying stream of chd_file
+    let stream = Box::new(Cursor::new(buffer)) as Box<dyn SeekRead>;
+
+    // takeownership of the existing chd file
+    let chd_file = ffi_takeown_chd(chd);
+    let (_file, parent) = chd_file.into_inner();
+
+    let buffered_chd = match ChdFile::open(stream, parent) {
+        Err(e) => return e,
+        Ok(chd) => Box::new(chd)
+    };
+
+    let buffered_chd = ffi_expose_chd(buffered_chd);
+    unsafe { chd.swap(buffered_chd) };
+
+    chd_error::None
+}
+
+#[no_mangle]
+#[cfg(feature = "chd_precache")]
+pub extern "C" fn chd_precache(chd: *mut chd_file) -> chd_error {
+    chd_precache_progress(chd, None, std::ptr::null_mut())
 }

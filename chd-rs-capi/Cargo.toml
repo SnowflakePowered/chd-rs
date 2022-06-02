@@ -11,9 +11,11 @@ crate-type = ["staticlib"]
 [features]
 default = []
 chd_core_file = ["bindgen", "cmake"]
+chd_virtio = ["chd_core_file"]
+chd_precache = []
 
 [dependencies]
-chd = "0.0.9"
+chd = "0.0.12"
 
 [build-dependencies]
 cbindgen = "0.23.0"

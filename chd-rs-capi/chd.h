@@ -5,12 +5,15 @@
 
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 
 #define CHD_OPEN_READ 1
 
 #define CHD_OPEN_READWRITE 2
+
+#define PRECACHE_CHUNK_SIZE ((16 * 1024) * 1024)
 
 #define CHD_MD5_BYTES 16
 
@@ -270,11 +273,28 @@ core_file *chd_core_file(struct chd_file *chd);
 chd_error chd_open_file(core_file *file, int mode, struct chd_file *parent, struct chd_file **out);
 
 /**
+ * Open an existing CHD file from an opened `core_file` object.
+ *
+ * Ownership is taken of the `core_file*` object and should not be modified until
+ * `chd_core_file` is called to retake ownership of the `core_file*`.
+ */
+chd_error chd_open_core_file(core_file *file,
+                             int mode,
+                             struct chd_file *parent,
+                             struct chd_file **out);
+
+/**
  * Get the name of a particular codec.
  *
  * This method always returns the string "Unknown"
  */
 const char *chd_get_codec_name(uint32_t _codec);
+
+chd_error chd_precache_progress(struct chd_file *chd,
+                                void (*progress)(size_t pos, size_t total, void *param),
+                                void *param);
+
+chd_error chd_precache(struct chd_file *chd);
 
 #ifdef __cplusplus
 } // extern "C"

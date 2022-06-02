@@ -4,7 +4,9 @@ use std::io::{Read, Seek, SeekFrom};
 use crate::chdcorefile_sys::*;
 use crate::SeekRead;
 
-pub struct CoreFile(pub(crate) *mut core_file);
+pub struct CoreFile {
+    pub(crate) file: *mut core_file
+}
 
 impl SeekRead for CoreFile {
     fn as_any(&self) -> &dyn Any {
@@ -15,7 +17,7 @@ impl SeekRead for CoreFile {
 impl Read for CoreFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let res = unsafe {
-            core_fread(self.0, buf.as_mut_ptr() as *mut c_void, buf.len() as size_t)
+            core_fread(self.file, buf.as_mut_ptr() as *mut c_void, buf.len() as size_t)
         };
         Ok(res as usize)
     }
@@ -29,7 +31,7 @@ impl Seek for CoreFile {
             SeekFrom::Current(off) => { (off, 1) } // SEEK_CUR
         };
         let res = unsafe {
-            core_fseek(self.0, off as size_t, set)
+            core_fseek(self.file, off as size_t, set)
         };
         Ok(res as u64)
     }
