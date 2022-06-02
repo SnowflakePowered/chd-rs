@@ -118,7 +118,6 @@ impl<F: Read + Seek> ChdFile<F> {
         doc(cfg(any(unsound_owning_iterators, unstable_lending_iterators)))
     )]
     #[cfg(any(
-        feature = "unsound_owning_iterators",
         feature = "unstable_lending_iterators"
     ))]
     /// Returns an iterator over the hunks of this CHD file.
@@ -126,9 +125,9 @@ impl<F: Read + Seek> ChdFile<F> {
         HunkIter::new(self)
     }
 
-    /// Consumes the `ChdFile` and returns the underlying reader.
-    pub fn into_inner(self) -> F {
-        self.file
+    /// Consumes the `ChdFile` and returns the underlying reader and parent if present.
+    pub fn into_inner(self) -> (F, Option<Box<ChdFile<F>>>) {
+        (self.file, self.parent)
     }
 
     /// Returns a mutable reference to the inner stream.
