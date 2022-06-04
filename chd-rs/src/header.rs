@@ -318,7 +318,7 @@ impl ChdHeader {
     }
 
     /// Returns whether or not the CHD file is compressed.
-    pub const fn is_compressed(&self) -> bool {
+    pub fn is_compressed(&self) -> bool {
         match self {
             ChdHeader::V1Header(c) => c.compression != CodecType::None as u32,
             ChdHeader::V2Header(c) => c.compression != CodecType::None as u32,
@@ -329,7 +329,7 @@ impl ChdHeader {
     }
 
     /// Returns the offset of the CHD metadata, if available.
-    pub const fn meta_offset(&self) -> Option<u64> {
+    pub fn meta_offset(&self) -> Option<u64> {
         match self {
             ChdHeader::V1Header(_c) => None,
             ChdHeader::V2Header(_c) => None,
@@ -340,7 +340,7 @@ impl ChdHeader {
     }
 
     /// Returns the flags of the CHD file, if available.
-    pub const fn flags(&self) -> Option<u32> {
+    pub fn flags(&self) -> Option<u32> {
         match self {
             ChdHeader::V1Header(c) => Some(c.flags),
             ChdHeader::V2Header(c) => Some(c.flags),
@@ -351,7 +351,7 @@ impl ChdHeader {
     }
 
     /// Returns the total number of hunks in the CHD file.
-    pub const fn hunk_count(&self) -> u32 {
+    pub fn hunk_count(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.total_hunks,
             ChdHeader::V2Header(c) => c.total_hunks,
@@ -362,7 +362,7 @@ impl ChdHeader {
     }
 
     /// Returns the size of each hunk in the CHD file in bytes.
-    pub const fn hunk_size(&self) -> u32 {
+    pub fn hunk_size(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.hunk_bytes,
             ChdHeader::V2Header(c) => c.hunk_bytes,
@@ -373,7 +373,7 @@ impl ChdHeader {
     }
 
     /// Returns the logical size of the compressed data in bytes.
-    pub const fn logical_bytes(&self) -> u64 {
+    pub fn logical_bytes(&self) -> u64 {
         match self {
             ChdHeader::V1Header(c) => c.logical_bytes,
             ChdHeader::V2Header(c) => c.logical_bytes,
@@ -384,7 +384,7 @@ impl ChdHeader {
     }
 
     /// Returns the number of bytes per unit within each hunk.
-    pub const fn unit_bytes(&self) -> u32 {
+    pub fn unit_bytes(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.unit_bytes,
             ChdHeader::V2Header(c) => c.unit_bytes,
@@ -395,7 +395,7 @@ impl ChdHeader {
     }
 
     /// Returns the number of units per hunk.
-    pub const fn unit_count(&self) -> u64 {
+    pub fn unit_count(&self) -> u64 {
         match self {
             ChdHeader::V1Header(c) => c.unit_count,
             ChdHeader::V2Header(c) => c.unit_count,
@@ -417,7 +417,7 @@ impl ChdHeader {
     }
 
     /// Returns the length of the header.
-    pub const fn len(&self) -> u32 {
+    pub fn len(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.length,
             ChdHeader::V2Header(c) => c.length,

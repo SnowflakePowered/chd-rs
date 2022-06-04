@@ -154,9 +154,10 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chd"
 version = "0.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e90042472036f7e63bb80b19d49524f35e3c23819a27c27e99dd4aa70ccd4054"
 dependencies = [
  "arrayvec",
- "bencher",
  "bitreader",
  "byteorder",
  "claxon",
@@ -171,11 +172,10 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90042472036f7e63bb80b19d49524f35e3c23819a27c27e99dd4aa70ccd4054"
+version = "0.1.0"
 dependencies = [
  "arrayvec",
+ "bencher",
  "bitreader",
  "byteorder",
  "claxon",
@@ -194,7 +194,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chd 0.0.12",
  "cmake",
 ]
 
@@ -609,7 +609,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.0.12",
+ "chd 0.1.0",
  "clap 3.1.15",
  "hex",
  "num-traits",
