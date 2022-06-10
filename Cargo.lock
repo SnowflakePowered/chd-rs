@@ -163,7 +163,7 @@ dependencies = [
  "claxon",
  "crc 3.0.0",
  "flate2",
- "lzma-rs-headerless 0.4.0",
+ "lzma-rs-headerless",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -181,7 +181,7 @@ dependencies = [
  "claxon",
  "crc 3.0.0",
  "flate2",
- "lzma-rs-headerless 0.4.0",
+ "lzma-rs",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -466,6 +466,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rs"
+version = "0.2.0"
+dependencies = [
+ "byteorder",
+ "crc 1.8.1",
+ "env_logger 0.8.4",
+ "log",
+ "rust-lzma",
+]
+
+[[package]]
 name = "lzma-rs-headerless"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,17 +484,6 @@ checksum = "c17afedc8ea88806491304c765cc3fd4ca8323a6b2e548cbd0e61883d06eb78e"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
-]
-
-[[package]]
-name = "lzma-rs-headerless"
-version = "0.4.1-api-alpha"
-dependencies = [
- "byteorder",
- "crc 1.8.1",
- "env_logger 0.8.4",
- "log",
- "rust-lzma",
 ]
 
 [[package]]

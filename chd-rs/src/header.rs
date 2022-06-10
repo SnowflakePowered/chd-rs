@@ -13,7 +13,7 @@ use crate::compression::codecs::{
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{ChdError, Result};
-use crate::metadata::{KnownMetadata, MetadataRefIter};
+use crate::metadata::{ChdMetadataTag, KnownMetadata, MetadataRefIter};
 use crate::{make_tag, map};
 use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
@@ -748,7 +748,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     let metas: Vec<_> = MetadataRefIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
         .iter()
-        .find(|&e| e.metatag == KnownMetadata::HardDisk as u32)
+        .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)
     {
         if let Ok(text) = hard_disk.read(chd) {
             let caps = bps_regex
@@ -764,7 +764,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
         }
     }
 
-    if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag)) {
+    if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag())) {
         return Some(crate::cdrom::CD_FRAME_SIZE as u32);
     }
     None

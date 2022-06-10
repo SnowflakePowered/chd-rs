@@ -91,7 +91,7 @@ impl<'this, 'a, F: Read + Seek> LendingIteratorLifetime<'this> for MetadataIter<
 
 impl<'a, F: Read + Seek + 'a> ChdMetadataTag for MetadataEntry<'a, F> {
     fn metatag(&self) -> u32 {
-        self.meta_ref.metatag
+        self.meta_ref.metatag()
     }
 }
 

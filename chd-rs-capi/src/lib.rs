@@ -10,10 +10,10 @@ mod chdcorefile;
 #[allow(unused)]
 mod chdcorefile_sys;
 
-use std::any::Any;
 use crate::header::chd_header;
 use chd::header::ChdHeader;
 use chd::{ChdError, ChdFile};
+use std::any::Any;
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek};
@@ -316,9 +316,7 @@ pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_s
 
     let pointer = match file_ref.downcast_ref::<crate::chdcorefile::CoreFile>() {
         None => std::ptr::null_mut(),
-        Some(file) => {
-            file.0
-        }
+        Some(file) => file.0,
     };
     std::mem::forget(file);
     pointer
@@ -384,18 +382,19 @@ pub extern "C" fn chd_get_codec_name(_codec: u32) -> *const c_char {
 use std::io::SeekFrom;
 
 #[cfg(feature = "chd_precache")]
-pub const PRECACHE_CHUNK_SIZE: usize =  16 * 1024 * 1024;
+pub const PRECACHE_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
 #[no_mangle]
 #[cfg(feature = "chd_precache")]
-pub extern "C" fn chd_precache_progress(chd: *mut chd_file,
-                                               progress: Option<unsafe extern "C" fn(pos: usize, total: usize,
-                                                                              param: *mut c_void)>, param: *mut c_void)
-                                               -> chd_error {
+pub extern "C" fn chd_precache_progress(
+    chd: *mut chd_file,
+    progress: Option<unsafe extern "C" fn(pos: usize, total: usize, param: *mut c_void)>,
+    param: *mut c_void,
+) -> chd_error {
     let chd_file = if let Some(chd) = unsafe { chd.as_mut() } {
         chd
     } else {
-        return chd_error::InvalidParameter
+        return chd_error::InvalidParameter;
     };
 
     // if the inner is already a cursor over Vec<u8>, then it's already cached.
@@ -450,7 +449,7 @@ pub extern "C" fn chd_precache_progress(chd: *mut chd_file,
 
     let buffered_chd = match ChdFile::open(stream, parent) {
         Err(e) => return e,
-        Ok(chd) => Box::new(chd)
+        Ok(chd) => Box::new(chd),
     };
 
     let buffered_chd = ffi_expose_chd(buffered_chd);

@@ -29,7 +29,8 @@ num-derive = "0.3"
 regex = { version = "1", features = ["std", "perf"] }
 once_cell = "1.10.0"
 flate2 = "1"
-lzma-rs-headerless = "0.4.0"
+#lzma-rs-headerless = { version = "0.4.0", path = "../lzma-rs" }
+lzma-rs = { path = "../lzma-rs", features = ["raw_decoder"] }
 claxon = "0.4"
 bitreader = "0.3.6"
 crc = "3"
@@ -43,5 +44,5 @@ name = "bench"
 harness = false
 
 [package.metadata.docs.rs]
-features = ["default", "codec_api", "huffman_api", "docsrs", "unstable_lending_iterators"]
+features = ["default", "codec_api", "huffman_api", "unstable_lending_iterators"]
 rustdoc-args = ["--cfg", "docsrs"]

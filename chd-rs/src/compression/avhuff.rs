@@ -249,14 +249,13 @@ impl CodecImplementation for AVHuffCodec {
             // avhuff.cpp always gives a videoxor of 0, so we don't have it here in this
             // implementation for clarity. The purpose of videoxor is to swap endianness
             // but we can use byteorder to enforce endianness here.
-            result += self
-                .decode_video(
-                    width,
-                    height,
-                    &input[result.total_in()..],
-                    video,
-                    (width * 2) as usize,
-                )?;
+            result += self.decode_video(
+                width,
+                height,
+                &input[result.total_in()..],
+                video,
+                (width * 2) as usize,
+            )?;
         }
 
         Ok(result)

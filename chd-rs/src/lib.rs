@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "docsrs", feature(doc_cfg, doc_cfg_hide))]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_cfg_hide))]
 // `unsound_owning_iterators` is quite literally unsound, so we don't need to condition on that.
 #![forbid(unsafe_code)]
 
@@ -98,7 +98,7 @@ mod huffman;
 /// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
 /// do not check the length of the output buffer against the hunk size. It is up to the caller
 /// of [`decompress`](crate::codecs::CodecImplementation::decompress) to uphold length invariants.
-#[cfg_attr(feature = "docsrs", doc(cfg(codec_api)))]
+#[cfg_attr(docsrs, doc(cfg(codec_api)))]
 pub mod codecs {
     pub use crate::compression::codecs::*;
     pub use crate::compression::{
@@ -133,7 +133,7 @@ pub mod metadata;
 pub mod read;
 
 #[cfg(feature = "unstable_lending_iterators")]
-#[cfg_attr(feature = "docsrs", doc(cfg(unstable_lending_iterators)))]
+#[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
 pub mod iter;
 
 #[cfg(test)]

@@ -7,9 +7,7 @@ use crate::map::{
     V5CompressionType,
 };
 
-#[cfg(
-    feature = "unstable_lending_iterators"
-)]
+#[cfg(feature = "unstable_lending_iterators")]
 use crate::iter::{HunkIter, MetadataIter};
 
 use crate::metadata::MetadataRefIter;
@@ -72,13 +70,8 @@ impl<F: Read + Seek> ChdFile<F> {
         }
     }
 
-    #[cfg(
-        feature = "unstable_lending_iterators"
-    )]
-    #[cfg_attr(
-        feature = "docsrs",
-        doc(cfg(unstable_lending_iterators))
-    )]
+    #[cfg(feature = "unstable_lending_iterators")]
+    #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
     /// Returns an iterator over metadata entries for this CHD file.
     ///
     /// The contents of each metadata entry are lazily read.
@@ -111,13 +104,8 @@ impl<F: Read + Seek> ChdFile<F> {
         vec![0u8; hunk_size]
     }
 
-    #[cfg_attr(
-        feature = "docsrs",
-        doc(cfg(unstable_lending_iterators))
-    )]
-    #[cfg(
-        feature = "unstable_lending_iterators"
-    )]
+    #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
+    #[cfg(feature = "unstable_lending_iterators")]
     /// Returns an iterator over the hunks of this CHD file.
     pub fn hunks(&mut self) -> HunkIter<F> {
         HunkIter::new(self)

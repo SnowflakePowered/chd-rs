@@ -35,7 +35,6 @@ fn build_chdcorefile() {
     println!("cargo:rustc-link-search=native={}", lib_dst.display());
     println!("cargo:rustc-link-lib=static=chdcorefile");
 
-
     let bindings = bindgen::Builder::default()
         .header("libchdcorefile/chdcorefile.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -43,8 +42,7 @@ fn build_chdcorefile() {
         .expect("Unable to generate bindings");
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
-    let chdcorefile_src = File::create("src/chdcorefile_sys.rs")
-        .expect("Unable to open file");
+    let chdcorefile_src = File::create("src/chdcorefile_sys.rs").expect("Unable to open file");
 
     bindings
         .write(Box::new(chdcorefile_src))
@@ -53,7 +51,7 @@ fn build_chdcorefile() {
 fn main() {
     #[cfg(feature = "chd_core_file")]
     if cfg!(feature = "chd_core_file") {
-       build_chdcorefile();
+        build_chdcorefile();
     }
 
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();

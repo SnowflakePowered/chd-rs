@@ -3,8 +3,9 @@ use crate::compression::{
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
+use lzma_rs::decompress::raw::{LzmaDecoder, LzmaParams, LzmaProperties};
 use std::io::Cursor;
-use lzma_rs_headerless::decompress::LzmaDecoder;
+// use lzma_rs_headerless::decompress::LzmaDecoder;
 
 /// LZMA (lzma) decompression codec.
 ///
@@ -19,10 +20,6 @@ use lzma_rs_headerless::decompress::LzmaDecoder;
 /// The dictionary size is determined via the following algorithm with a level of 9, and a
 /// reduction size of hunk size.
 ///
-/// ## Buffer Restrictions
-/// Each compressed LZMA hunk decompresses to a hunk-sized chunk.
-/// The input buffer must contain exactly enough data to fill the output buffer
-/// when decompressed.
 /// ```rust
 /// fn get_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
 ///     let mut dict_size = if level <= 5 {
@@ -49,11 +46,16 @@ use lzma_rs_headerless::decompress::LzmaDecoder;
 ///     dict_size
 /// }
 /// ```
+///
+/// ## Buffer Restrictions
+/// Each compressed LZMA hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain exactly enough data to fill the output buffer
+/// when decompressed.
 pub struct LzmaCodec {
     // The LZMA codec for CHD uses raw LZMA chunks without a stream header. The result
     // is that the chunks are encoded with the defaults used in LZMA 19.0.
     // These defaults are lc = 3, lp = 0, pb = 2.
-    engine: LzmaDecoder<3, 0, 2>
+    engine: LzmaDecoder,
 }
 
 impl CompressionCodec for LzmaCodec {}
@@ -107,8 +109,19 @@ impl CodecImplementation for LzmaCodec {
 
     fn new(hunk_size: u32) -> Result<Self> {
         Ok(LzmaCodec {
-            engine: LzmaDecoder::new(get_lzma_dict_size(9, hunk_size), None)
-                .map_err(|_| ChdError::DecompressionError)?
+            engine: LzmaDecoder::new(
+                LzmaParams::new(
+                    LzmaProperties {
+                        lc: 3,
+                        lp: 0,
+                        pb: 2,
+                    },
+                    get_lzma_dict_size(9, hunk_size),
+                    None,
+                ),
+                None,
+            )
+            .map_err(|_| ChdError::DecompressionError)?,
         })
     }
 
@@ -116,7 +129,8 @@ impl CodecImplementation for LzmaCodec {
         let mut read = Cursor::new(input);
         self.engine.reset();
         let len = output.len();
-        self.engine.decompress(&mut read, &mut output)
+        self.engine
+            .decompress(&mut read, &mut output)
             .map_err(|_| ChdError::DecompressionError)?;
         Ok(DecompressResult::new(len, read.position() as usize))
     }

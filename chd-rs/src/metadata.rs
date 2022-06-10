@@ -82,12 +82,10 @@ impl ChdMetadataTag for ChdMetadata {
 #[derive(Clone)]
 pub struct MetadataRef {
     offset: u64,
-    next: u64,
-    prev: u64,
-    pub(crate) length: u32,
-    pub(crate) metatag: u32,
-    pub(crate) flags: u8,
-    pub(crate) index: u32,
+    length: u32,
+    flags: u8,
+    index: u32,
+    metatag: u32,
 }
 
 impl MetadataRef {
@@ -113,6 +111,7 @@ impl MetadataRef {
 }
 
 impl ChdMetadataTag for MetadataRef {
+    #[inline(always)]
     fn metatag(&self) -> u32 {
         self.metatag
     }
@@ -210,19 +209,14 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefIter<'a, F> {
                 s.indices.push((metatag, 1))
             }
 
-            let mut new = MetadataRef {
+            let new = MetadataRef {
                 offset: s.curr_offset,
-                next,
-                prev: 0,
                 length,
                 metatag,
                 flags: flags as u8,
                 index,
             };
 
-            if let Some(curr) = &s.curr {
-                new.prev = curr.offset;
-            }
             s.curr_offset = next;
             s.curr = Some(new.clone());
             Ok(new)

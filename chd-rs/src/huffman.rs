@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "docsrs", doc(cfg(huffman_api)))]
+#![cfg_attr(docsrs, doc(cfg(huffman_api)))]
 //! Implementation of the MAME CHD Huffman Decoder.
 //!
 //! For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
