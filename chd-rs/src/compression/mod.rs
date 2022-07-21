@@ -28,7 +28,7 @@ pub mod codecs {
 
 // unstable(trait_alias)
 /// Marker trait for a codec that can be used to decompress a compressed hunk.
-pub trait CompressionCodec: CodecImplementation + CompressionCodecType {}
+pub trait CompressionCodec: CodecImplementation + CompressionCodecType + Send {}
 
 /// Trait for a codec that implements a known CHD codec type.
 pub trait CompressionCodecType {
