@@ -107,7 +107,7 @@ pub mod codecs {
 }
 
 const fn make_tag(a: &[u8; 4]) -> u32 {
-    return ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32);
+    ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
 }
 
 macro_rules! const_assert {

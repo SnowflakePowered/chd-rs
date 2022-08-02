@@ -128,25 +128,25 @@ impl Display for ChdError {
 
 impl From<TryFromSliceError> for ChdError {
     fn from(_: TryFromSliceError) -> Self {
-        return ChdError::InvalidFile;
+        ChdError::InvalidFile
     }
 }
 
 impl From<BitReaderError> for ChdError {
     fn from(_: BitReaderError) -> Self {
-        return ChdError::ReadError;
+        ChdError::ReadError
     }
 }
 
 impl From<FromBytesWithNulError> for ChdError {
     fn from(_: FromBytesWithNulError) -> Self {
-        return ChdError::InvalidData;
+        ChdError::InvalidData
     }
 }
 
 impl From<Utf8Error> for ChdError {
     fn from(_: Utf8Error) -> Self {
-        return ChdError::InvalidData;
+        ChdError::InvalidData
     }
 }
 

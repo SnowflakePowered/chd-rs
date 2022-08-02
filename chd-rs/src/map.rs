@@ -278,6 +278,7 @@ impl<'a> Iterator for MapEntryIter<'a> {
 
 impl ChdMap {
     /// Gets the number of entries in the CHD Map.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         match self {
             ChdMap::V5(m) => {
@@ -312,7 +313,7 @@ impl ChdMap {
                             .ok()
                     };
                 }
-                return None;
+                None
             }
             ChdMap::Legacy(m) => m.0.get(hunk_num).map(MapEntry::LegacyEntry),
         }

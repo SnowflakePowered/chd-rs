@@ -245,7 +245,7 @@ impl CodecImplementation for AVHuffCodec {
             )?;
         }
 
-        if width > 0 && height > 0 && video.len() != 0 {
+        if width > 0 && height > 0 && !video.is_empty() {
             // avhuff.cpp always gives a videoxor of 0, so we don't have it here in this
             // implementation for clarity. The purpose of videoxor is to swap endianness
             // but we can use byteorder to enforce endianness here.
@@ -375,7 +375,7 @@ impl AVHuffCodec {
                     let mut channel = channel_dest.deref_mut();
 
                     let mut prev_sample = 0;
-                    let mut bit_reader = BitReader::new(&source);
+                    let mut bit_reader = BitReader::new(source);
 
                     for _sample in 0..samples {
                         let mut delta: u16 = (hi_decoder.decode_one(&mut bit_reader)? << 8) as u16;

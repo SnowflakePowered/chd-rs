@@ -27,7 +27,7 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
     where
         Self: Sized,
     {
-        return false;
+        false
     }
 
     fn new(hunk_bytes: u32) -> Result<Self>

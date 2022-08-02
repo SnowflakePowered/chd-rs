@@ -145,6 +145,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         let header_bytes = ecc_bytes + complen_bytes;
 
         // Extract compressed length of base
+        #[allow(clippy::identity_op)]
         let mut sector_compressed_len: u32 =
             (input[ecc_bytes + 0] as u32) << 8 | input[ecc_bytes + 1] as u32;
         if complen_bytes > 2 {

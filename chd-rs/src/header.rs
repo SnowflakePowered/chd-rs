@@ -290,7 +290,7 @@ const MD5_BYTES: usize = 16;
 const SHA1_BYTES: usize = 20;
 
 /// The CHD magic number.
-pub const CHD_MAGIC: &'static str = "MComprHD";
+pub const CHD_MAGIC: &str = "MComprHD";
 
 const CHD_V1_HEADER_SIZE: u32 = 76;
 const CHD_V2_HEADER_SIZE: u32 = 80;
@@ -417,6 +417,7 @@ impl ChdHeader {
     }
 
     /// Returns the length of the header.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {
         match self {
             ChdHeader::V1Header(c) => c.length,

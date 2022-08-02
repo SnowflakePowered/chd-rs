@@ -343,7 +343,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                     }
                 }
             }
-            MapEntry::LegacyEntry(_) => return Err(ChdError::InvalidParameter),
+            MapEntry::LegacyEntry(_) => Err(ChdError::InvalidParameter)
         }
     }
 
@@ -368,6 +368,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         }
     }
 
+    #[allow(clippy::len_without_is_empty)]
     /// Returns the length of this hunk in bytes.
     pub fn len(&self) -> usize {
         self.inner.header.hunk_size() as usize

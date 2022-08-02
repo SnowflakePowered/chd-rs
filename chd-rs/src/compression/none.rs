@@ -21,7 +21,7 @@ impl CodecImplementation for NoneCodec {
     }
 
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
-        Ok(DecompressResult::new(output.write(&input)?, input.len()))
+        Ok(DecompressResult::new(output.write(input)?, input.len()))
     }
 }
 

@@ -41,7 +41,7 @@ pub trait CompressionCodecType {
 
 /// Trait for a CHD decompression codec implementation.
 pub trait CodecImplementation {
-    /// Returns whethere is codec is lossy or not.
+    /// Returns whether the is codec is lossy or not.
     fn is_lossy(&self) -> bool
     where
         Self: Sized;

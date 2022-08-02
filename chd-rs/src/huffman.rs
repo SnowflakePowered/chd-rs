@@ -86,7 +86,7 @@ impl<'a> PartialOrd for HuffmanNode<'a> {
             return None;
         }
         // (int)node1->bits - (int)node2->bits;
-        return Some(self.bits.cmp(&other.bits));
+        Some(self.bits.cmp(&other.bits))
     }
 }
 
