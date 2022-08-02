@@ -5,27 +5,18 @@
 use crate::Result;
 use crate::{ChdFile, ChdHunk};
 use std::io::{Read, Seek};
-
-// Lifted from
-// https://sabrinajewson.org/blog/the-better-alternative-to-lifetime-gats
-/// The lifetime of an item from a [`LendingIterator`](crate::iter::LendingIterator).
-pub trait LendingIteratorLifetime<'this, ImplicitBounds: Sealed = Bounds<&'this Self>> {
-    type Item;
-}
-
-mod sealed {
-    pub trait Sealed: Sized {}
-    pub struct Bounds<T>(T);
-    impl<T> Sealed for Bounds<T> {}
-}
-
+use lending_iterator::prelude::*;
 use crate::metadata::{ChdMetadata, ChdMetadataTag, MetadataRef, MetadataRefIter};
-use sealed::{Bounds, Sealed};
 
-/// An iterator interface that lends items from a higher lifetime.
-pub trait LendingIterator: for<'this> LendingIteratorLifetime<'this> {
-    fn next(&mut self) -> Option<<Self as LendingIteratorLifetime<'_>>::Item>;
-}
+#[::nougat::gat(Item)]
+/// A `LendingIterator` definition re-exported from the [lending-iterator](https://crates.io/crates/lending-iterator)
+/// crate. Provides an lending iterator interface with various [adapters](https://docs.rs/lending-iterator/0.1.5/lending_iterator/lending_iterator/adapters/index.html)
+/// that map to those from [`Iterator`](core::iter::Iterator).
+///
+/// This crate defined `LendingIterator` will be replaced once a stabilized trait lands in `std`, and should
+/// not be considered stable.
+///
+pub use lending_iterator::lending_iterator::LendingIterator;
 
 /// An iterator over the hunks of a CHD file.
 pub struct HunkIter<'a, F: Read + Seek> {
@@ -45,12 +36,13 @@ impl<'a, F: Read + Seek> HunkIter<'a, F> {
     }
 }
 
-impl<'this, 'a, F: Read + Seek> LendingIteratorLifetime<'this> for HunkIter<'a, F> {
-    type Item = ChdHunk<'this, F>;
-}
-
+#[::nougat::gat]
 impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
-    fn next(&mut self) -> Option<<Self as LendingIteratorLifetime<'_>>::Item> {
+    type Item<'next>
+        where
+            Self: 'next, = ChdHunk<'next, F>;
+
+    fn next(&'_ mut self) -> Option<ChdHunk<'_, F>> {
         if self.current_hunk == self.last_hunk {
             return None;
         }
@@ -85,18 +77,19 @@ pub struct MetadataEntry<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
 }
 
-impl<'this, 'a, F: Read + Seek> LendingIteratorLifetime<'this> for MetadataIter<'a, F> {
-    type Item = MetadataEntry<'this, F>;
-}
-
 impl<'a, F: Read + Seek + 'a> ChdMetadataTag for MetadataEntry<'a, F> {
     fn metatag(&self) -> u32 {
         self.meta_ref.metatag()
     }
 }
 
+#[::nougat::gat]
 impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
-    fn next(&mut self) -> Option<<Self as LendingIteratorLifetime<'_>>::Item> {
+    type Item<'next>
+        where
+            Self: 'next, = MetadataEntry<'next, F>;
+
+    fn next(&'_ mut self) -> Option<Item<'_, Self>> {
         let next = self.inner.next();
         if let Some(next) = next {
             Some(MetadataEntry {

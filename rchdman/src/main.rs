@@ -182,6 +182,7 @@ fn benchmark(p: impl AsRef<Path>) {
         hunk_num += 1;
     }
 
+
     let time = Instant::now().saturating_duration_since(start);
     println!("Read {} bytes in {} seconds", bytes, time.as_secs_f64());
     println!(
