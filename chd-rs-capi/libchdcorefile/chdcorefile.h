@@ -1,7 +1,7 @@
 // The guard here is __CORETYPES_H__ because this is mutually exclusive with libchdr/coretypes.h
 #ifndef __CORETYPES_H__
 #define __CORETYPES_H__
-
+#include <stddef.h>
 typedef void core_file;
 
 size_t core_fread(core_file* file, void* buffer, size_t size);

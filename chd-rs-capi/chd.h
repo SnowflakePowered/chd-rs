@@ -305,7 +305,7 @@ chd_error chd_read_header(const char *filename,
                           struct chd_header *header);
 
 /**
- * Returns the associated core_file.
+ * Returns the associated `core_file*`.
  *
  * This method has different semantics than `chd_core_file` in libchdr.
  *
