@@ -48,7 +48,13 @@ fn build_chdcorefile() {
         .write(Box::new(chdcorefile_src))
         .expect("Unable to write bindings to libchdcorefile.");
 }
+
 fn main() {
+    // Do not update files on docsrs
+    if env::var("DOCS_RS").is_ok() {
+        return;
+    }
+
     #[cfg(feature = "chd_core_file")]
     if cfg!(feature = "chd_core_file") {
         build_chdcorefile();

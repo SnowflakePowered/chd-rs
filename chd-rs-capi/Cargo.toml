@@ -1,6 +1,6 @@
 [package]
 name = "chd-capi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 description = "libchdr-compatible C API for a Rust implementation of the CHD File Format"
@@ -24,8 +24,8 @@ verify_block_crc = ["chd/verify_block_crc"]
 chd = "0.1"
 
 [build-dependencies]
-cbindgen = "0.23.0"
-bindgen = { version = "0.59.2", optional = true }
+cbindgen = "0.24.3"
+bindgen = { version = "0.60.1", optional = true }
 cmake = { version =  "0.1.48", optional = true }
 
 
