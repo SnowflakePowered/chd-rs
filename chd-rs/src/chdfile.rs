@@ -120,6 +120,11 @@ impl<F: Read + Seek> ChdFile<F> {
     pub fn inner(&mut self) -> &mut F {
         &mut self.file
     }
+
+    /// Returns a mutable reference to the inner parent stream if present.
+    pub fn inner_parent(&mut self) -> Option<&mut F> {
+        self.parent.as_deref_mut().map(|f| f.inner())
+    }
 }
 
 /// A reference to a compressed Hunk in a CHD file.
