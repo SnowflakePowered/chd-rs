@@ -53,7 +53,7 @@ and the `LendingIterator` trait is stabilized.
 
 ```toml
 [dependencies]
-chd = { version = "0.0.10", features = ["unstable_lending_iterators"] }
+chd = { version = "0.1", features = ["unstable_lending_iterators"] }
 ```
 
 Then hunks can be iterated like so.
@@ -84,7 +84,7 @@ to verify hunk checksums.
 
 ```toml
 [dependencies]
-chd = { version = "0.0.10", features = ["verify_block_crc"] }
+chd = { version = "0.1", features = ["verify_block_crc"] }
 ```
 
 ### Supported Codecs
