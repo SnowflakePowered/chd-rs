@@ -168,9 +168,6 @@ fn benchmark(p: impl AsRef<Path>) {
     let hunk_count = chd.header().hunk_count();
     let hunk_size = chd.header().hunk_size() as usize;
     let mut hunk_buf = chd.get_hunksized_buffer();
-    // 13439 breaks??
-    // 13478 breaks now with decmp error.
-    // for hunk_num in 13478..hunk_count {
     let mut cmp_buf = Vec::new();
     let mut bytes = 0;
     let mut hunk_iter = chd.hunks();

@@ -153,9 +153,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chd"
-version = "0.0.12"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90042472036f7e63bb80b19d49524f35e3c23819a27c27e99dd4aa70ccd4054"
+checksum = "2f7d3159d86c37489e3de06eb054aca40a7af2355425f768de37c886826039b9"
 dependencies = [
  "arrayvec",
  "bitreader",
@@ -163,7 +163,7 @@ dependencies = [
  "claxon",
  "crc 3.0.0",
  "flate2",
- "lzma-rs-headerless 0.4.0",
+ "lzma-rs-headerless",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -182,7 +182,7 @@ dependencies = [
  "crc 3.0.0",
  "flate2",
  "lending-iterator",
- "lzma-rs-headerless 0.5.2",
+ "lzma-rs-headerless",
  "nougat",
  "num-derive",
  "num-traits",
@@ -196,7 +196,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.0.12",
+ "chd 0.1.1",
  "cmake",
 ]
 
@@ -528,16 +528,6 @@ dependencies = [
  "env_logger 0.8.4",
  "log",
  "rust-lzma",
-]
-
-[[package]]
-name = "lzma-rs-headerless"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c17afedc8ea88806491304c765cc3fd4ca8323a6b2e548cbd0e61883d06eb78e"
-dependencies = [
- "byteorder",
- "crc 1.8.1",
 ]
 
 [[package]]

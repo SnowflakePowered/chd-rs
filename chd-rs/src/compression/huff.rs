@@ -36,8 +36,8 @@ impl CodecImplementation for HuffmanCodec {
         let mut bit_reader = BitReader::new(input);
         let decoder = Huffman8BitDecoder::from_huffman_tree(&mut bit_reader)?;
 
-        for i in 0..output.len() {
-            output[i] = decoder.decode_one(&mut bit_reader)? as u8;
+        for i in output.iter_mut() {
+            *i = decoder.decode_one(&mut bit_reader)? as u8;
         }
 
         Ok(DecompressResult::new(

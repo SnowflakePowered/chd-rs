@@ -725,9 +725,9 @@ fn ecc_compute_bytes<const ROWLEN: usize>(
     row: &[u16; ROWLEN],
 ) -> (u8, u8) {
     let (mut val1, mut val2) = (0, 0);
-    for c in 0..ROWLEN {
-        val1 ^= ecc_source_byte(sector, row[c]);
-        val2 ^= ecc_source_byte(sector, row[c]);
+    for byte in row.iter().take(ROWLEN) {
+        val1 ^= ecc_source_byte(sector, *byte);
+        val2 ^= ecc_source_byte(sector, *byte);
         val1 = ECC_LOW[val1 as usize];
     }
 

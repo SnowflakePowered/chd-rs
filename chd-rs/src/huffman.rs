@@ -285,8 +285,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         let mut histogram = [0u32; 33];
 
         // Fill in histogram of bit lengths.
-        for curr_code in 0..NUM_CODES {
-            let node = &huffnode_array[curr_code];
+        for node in huffnode_array.iter().take(NUM_CODES) {
             if node.num_bits > MAX_BITS {
                 return Err(HuffmanError::InternalInconsistency);
             }
@@ -306,8 +305,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         }
 
         // Assign codes.
-        for curr_code in 0..NUM_CODES {
-            let node = &mut huffnode_array[curr_code];
+        for node in huffnode_array.iter_mut().take(NUM_CODES) {
             if node.num_bits > 0 {
                 node.bits = histogram[node.num_bits as usize];
                 histogram[node.num_bits as usize] += 1;
@@ -321,8 +319,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
     }
 
     fn build_lookup_table(&mut self, huffnode_array: &[HuffmanNode<'a>; NUM_CODES]) {
-        for curr_code in 0..NUM_CODES {
-            let node = &huffnode_array[curr_code];
+        for (curr_code, node) in huffnode_array.iter().enumerate().take(NUM_CODES)  {
             if node.num_bits > 0 {
                 // Get entry
                 let value = Self::make_lookup(curr_code as u16, node.num_bits);

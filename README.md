@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     let hunk_size = chd.header().hunk_size();
     
     // buffer to store decompressed hunks
-    let mut out_buf = vec![0u8; hunk_size as usize];
+    let mut out_buf = chd.get_hunksized_buffer();
     
     // buffer for temporary compressed
     let mut temp_buf = Vec::new();
@@ -116,8 +116,8 @@ to change but should be considered mostly stable.
 In particular the type signature for [`HuffmanDecoder`](https://github.com/SnowflakePowered/chd-rs/blob/e03e093021f1705d46fe6aaa8b32593489e55467/chd-rs/src/huffman.rs#L110)
 is subject to change once [`generic_const_exprs`](https://github.com/rust-lang/rust/issues/76560) is stabilized.
 
-## `libchdr` API (WIP)
-⚠️*The C API is incomplete and heavily work in progress.* ⚠️
+## `libchdr` API
+⚠️*The C API has not been heavily tested. Use at your own risk.* ⚠️
 
 chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h). 
 ABI compatibility is detailed below but is untested when compiling as a dynamic library.
