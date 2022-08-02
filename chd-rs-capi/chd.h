@@ -9,10 +9,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/**
+ * Open a CHD for reading.
+ */
 #define CHD_OPEN_READ 1
 
+/**
+ * Open a CHD for reading and writing. This mode is not supported and will always return an error
+ * when passed into a constructor function such as [`chd_open`](crate::chd_open).
+ */
 #define CHD_OPEN_READWRITE 2
 
+/**
+ * The chunk size to read when pre-caching the underlying file stream into memory.
+ */
 #define PRECACHE_CHUNK_SIZE ((16 * 1024) * 1024)
 
 #define CHD_MD5_BYTES 16
@@ -158,6 +168,9 @@ typedef enum chd_error {
   CHDERR_UNKNOWN,
 } chd_error;
 
+/**
+ * An opaque type for an opened CHD file.
+ */
 typedef struct chd_file chd_file;
 
 /**
@@ -196,32 +209,73 @@ typedef void core_file;
 extern "C" {
 #endif // __cplusplus
 
-chd_error chd_open(const char *filename, int mode, struct chd_file *parent, struct chd_file **out);
+/**
+ * Opens a CHD file by file name, with a layout-undefined backing file pointer owned by
+ * the library.
+ *
+ * The result of passing an object created by this function into [`chd_core_file`](crate::chd_core_file)
+ * is strictly undefined. Instead, all `chd_file*` pointers with provenance from `chd_open` should be
+ * closed with [`chd_close`](crate::chd_close).
+ *
+ * # Safety
+ * * `filename` is a valid, null-terminated **UTF-8** string.
+ * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
+ */
+chd_error chd_open(const char *filename,
+                   int mode,
+                   struct chd_file *parent,
+                   struct chd_file **out);
 
 /**
  * Close a CHD file.
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * If `chd` is `NULL`, this does nothing.
  */
 void chd_close(struct chd_file *chd);
 
 /**
  * Returns an error string for the corresponding CHD error.
+ *
+ * # Safety
+ * The returned string is leaked and the memory **should not and can not ever** be validly freed.
+ * Attempting to free the returned pointer with `free` is **undefined behaviour**.
  */
 const char *chd_error_string(chd_error err);
 
 /**
  * Returns a pointer to the extracted CHD header data.
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * If `chd` is `NULL`, returns `NULL`.
+ * * The returned pointer is leaked and the memory **should not and can not ever** be validly freed. Attempting to free the returned pointer with `free` is **undefined behaviour**. A non-leaking variant is provided in [`chd_read_header`](crate::chd_read_header).
  */
 const struct chd_header *chd_get_header(const struct chd_file *chd);
 
 /**
  * Read a single hunk from the CHD file.
- * The output buffer must be initialized and have a length
- * of exactly the hunk size, or it is undefined behaviour.
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * `buffer` must an aligned pointer to a block of initialized memory of exactly the hunk size for the input `chd_file*` that is valid for both reads and writes. This size can be found with [`chd_get_header`](crate::chd_get_header).
+ * * If `chd` is `NULL`, returns `CHDERR_INVALID_PARAMETER`.
  */
-chd_error chd_read(struct chd_file *chd, uint32_t hunknum, void *buffer);
+chd_error chd_read(struct chd_file *chd,
+                   uint32_t hunknum,
+                   void *buffer);
 
 /**
  * Get indexed metadata of the given search tag and index.
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * `output` must be an aligned pointer to a block of initialized memory of size exactly `output_len` that is valid for writes.
+ * * `result_len` must be either NULL or an aligned pointer to a `uint32_t` that is valid for writes.
+ * * `result_tag` must be either NULL or an aligned pointer to a `uint32_t` that is valid for writes.
+ * * `result_flags` must be either NULL or an aligned pointer to a `uint8_t` that is valid for writes.
+ * * If `chd` is `NULL`, returns `CHDERR_INVALID_PARAMETER`.
  */
 chd_error chd_get_metadata(struct chd_file *chd,
                            uint32_t searchtag,
@@ -235,14 +289,20 @@ chd_error chd_get_metadata(struct chd_file *chd,
 /**
  * Set codec internal parameters.
  *
- * This function is not supported and always returns CHDERR_INVALID_PARAMETER.
+ * This function is not supported and always returns `CHDERR_INVALID_PARAMETER`.
  */
 chd_error chd_codec_config(const struct chd_file *_chd, int32_t _param, void *_config);
 
 /**
  * Read CHD header data from the file into the pointed struct.
+ *
+ * # Safety
+ * * `filename` is a valid, null-terminated **UTF-8** string.
+ * * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
+ * * If `header` is `NULL`, returns `CHDERR_INVALID_PARAMETER`
  */
-chd_error chd_read_header(const char *filename, struct chd_header *header);
+chd_error chd_read_header(const char *filename,
+                          struct chd_header *header);
 
 /**
  * Returns the associated core_file.
@@ -254,13 +314,20 @@ chd_error chd_read_header(const char *filename, struct chd_header *header);
  *
  * The provenance of the `chd_file*` is important to keep in mind.
  *
- * If the input `chd_file*` was opened with `chd_open`, the input `chd_file*` will be closed,
- * and the return value will be undefined. For now it is `NULL`, but this may change in the future.
+ * If the input `chd_file*` was opened with [`chd_open`](crate::chd_open), the input `chd_file*` will be closed,
+ * and the return value should be considered undefined. For now it is `NULL`, but relying on this
+ * behaviour is unstable and may change in the future.
  *
  * If the input `chd_file*` was opened with `chd_open_file` and the `chd_core_file` crate feature
  * is enabled, this method will return the same pointer as passed to `chd_input_file`, which may
  * be possible to cast to `FILE*` depending on the implementation of `libchdcorefile` that was
  * linked.
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * If `chd` is `NULL`, returns `NULL`.
+ * * If `chd` has provenance from [`chd_open`](crate::chd_open), the returned pointer is undefined and must not be used.
+ * * `chd` is **no longer valid** upon return of this function, and subsequent reuse of the `chd_file*` pointer is **undefined behaviour**.
  */
 core_file *chd_core_file(struct chd_file *chd);
 
@@ -269,14 +336,29 @@ core_file *chd_core_file(struct chd_file *chd);
  *
  * Ownership is taken of the `core_file*` object and should not be modified until
  * `chd_core_file` is called to retake ownership of the `core_file*`.
+ *
+ * # Safety
+ * * `file` is a valid pointer to a `core_file` with respect to the implementation of libchdcorefile that was linked.
+ * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
+ * * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
  */
-chd_error chd_open_file(core_file *file, int mode, struct chd_file *parent, struct chd_file **out);
+chd_error chd_open_file(core_file *file,
+                        int mode,
+                        struct chd_file *parent,
+                        struct chd_file **out);
 
 /**
  * Open an existing CHD file from an opened `core_file` object.
  *
  * Ownership is taken of the `core_file*` object and should not be modified until
  * `chd_core_file` is called to retake ownership of the `core_file*`.
+ *
+ * # Safety
+ * * `file` is a valid pointer to a `core_file` with respect to the implementation of libchdcorefile that was linked.
+ * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
+ * * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
  */
 chd_error chd_open_core_file(core_file *file,
                              int mode,
@@ -290,10 +372,46 @@ chd_error chd_open_core_file(core_file *file,
  */
 const char *chd_get_codec_name(uint32_t _codec);
 
+/**
+ * Precache the underlying file into memory with an optional callback to report progress.
+ *
+ * The underlying stream of the input `chd_file` is swapped with a layout-undefined in-memory stream.
+ *
+ * If the provenance of the original `chd_file` is from [`chd_open`](crate::chd_open), then the underlying
+ * stream is safely dropped.
+ *
+ * If instead the underlying stream is a `core_file` opened from [`chd_open_file`](crate::chd_open_file),
+ * or [`chd_open_core_file`](crate::chd_open_core_file), then the same semantics of calling [`chd_core_file`](crate::chd_core_file)
+ * applies, and ownership of the underlying stream is released to the caller.
+ *
+ * After precaching, the input `chd_file` no longer returns a valid inner stream when passed to [`chd_core_file`](crate::chd_core_file),
+ * and should be treated as having the same provenance as being from [`chd_open`](crate::chd_open).
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ */
 chd_error chd_precache_progress(struct chd_file *chd,
                                 void (*progress)(size_t pos, size_t total, void *param),
                                 void *param);
 
+/**
+ * Precache the underlying file into memory.
+ *
+ * The underlying stream of the input `chd_file` is swapped with a layout-undefined in-memory stream.
+ *
+ * If the provenance of the original `chd_file` is from [`chd_open`](crate::chd_open), then the underlying
+ * stream is safely dropped.
+ *
+ * If instead the underlying stream is a `core_file` opened from [`chd_open_file`](crate::chd_open_file),
+ * or [`chd_open_core_file`](crate::chd_open_core_file), then the same semantics of calling [`chd_core_file`](crate::chd_core_file)
+ * applies, and ownership of the underlying stream is released to the caller.
+ *
+ * After precaching, the input `chd_file` no longer returns a valid inner stream when passed to [`chd_core_file`](crate::chd_core_file),
+ * and should be treated as having the same provenance as being from [`chd_open`](crate::chd_open).
+ *
+ * # Safety
+ * * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
+ */
 chd_error chd_precache(struct chd_file *chd);
 
 #ifdef __cplusplus

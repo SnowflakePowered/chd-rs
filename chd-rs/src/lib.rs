@@ -34,7 +34,7 @@
 //! let hunk_size = chd.header().hunk_size();
 //!
 //! // buffer to store uncompressed hunk data must be the same length as the hunk size.
-//! let mut hunk_buf = vec![0u8; hunk_size as usize];
+//! let mut hunk_buf = chd.get_hunksized_buffer();
 //! // buffer to store compressed data.
 //! let mut cmp_buf = Vec::new();
 //!

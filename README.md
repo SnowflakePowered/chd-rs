@@ -120,24 +120,4 @@ is subject to change once [`generic_const_exprs`](https://github.com/rust-lang/r
 ⚠️*The C API has not been heavily tested. Use at your own risk.* ⚠️
 
 chd-rs provides a C API compatible with [chd.h](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h). 
-ABI compatibility is detailed below but is untested when compiling as a dynamic library.
-
-### `core_file*` support
-The functions `chd_open_file`, and `chd_core_file` will not be available unless the feature `chd_core_file` is enabled. 
-
-This is because `core_file*` is not an opaque pointer and is a C `FILE*` stream. This allows the underlying file pointer to be changed unsafely beneath 
-the memory safety guarantees of chd-rs. We strongly encourage using `chd_open` instead of `chd_open_file`.  
-
-If you need `core_file*` support, chd-capi should have the `chd_core_file` feature enabled, which will wrap 
-`FILE*` to be usable in Rust with a lightweight wrapper in `libchdcorefile`. If the default implementation
-is not suitable, you may need to implement `libchdcorefile` yourself. The `chd_core_file` feature requires
-CMake and Clang to be installed.
-
-### ABI compatibility
-
-chd-rs makes the following ABI-compatibility guarantees compared to libchdr when compiled statically.
-* `chd_error` is ABI and API-compatible with [chd.h](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/include/libchdr/chd.h#L258)
-* `chd_header` is ABI and API-compatible [chd.h](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/include/libchdr/chd.h#L302)
-* `chd_file *` is an opaque pointer. It is **not layout compatible** with [chd.c](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L265)
-* The layout of `core_file *` is user-defined when the `chd_core_file` feature is enabled.
-* Freeing any pointer returned by chd-rs with `free` is undefined behaviour. A `chd_file *` pointer can be safely freed with `chd_close`.
+ABI compatibility is detailed below but is untested when compiling as a dynamic library. See [/chd-rs-capi](https://github.com/SnowflakePowered/chd-rs/tree/master/chd-rs-capi) for more details.

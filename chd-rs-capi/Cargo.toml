@@ -2,8 +2,13 @@
 name = "chd-capi"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Ronny Chan <ronny@ronnychan.ca>"]
+description = "libchdr-compatible C API for a Rust implementation of the CHD File Format"
+license = "BSD-3-Clause"
+repository = "https://github.com/SnowflakePowered/chd-rs"
+readme = "README.md"
+categories = ["emulators", "compression", "encoding"]
+keywords = ["mame", "chd", "decompression"]
 
 [lib]
 crate-type = ["staticlib"]
@@ -13,11 +18,17 @@ default = []
 chd_core_file = ["bindgen", "cmake"]
 chd_virtio = ["chd_core_file"]
 chd_precache = []
+verify_block_crc = ["chd/verify_block_crc"]
 
 [dependencies]
-chd = "0.0.12"
+chd = "0.1"
 
 [build-dependencies]
 cbindgen = "0.23.0"
 bindgen = { version = "0.59.2", optional = true }
 cmake = { version =  "0.1.48", optional = true }
+
+
+[package.metadata.docs.rs]
+features = ["default", "chd_core_file", "chd_virtio", "chd_precache"]
+rustdoc-args = ["--cfg", "docsrs"]
