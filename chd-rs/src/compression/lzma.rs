@@ -127,8 +127,8 @@ impl CodecImplementation for LzmaCodec {
 
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
         let mut read = Cursor::new(input);
-        self.engine.reset();
         let len = output.len();
+        self.engine.reset(Some(Some(len as u64)));
         self.engine
             .decompress(&mut read, &mut output)
             .map_err(|_| ChdError::DecompressionError)?;
