@@ -6,8 +6,8 @@ use chd::ChdFile;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thousands::Separable;
@@ -22,6 +22,22 @@ fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
         std::io::ErrorKind::NotFound,
         "File not found or not a file.",
     ))
+}
+
+fn try_fourcc_to_u32(s: &str) -> anyhow::Result<u32> {
+    const fn make_tag(a: &[u8; 4]) -> u32 {
+        ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
+    }
+
+    let s = s.as_bytes();
+    let tag = [
+        s.get(0).map_or(b' ', |f| *f),
+        s.get(1).map_or(b' ', |f| *f),
+        s.get(2).map_or(b' ', |f| *f),
+        s.get(3).map_or(b' ', |f| *f)
+    ];
+
+    Ok(make_tag(&tag))
 }
 
 #[derive(Parser)]
@@ -58,7 +74,40 @@ enum Commands {
         /// parent file name for input CHD
         #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
         inputparent: Option<PathBuf>,
+    },
+    /// Verifies the integrity of a CHD
+    Dumpmeta {
+        /// input file name
+        #[clap(short, long, parse(try_from_os_str = validate_file_exists))]
+        input: PathBuf,
+        /// output file name
+        #[clap(short, long)]
+        output: Option<PathBuf>,
+        /// force overwriting an existing file
+        #[clap(short, long)]
+        force: bool,
+        /// 4-character tag for metadata
+        #[clap(short, long, parse(try_from_str = try_fourcc_to_u32))]
+        tag: u32,
+        #[clap(short = 'x', long, default_value = "0")]
+        index: u32,
+    },
+    /// Extract raw file from a CHD input file
+    Extractraw {
+        /// output file name
+        #[clap(short, long)]
+        output: PathBuf,
+        /// force overwriting an existing file
+        #[clap(short, long)]
+        force: bool,
+        /// input file name
+        #[clap(short, long, parse(try_from_os_str = validate_file_exists))]
+        input: PathBuf,
+        /// parent file name for input CHD
+        #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
+        inputparent: Option<PathBuf>,
     }
+
 }
 
 fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
@@ -360,12 +409,12 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn benchmark(p: impl AsRef<Path>) {
+fn benchmark(p: impl AsRef<Path>) -> anyhow::Result<()> {
     println!("\nchd-rs - rchdman benchmark");
-    let mut f = BufReader::new(File::open(p).expect("could not open file"));
+    let mut f = BufReader::new(File::open(p)?);
 
     let start = Instant::now();
-    let mut chd = ChdFile::open(&mut f, None).expect("file");
+    let mut chd = ChdFile::open(&mut f, None)?;
     let mut hunk_buf = chd.get_hunksized_buffer();
     let mut cmp_buf = Vec::new();
     let hunk_iter = chd.hunks();
@@ -385,13 +434,16 @@ fn benchmark(p: impl AsRef<Path>) {
         "Rate is {} MB/s",
         (bytes / (1024 * 1024)) as f64 / time.as_secs_f64()
     );
+
+    Ok(())
 }
 
-fn verify(input: &PathBuf, inputparent: Option<impl AsRef<Path>>) -> anyhow::Result<()> {
-    let f = File::open(input)?;
+fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> anyhow::Result<()> {
+    println!("\nchd-rs - rchdman verify");
+    let f = BufReader::new(File::open(input)?);
 
     let p = if let Some(parent) = inputparent {
-        let f = File::open(parent)?;
+        let f = BufReader::new(File::open(parent)?);
         let parent_chd = ChdFile::open(f, None)?;
         Some(Box::new(parent_chd))
     } else {
@@ -432,12 +484,75 @@ fn verify(input: &PathBuf, inputparent: Option<impl AsRef<Path>>) -> anyhow::Res
     Ok(())
 }
 
+fn dumpmeta(input: impl AsRef<Path>, output: Option<&PathBuf>, force: bool, tag: u32, index: u32) -> anyhow::Result<()> {
+    println!("\nchd-rs - rchdman dumpmeta");
+
+    let mut f = BufReader::new(File::open(input)?);
+    let mut chd = ChdFile::open(&mut f, None)?;
+
+    let metas = chd.metadata_refs().try_into_vec()?;
+    let tag = metas.iter().find(|p| p.metatag == tag && p.index == index)
+        .ok_or_else(|| anyhow!("Error reading metadata: can't find metadata"))?;
+
+    if let Some(output) = output {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(!force)
+            .create(true)
+            .truncate(true)
+            .open(output)?;
+        file.write_all(&*tag.value)?;
+        println!("File ({}) written, {} bytes", output.display(), tag.length)
+    } else {
+        println!("{}", String::from_utf8_lossy(&*tag.value));
+    }
+    Ok(())
+}
+
+fn extractraw(input: &PathBuf, inputparent: Option<impl AsRef<Path>>, output: &PathBuf, force: bool) -> anyhow::Result<()>{
+    println!("\nchd-rs - rchdman extractraw");
+    let mut output_file = BufWriter::new(OpenOptions::new()
+        .write(true)
+        .create_new(!force)
+        .create(true)
+        .truncate(true)
+        .open(output)?);
+
+    println!("Output File:  {}", output.display());
+    println!("Input CHD:    {}", input.display());
+
+    let f = BufReader::new(File::open(input)?);
+
+    let p = if let Some(parent) = inputparent {
+        let f = BufReader::new(File::open(parent)?);
+        let parent_chd = ChdFile::open(f, None)?;
+        Some(Box::new(parent_chd))
+    } else {
+        None
+    };
+
+    let mut chd = ChdFile::open(f, p)?;
+    let mut cmp_buf = Vec::new();
+    let mut out_buf = chd.get_hunksized_buffer();
+    let mut hunk_iter = chd.hunks();
+    while let Some(mut hunk) = hunk_iter.next() {
+        hunk.read_hunk_in(&mut cmp_buf, &mut out_buf)?;
+        output_file.write_all(&out_buf)?;
+    }
+    println!("Extraction complete");
+    output_file.flush()?;
+    Ok(())
+}
+
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Info { input, verbose } => info(input, *verbose)?,
-        Commands::Benchmark { input } => benchmark(input),
-        Commands::Verify { input, inputparent } => verify(input, inputparent.as_deref())?
+        Commands::Benchmark { input } => benchmark(input)?,
+        Commands::Verify { input, inputparent } => verify(input, inputparent.as_deref())?,
+        Commands::Dumpmeta { input, output, force, tag, index} => dumpmeta(input, output.as_ref(), *force, *tag, *index)?,
+        Commands::Extractraw { input, inputparent, force, output} => extractraw(input, inputparent.as_deref(), output, *force)?
     }
     Ok(())
 }

@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-chd = { path = "../chd-rs", features = ["unstable_lending_iterators"]}
+chd = { path = "../chd-rs", features = ["unstable_lending_iterators", "verify_block_crc"]}
 clap = { version = "3", features = ["derive"] }
 anyhow = "1"
 thousands = "0.2.0"
