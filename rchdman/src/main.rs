@@ -75,7 +75,7 @@ enum Commands {
         #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
         inputparent: Option<PathBuf>,
     },
-    /// Verifies the integrity of a CHD
+    /// Dump metadata from the CHD to stdout or to a file
     Dumpmeta {
         /// input file name
         #[clap(short, long, parse(try_from_os_str = validate_file_exists))]

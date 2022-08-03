@@ -116,6 +116,17 @@ to change but should be considered mostly stable.
 In particular the type signature for [`HuffmanDecoder`](https://github.com/SnowflakePowered/chd-rs/blob/e03e093021f1705d46fe6aaa8b32593489e55467/chd-rs/src/huffman.rs#L110)
 is subject to change once [`generic_const_exprs`](https://github.com/rust-lang/rust/issues/76560) is stabilized.
 
+## `rchdman` command line tool
+As a proof of concept, chd-rs implements an *extremely* basic reimplementation of chdman for read-only purposes. The following functions are available with rchdman.
+
+* `info` Displays information about a CHD.
+* `verify` Verify the integrity of a CHD. Metadata integrity is not verified.
+* `extractraw` Extract the raw file from a CHD input file.
+* `dumpmeta` Dump metadata from the CHD to stdout or to a file.
+
+The results from rchdman should be identical from chdman. rchdman is intended to be basic and does not implement multithreading or other functions, so in general it is slower than chdman. There are
+no plans to implement write-operations into rchdman.
+
 ## `libchdr` API
 ⚠️*The C API has not been heavily tested. Use at your own risk.* ⚠️
 
