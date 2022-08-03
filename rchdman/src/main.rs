@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use chd::header::{ChdHeader, CodecType};
 use chd::iter::LendingIterator;
-use chd::map::MapEntry;
+use chd::map::{LegacyEntryType, MapEntry, V5CompressionType};
 use chd::ChdFile;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
@@ -9,7 +9,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use thousands::Separable;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
@@ -99,7 +99,41 @@ fn print_hash(header: &ChdHeader) {
     }
 }
 
+fn codec_name(ty: CodecType) -> &'static str {
+    match ty {
+        CodecType::None => "Copy from self",
+        CodecType::Zlib => "Legacy zlib (Deflate)",
+        CodecType::ZlibPlus => "Legacy zlib+ (Deflate)",
+        CodecType::AV => "Legacy A/V",
+        CodecType::ZLibV5 => "Deflate",
+        CodecType::ZLibCdV5 => "CD Deflate",
+        CodecType::LzmaCdV5 => "CD LZMA",
+        CodecType::FlacCdV5 => "CD FLAC",
+        CodecType::FlacV5 => "FLAC",
+        CodecType::LzmaV5 => "LZMA",
+        CodecType::AVHuffV5 => "A/V Huffman",
+        CodecType::HuffV5 => "Huffman"
+    }
+}
+
 fn print_compression(header: &ChdHeader) {
+    fn to_chdman_compression_name(ty: CodecType) -> &'static str {
+        match ty {
+            CodecType::None => "none",
+            CodecType::Zlib => "Legacy zlib (Deflate)",
+            CodecType::ZlibPlus => "Legacy zlib+ (Deflate)",
+            CodecType::AV => "Legacy av (AV)",
+            CodecType::ZLibV5 => "zlib (Deflate)",
+            CodecType::ZLibCdV5 => "cdzl (CD Deflate)",
+            CodecType::LzmaCdV5 => "cdlz (CD LZMA)",
+            CodecType::FlacCdV5 => "cdfl (CD FLAC)",
+            CodecType::FlacV5 => "flac (FLAC)",
+            CodecType::LzmaV5 => "lzma (LZMA)",
+            CodecType::AVHuffV5 => "avhu (A/V Huffman)",
+            CodecType::HuffV5 => "huff (Huffman)"
+        }
+    }
+
     print!("Compression:\t");
     if !header.is_compressed() {
         println!("none");
@@ -108,20 +142,20 @@ fn print_compression(header: &ChdHeader) {
 
     match header {
         ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
-            println!("{:?}", CodecType::from_u32(h.compression).unwrap());
+            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
         }
         ChdHeader::V3Header(h) => {
-            println!("{:?}", CodecType::from_u32(h.compression).unwrap());
+            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
         }
         ChdHeader::V4Header(h) => {
-            println!("{:?}", CodecType::from_u32(h.compression).unwrap());
+            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
         }
         ChdHeader::V5Header(h) => {
             for compression in h.compression {
                 if compression == 0 {
                     break;
                 }
-                print!("{:?}, ", CodecType::from_u32(compression).unwrap());
+                print!("{}, ", to_chdman_compression_name(CodecType::from_u32(compression).unwrap()));
             }
             println!();
         }
@@ -135,7 +169,7 @@ fn to_fourcc(fourcc: u32) -> anyhow::Result<[char; 4]> {
         (fourcc >> 8) & 0xff,
         fourcc & 0xff,
     ];
-    let res = parts.map(|e| char::from_u32(e));
+    let res = parts.map(char::from_u32);
     if res.iter().any(|f| f.is_none()) {
         return Err(anyhow!("unable to parse"));
     }
@@ -143,18 +177,111 @@ fn to_fourcc(fourcc: u32) -> anyhow::Result<[char; 4]> {
 }
 
 fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
+    // can only have 4 comptypes.
+    // first four is for the four comp types.
+    // next four is NONE, SELF, PARENT, MINI, UNKNOWN
+    let mut hunk_count = [0u64; 9];
+
+    let num_hunks = chd.map().len();
+    println!();
     println!("     Hunks  Percent  Name");
     println!("----------  -------  ------------------------------------");
 
-    for i in 0..chd.map().len() {
+
+    for i in 0..num_hunks {
         let hunk = chd.map().get_entry(i).unwrap();
-        // v5 only
         match hunk {
-            MapEntry::V5Compressed(_) => {}
-            MapEntry::V5Uncompressed(_) => {}
-            MapEntry::LegacyEntry(_) => {}
+            MapEntry::V5Compressed(c) => {
+                match c.hunk_type()? {
+                    V5CompressionType::CompressionType0 => {
+                        hunk_count[0] += 1;
+                    }
+                    V5CompressionType::CompressionType1 => {
+                        hunk_count[1] += 1;
+                    }
+                    V5CompressionType::CompressionType2 => {
+                        hunk_count[2] += 1;
+                    }
+                    V5CompressionType::CompressionType3 => {
+                        hunk_count[3] += 1;
+                    }
+                    V5CompressionType::CompressionNone => {
+                        hunk_count[4] += 1;
+                    }
+                    V5CompressionType::CompressionSelf | V5CompressionType::CompressionSelf0 | V5CompressionType::CompressionSelf1 => {
+                        hunk_count[5] += 1;
+                    }
+                    V5CompressionType::CompressionParent
+                        | V5CompressionType::CompressionParentSelf | V5CompressionType::CompressionParent0 | V5CompressionType::CompressionParent1 => {}
+                    _ => {
+                        hunk_count[6] += 1;
+                    }
+                }
+            }
+            MapEntry::V5Uncompressed(_) => {
+                hunk_count[4] += 1;
+            }
+            MapEntry::LegacyEntry(c) => {
+                match c.hunk_type()? {
+                    LegacyEntryType::Invalid => {}
+                    LegacyEntryType::Compressed => {
+                        hunk_count[0] += 1;
+                    }
+                    LegacyEntryType::Uncompressed => {
+                        hunk_count[4] += 1;
+                    }
+                    LegacyEntryType::Mini => {
+                        hunk_count[7] += 1;
+                    }
+                    LegacyEntryType::SelfHunk => {
+                        hunk_count[5] += 1;
+                    }
+                    LegacyEntryType::ParentHunk => {
+                        hunk_count[6] += 1;
+                    }
+                    LegacyEntryType::ExternalCompressed => {
+                        // not sure this is valid.
+                        hunk_count[8] += 1;
+                    }
+                }
+            }
         }
     }
+
+    let results: Vec<(u64, f64, &'static str)> = hunk_count.iter().enumerate().map(|(i, count)| {
+        let percent = *count as f64 / num_hunks as f64;
+        let name = match i {
+            4 => "Uncompressed",
+            5 => "Copy from self",
+            6 => "Copy from parent",
+            7 => "Legacy 8-byte mini",
+            8 => "Unknown",
+            i => codec_name(CodecType::from_u32(match chd.header() {
+                ChdHeader::V1Header(h) => h.compression,
+                ChdHeader::V2Header(h) => h.compression,
+                ChdHeader::V3Header(h) => h.compression,
+                ChdHeader::V4Header(h) => h.compression,
+                ChdHeader::V5Header(h) => h.compression[i]
+            }).unwrap())
+        };
+        (*count, percent, name)
+    }).collect();
+
+
+    for (count, percent, name) in &results[4..] {
+        if *count == 0u64 {
+            continue;
+        }
+        println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+    }
+
+    for (count, percent, name) in &results[..4] {
+        if *count == 0u64 {
+            continue;
+        }
+        println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+    }
+
 
     Ok(())
 }
@@ -165,23 +292,21 @@ fn benchmark(p: impl AsRef<Path>) {
 
     let start = Instant::now();
     let mut chd = ChdFile::open(&mut f, None).expect("file");
-    let hunk_count = chd.header().hunk_count();
-    let hunk_size = chd.header().hunk_size() as usize;
     let mut hunk_buf = chd.get_hunksized_buffer();
     let mut cmp_buf = Vec::new();
+    let hunk_iter = chd.hunks();
     let mut bytes = 0;
-    let mut hunk_iter = chd.hunks();
     let mut hunk_num = 0;
-    while let Some(mut hunk) = hunk_iter.next() {
+
+    hunk_iter.for_each(|mut hunk| {
         bytes += hunk
             .read_hunk_in(&mut cmp_buf, &mut hunk_buf)
             .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
         hunk_num += 1;
-    }
-
+    });
 
     let time = Instant::now().saturating_duration_since(start);
-    println!("Read {} bytes in {} seconds", bytes, time.as_secs_f64());
+    println!("Read {} bytes ({} hunks) in {} seconds", bytes, hunk_num, time.as_secs_f64());
     println!(
         "Rate is {} MB/s",
         (bytes / (1024 * 1024)) as f64 / time.as_secs_f64()
@@ -247,13 +372,13 @@ fn main() -> anyhow::Result<()> {
                         );
                     }
                     print!("              \t");
-                    println!("{}", std::str::from_utf8(&meta.value).unwrap())
+                    println!("{}",meta.value.iter().map(|u| if u.is_ascii_alphanumeric() || u.is_ascii_whitespace() || u.is_ascii_punctuation() { *u as char } else { '.' }).collect::<String>());
                 }
             }
 
-            // if verbose {
-            //     print_verbose(&chd);
-            // }
+            if *verbose {
+                print_verbose(&chd)?;
+            }
         }
         Commands::Benchmark { input, .. } => benchmark(input),
     }
