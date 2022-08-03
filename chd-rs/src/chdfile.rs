@@ -368,6 +368,34 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
         }
     }
 
+    /// Read the raw, compressed contents of the hunk into the provided buffer.
+    ///
+    /// Returns the number of bytes read on success.
+    pub fn read_raw_in(&mut self, output: &mut Vec<u8>) -> Result<usize> {
+        let map_entry = self
+            .inner
+            .map()
+            .get_entry(self.hunk_num as usize)
+            .ok_or(ChdError::HunkOutOfRange)?;
+
+        let (offset, size) = match map_entry {
+            MapEntry::V5Compressed(map_entry) => {
+                (map_entry.block_offset()?, map_entry.block_size()?)
+            }
+            MapEntry::V5Uncompressed(map_entry) => {
+                (map_entry.block_offset()?, map_entry.block_size())
+            }
+            MapEntry::LegacyEntry(map_entry) => {
+                (map_entry.block_offset(), map_entry.block_size())
+            }
+        };
+
+        output.resize(size as usize, 0);
+        self.inner.file.seek(SeekFrom::Start(offset))?;
+        let read = self.inner.file.read(output)?;
+        Ok(read)
+    }
+
     #[allow(clippy::len_without_is_empty)]
     /// Returns the length of this hunk in bytes.
     pub fn len(&self) -> usize {
