@@ -11,6 +11,7 @@ use std::io::{BufReader, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thousands::Separable;
+use sha1::{Sha1, Digest};
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
@@ -48,246 +49,319 @@ enum Commands {
         /// input file name
         #[clap(short, long, parse(try_from_os_str = validate_file_exists))]
         input: PathBuf,
-
-        /// output additional information
-        #[clap(short, long)]
-        verbose: bool,
     },
-}
-
-fn get_file_version(chd: &ChdHeader) -> usize {
-    match chd {
-        ChdHeader::V1Header(_) => 1,
-        ChdHeader::V2Header(_) => 2,
-        ChdHeader::V3Header(_) => 3,
-        ChdHeader::V4Header(_) => 4,
-        ChdHeader::V5Header(_) => 5,
+    /// Verifies the integrity of a CHD
+    Verify {
+        /// input file name
+        #[clap(short, long, parse(try_from_os_str = validate_file_exists))]
+        input: PathBuf,
+        /// parent file name for input CHD
+        #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
+        inputparent: Option<PathBuf>,
     }
 }
 
-fn print_hash(header: &ChdHeader) {
-    match header {
-        ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
-            println!("MD5:\t\t{}", hex::encode(h.md5));
-            if header.has_parent() {
-                println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
-            }
+fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
+    fn get_file_version(chd: &ChdHeader) -> usize {
+        match chd {
+            ChdHeader::V1Header(_) => 1,
+            ChdHeader::V2Header(_) => 2,
+            ChdHeader::V3Header(_) => 3,
+            ChdHeader::V4Header(_) => 4,
+            ChdHeader::V5Header(_) => 5,
         }
-        ChdHeader::V3Header(h) => {
-            println!("MD5:\t\t{}", hex::encode(h.md5));
-            if header.has_parent() {
-                println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
+    }
+
+    fn print_hash(header: &ChdHeader) {
+        match header {
+            ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
+                println!("MD5:\t\t{}", hex::encode(h.md5));
+                if header.has_parent() {
+                    println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
+                }
             }
-            println!("SHA1:\t\t{}", hex::encode(h.sha1));
-            if header.has_parent() {
-                println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+            ChdHeader::V3Header(h) => {
+                println!("MD5:\t\t{}", hex::encode(h.md5));
+                if header.has_parent() {
+                    println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
+                }
+                println!("SHA1:\t\t{}", hex::encode(h.sha1));
+                if header.has_parent() {
+                    println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+                }
             }
-        }
-        ChdHeader::V4Header(h) => {
-            println!("SHA1:\t\t{}", hex::encode(h.sha1));
-            if header.has_parent() {
-                println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+            ChdHeader::V4Header(h) => {
+                println!("SHA1:\t\t{}", hex::encode(h.sha1));
+                if header.has_parent() {
+                    println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+                }
             }
-        }
-        ChdHeader::V5Header(h) => {
-            println!("SHA1:\t\t{}", hex::encode(h.sha1));
-            println!("Data SHA1:\t{}", hex::encode(h.raw_sha1));
-            if header.has_parent() {
-                println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+            ChdHeader::V5Header(h) => {
+                println!("SHA1:\t\t{}", hex::encode(h.sha1));
+                println!("Data SHA1:\t{}", hex::encode(h.raw_sha1));
+                if header.has_parent() {
+                    println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
+                }
             }
         }
     }
-}
 
-fn codec_name(ty: CodecType) -> &'static str {
-    match ty {
-        CodecType::None => "Copy from self",
-        CodecType::Zlib => "Legacy zlib (Deflate)",
-        CodecType::ZlibPlus => "Legacy zlib+ (Deflate)",
-        CodecType::AV => "Legacy A/V",
-        CodecType::ZLibV5 => "Deflate",
-        CodecType::ZLibCdV5 => "CD Deflate",
-        CodecType::LzmaCdV5 => "CD LZMA",
-        CodecType::FlacCdV5 => "CD FLAC",
-        CodecType::FlacV5 => "FLAC",
-        CodecType::LzmaV5 => "LZMA",
-        CodecType::AVHuffV5 => "A/V Huffman",
-        CodecType::HuffV5 => "Huffman"
-    }
-}
-
-fn print_compression(header: &ChdHeader) {
-    fn to_chdman_compression_name(ty: CodecType) -> &'static str {
+    fn codec_name(ty: CodecType) -> &'static str {
         match ty {
-            CodecType::None => "none",
+            CodecType::None => "Copy from self",
             CodecType::Zlib => "Legacy zlib (Deflate)",
             CodecType::ZlibPlus => "Legacy zlib+ (Deflate)",
-            CodecType::AV => "Legacy av (AV)",
-            CodecType::ZLibV5 => "zlib (Deflate)",
-            CodecType::ZLibCdV5 => "cdzl (CD Deflate)",
-            CodecType::LzmaCdV5 => "cdlz (CD LZMA)",
-            CodecType::FlacCdV5 => "cdfl (CD FLAC)",
-            CodecType::FlacV5 => "flac (FLAC)",
-            CodecType::LzmaV5 => "lzma (LZMA)",
-            CodecType::AVHuffV5 => "avhu (A/V Huffman)",
-            CodecType::HuffV5 => "huff (Huffman)"
+            CodecType::AV => "Legacy A/V",
+            CodecType::ZLibV5 => "Deflate",
+            CodecType::ZLibCdV5 => "CD Deflate",
+            CodecType::LzmaCdV5 => "CD LZMA",
+            CodecType::FlacCdV5 => "CD FLAC",
+            CodecType::FlacV5 => "FLAC",
+            CodecType::LzmaV5 => "LZMA",
+            CodecType::AVHuffV5 => "A/V Huffman",
+            CodecType::HuffV5 => "Huffman"
         }
     }
 
-    print!("Compression:\t");
-    if !header.is_compressed() {
-        println!("none");
-        return;
-    }
-
-    match header {
-        ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
-            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
-        }
-        ChdHeader::V3Header(h) => {
-            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
-        }
-        ChdHeader::V4Header(h) => {
-            println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
-        }
-        ChdHeader::V5Header(h) => {
-            for compression in h.compression {
-                if compression == 0 {
-                    break;
-                }
-                print!("{}, ", to_chdman_compression_name(CodecType::from_u32(compression).unwrap()));
+    fn print_compression(header: &ChdHeader) {
+        fn to_chdman_compression_name(ty: CodecType) -> &'static str {
+            match ty {
+                CodecType::None => "none",
+                CodecType::Zlib => "Legacy zlib (Deflate)",
+                CodecType::ZlibPlus => "Legacy zlib+ (Deflate)",
+                CodecType::AV => "Legacy av (AV)",
+                CodecType::ZLibV5 => "zlib (Deflate)",
+                CodecType::ZLibCdV5 => "cdzl (CD Deflate)",
+                CodecType::LzmaCdV5 => "cdlz (CD LZMA)",
+                CodecType::FlacCdV5 => "cdfl (CD FLAC)",
+                CodecType::FlacV5 => "flac (FLAC)",
+                CodecType::LzmaV5 => "lzma (LZMA)",
+                CodecType::AVHuffV5 => "avhu (A/V Huffman)",
+                CodecType::HuffV5 => "huff (Huffman)"
             }
-            println!();
+        }
+
+        print!("Compression:\t");
+        if !header.is_compressed() {
+            println!("none");
+            return;
+        }
+
+        match header {
+            ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
+                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+            }
+            ChdHeader::V3Header(h) => {
+                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+            }
+            ChdHeader::V4Header(h) => {
+                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+            }
+            ChdHeader::V5Header(h) => {
+                for compression in h.compression {
+                    if compression == 0 {
+                        break;
+                    }
+                    print!("{}, ", to_chdman_compression_name(CodecType::from_u32(compression).unwrap()));
+                }
+                println!();
+            }
         }
     }
-}
 
-fn to_fourcc(fourcc: u32) -> anyhow::Result<[char; 4]> {
-    let parts = [
-        (fourcc >> 24) & 0xff,
-        (fourcc >> 16) & 0xff,
-        (fourcc >> 8) & 0xff,
-        fourcc & 0xff,
-    ];
-    let res = parts.map(char::from_u32);
-    if res.iter().any(|f| f.is_none()) {
-        return Err(anyhow!("unable to parse"));
+    fn to_fourcc(fourcc: u32) -> anyhow::Result<[char; 4]> {
+        let parts = [
+            (fourcc >> 24) & 0xff,
+            (fourcc >> 16) & 0xff,
+            (fourcc >> 8) & 0xff,
+            fourcc & 0xff,
+        ];
+        let res = parts.map(char::from_u32);
+        if res.iter().any(|f| f.is_none()) {
+            return Err(anyhow!("unable to parse"));
+        }
+        Ok(res.map(Option::unwrap))
     }
-    Ok(res.map(Option::unwrap))
-}
 
-fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
-    // can only have 4 comptypes.
-    // first four is for the four comp types.
-    // next four is NONE, SELF, PARENT, MINI, UNKNOWN
-    let mut hunk_count = [0u64; 9];
+    fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
+        // can only have 4 comptypes.
+        // first four is for the four comp types.
+        // next four is NONE, SELF, PARENT, MINI, UNKNOWN
+        let mut hunk_count = [0u64; 9];
 
-    let num_hunks = chd.map().len();
-    println!();
-    println!("     Hunks  Percent  Name");
-    println!("----------  -------  ------------------------------------");
+        let num_hunks = chd.map().len();
+        println!();
+        println!("     Hunks  Percent  Name");
+        println!("----------  -------  ------------------------------------");
 
 
-    for i in 0..num_hunks {
-        let hunk = chd.map().get_entry(i).unwrap();
-        match hunk {
-            MapEntry::V5Compressed(c) => {
-                match c.hunk_type()? {
-                    V5CompressionType::CompressionType0 => {
-                        hunk_count[0] += 1;
-                    }
-                    V5CompressionType::CompressionType1 => {
-                        hunk_count[1] += 1;
-                    }
-                    V5CompressionType::CompressionType2 => {
-                        hunk_count[2] += 1;
-                    }
-                    V5CompressionType::CompressionType3 => {
-                        hunk_count[3] += 1;
-                    }
-                    V5CompressionType::CompressionNone => {
-                        hunk_count[4] += 1;
-                    }
-                    V5CompressionType::CompressionSelf | V5CompressionType::CompressionSelf0 | V5CompressionType::CompressionSelf1 => {
-                        hunk_count[5] += 1;
-                    }
-                    V5CompressionType::CompressionParent
+        for i in 0..num_hunks {
+            let hunk = chd.map().get_entry(i).unwrap();
+            match hunk {
+                MapEntry::V5Compressed(c) => {
+                    match c.hunk_type()? {
+                        V5CompressionType::CompressionType0 => {
+                            hunk_count[0] += 1;
+                        }
+                        V5CompressionType::CompressionType1 => {
+                            hunk_count[1] += 1;
+                        }
+                        V5CompressionType::CompressionType2 => {
+                            hunk_count[2] += 1;
+                        }
+                        V5CompressionType::CompressionType3 => {
+                            hunk_count[3] += 1;
+                        }
+                        V5CompressionType::CompressionNone => {
+                            hunk_count[4] += 1;
+                        }
+                        V5CompressionType::CompressionSelf | V5CompressionType::CompressionSelf0 | V5CompressionType::CompressionSelf1 => {
+                            hunk_count[5] += 1;
+                        }
+                        V5CompressionType::CompressionParent
                         | V5CompressionType::CompressionParentSelf | V5CompressionType::CompressionParent0 | V5CompressionType::CompressionParent1 => {}
-                    _ => {
-                        hunk_count[6] += 1;
+                        _ => {
+                            hunk_count[6] += 1;
+                        }
+                    }
+                }
+                MapEntry::V5Uncompressed(_) => {
+                    hunk_count[4] += 1;
+                }
+                MapEntry::LegacyEntry(c) => {
+                    match c.hunk_type()? {
+                        LegacyEntryType::Invalid => {}
+                        LegacyEntryType::Compressed => {
+                            hunk_count[0] += 1;
+                        }
+                        LegacyEntryType::Uncompressed => {
+                            hunk_count[4] += 1;
+                        }
+                        LegacyEntryType::Mini => {
+                            hunk_count[7] += 1;
+                        }
+                        LegacyEntryType::SelfHunk => {
+                            hunk_count[5] += 1;
+                        }
+                        LegacyEntryType::ParentHunk => {
+                            hunk_count[6] += 1;
+                        }
+                        LegacyEntryType::ExternalCompressed => {
+                            // not sure this is valid.
+                            hunk_count[8] += 1;
+                        }
                     }
                 }
             }
-            MapEntry::V5Uncompressed(_) => {
-                hunk_count[4] += 1;
+        }
+
+        let results: Vec<(u64, f64, &'static str)> = hunk_count.iter().enumerate().map(|(i, count)| {
+            let percent = *count as f64 / num_hunks as f64;
+            let name = match i {
+                4 => "Uncompressed",
+                5 => "Copy from self",
+                6 => "Copy from parent",
+                7 => "Legacy 8-byte mini",
+                8 => "Unknown",
+                i => codec_name(CodecType::from_u32(match chd.header() {
+                    ChdHeader::V1Header(h) => h.compression,
+                    ChdHeader::V2Header(h) => h.compression,
+                    ChdHeader::V3Header(h) => h.compression,
+                    ChdHeader::V4Header(h) => h.compression,
+                    ChdHeader::V5Header(h) => h.compression[i]
+                }).unwrap())
+            };
+            (*count, percent, name)
+        }).collect();
+
+
+        for (count, percent, name) in &results[4..] {
+            if *count == 0u64 {
+                continue;
             }
-            MapEntry::LegacyEntry(c) => {
-                match c.hunk_type()? {
-                    LegacyEntryType::Invalid => {}
-                    LegacyEntryType::Compressed => {
-                        hunk_count[0] += 1;
-                    }
-                    LegacyEntryType::Uncompressed => {
-                        hunk_count[4] += 1;
-                    }
-                    LegacyEntryType::Mini => {
-                        hunk_count[7] += 1;
-                    }
-                    LegacyEntryType::SelfHunk => {
-                        hunk_count[5] += 1;
-                    }
-                    LegacyEntryType::ParentHunk => {
-                        hunk_count[6] += 1;
-                    }
-                    LegacyEntryType::ExternalCompressed => {
-                        // not sure this is valid.
-                        hunk_count[8] += 1;
-                    }
-                }
+            println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+        }
+
+        for (count, percent, name) in &results[..4] {
+            if *count == 0u64 {
+                continue;
             }
+            println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+        }
+
+
+        Ok(())
+    }
+
+    println!("\nchd-rs - rchdman info");
+    let mut f = File::open(input)?;
+    let fsize = f.metadata()?.len();
+    let mut chd = ChdFile::open(&mut f, None)?;
+    println!("Input file:\t{}", input.display());
+    println!("File Version:\t{}", get_file_version(chd.header()));
+    println!(
+        "Logical size:\t{} bytes",
+        chd.header().logical_bytes().separate_with_commas()
+    );
+    println!(
+        "Hunk Size:\t{} bytes",
+        chd.header().hunk_size().separate_with_commas()
+    );
+    println!(
+        "Total Hunks:\t{}",
+        chd.header().hunk_count().separate_with_commas()
+    );
+    println!(
+        "Unit Size:\t{} bytes",
+        chd.header().unit_bytes().separate_with_commas()
+    );
+    println!(
+        "Total Units:\t{}",
+        chd.header().unit_count().separate_with_commas()
+    );
+    print_compression(chd.header());
+    println!("CHD size:\t{} bytes", fsize.separate_with_commas());
+
+    if chd.header().is_compressed() {
+        println!(
+            "Ratio:\t\t{:.1}%",
+            100.0 * fsize as f64 / chd.header().logical_bytes() as f64
+        );
+    }
+
+    // hash
+    print_hash(chd.header());
+
+    if let Ok(metadata) = chd.metadata_refs().try_into_vec() {
+        for meta in metadata {
+            let tag = to_fourcc(meta.metatag);
+            if let Ok(tag) = tag {
+                println!(
+                    "Metadata:\tTag='{}'  Index={}  Length={} bytes",
+                    tag.iter().collect::<String>(),
+                    meta.index,
+                    meta.length
+                );
+            } else {
+                println!(
+                    "Metadata:\tTag={:0x}  Index={}  Length={} bytes",
+                    meta.metatag, meta.index, meta.length
+                );
+            }
+            print!("              \t");
+            println!("{}",meta.value.iter().map(|u| if u.is_ascii_alphanumeric() || u.is_ascii_whitespace() || u.is_ascii_punctuation() { *u as char } else { '.' }).collect::<String>());
         }
     }
 
-    let results: Vec<(u64, f64, &'static str)> = hunk_count.iter().enumerate().map(|(i, count)| {
-        let percent = *count as f64 / num_hunks as f64;
-        let name = match i {
-            4 => "Uncompressed",
-            5 => "Copy from self",
-            6 => "Copy from parent",
-            7 => "Legacy 8-byte mini",
-            8 => "Unknown",
-            i => codec_name(CodecType::from_u32(match chd.header() {
-                ChdHeader::V1Header(h) => h.compression,
-                ChdHeader::V2Header(h) => h.compression,
-                ChdHeader::V3Header(h) => h.compression,
-                ChdHeader::V4Header(h) => h.compression,
-                ChdHeader::V5Header(h) => h.compression[i]
-            }).unwrap())
-        };
-        (*count, percent, name)
-    }).collect();
-
-
-    for (count, percent, name) in &results[4..] {
-        if *count == 0u64 {
-            continue;
-        }
-        println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+    if verbose {
+        print_verbose(&chd)?;
     }
-
-    for (count, percent, name) in &results[..4] {
-        if *count == 0u64 {
-            continue;
-        }
-        println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
-    }
-
 
     Ok(())
 }
 
 fn benchmark(p: impl AsRef<Path>) {
-    println!("\nchd-rs benchmark tool....");
+    println!("\nchd-rs - rchdman benchmark");
     let mut f = BufReader::new(File::open(p).expect("could not open file"));
 
     let start = Instant::now();
@@ -313,74 +387,57 @@ fn benchmark(p: impl AsRef<Path>) {
     );
 }
 
+fn verify(input: &PathBuf, inputparent: Option<impl AsRef<Path>>) -> anyhow::Result<()> {
+    let f = File::open(input)?;
+
+    let p = if let Some(parent) = inputparent {
+        let f = File::open(parent)?;
+        let parent_chd = ChdFile::open(f, None)?;
+        Some(Box::new(parent_chd))
+    } else {
+        None
+    };
+
+    let mut chd = ChdFile::open(f, p)?;
+
+    let header = chd.header();
+    if !header.is_compressed() {
+        return Err(anyhow!("No verification to be done; CHD is uncompressed"))
+    }
+
+    let raw_sha1 = match header {
+        ChdHeader::V3Header(h) => h.sha1,
+        ChdHeader::V4Header(h) => h.raw_sha1,
+        ChdHeader::V5Header(h) => h.raw_sha1,
+        _ => return Err(anyhow!("No verification to be done; CHD has no checksum"))
+    };
+
+    let mut hasher = Sha1::new();
+    let mut out_buf = chd.get_hunksized_buffer();
+    let mut hunk_iter = chd.hunks();
+    let mut comp_buffer = Vec::new();
+    while let Some(mut hunk) = hunk_iter.next() {
+        hunk.read_hunk_in(&mut comp_buffer, &mut out_buf)?;
+        hasher.update(&out_buf);
+    }
+    let raw_result = hasher.finalize();
+
+    if raw_result[..] == raw_sha1[..] {
+        println!("Raw SHA1 verification successful!");
+    } else {
+        eprintln!("Error: Raw SHA1 in header = {}\n              actual SHA1 = {}\n", hex::encode(raw_sha1), hex::encode(raw_result));
+    }
+
+    // todo: full verification
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match &cli.command {
-        Commands::Info { input, verbose } => {
-            let mut f = File::open(input)?;
-            let fsize = f.metadata()?.len();
-            let mut chd = ChdFile::open(&mut f, None)?;
-            println!("Input file:\t{}", input.display());
-            println!("File Version:\t{}", get_file_version(chd.header()));
-            println!(
-                "Logical size:\t{} bytes",
-                chd.header().logical_bytes().separate_with_commas()
-            );
-            println!(
-                "Hunk Size:\t{} bytes",
-                chd.header().hunk_size().separate_with_commas()
-            );
-            println!(
-                "Total Hunks:\t{}",
-                chd.header().hunk_count().separate_with_commas()
-            );
-            println!(
-                "Unit Size:\t{} bytes",
-                chd.header().unit_bytes().separate_with_commas()
-            );
-            println!(
-                "Total Units:\t{}",
-                chd.header().unit_count().separate_with_commas()
-            );
-            print_compression(chd.header());
-            println!("CHD size:\t{} bytes", fsize.separate_with_commas());
-
-            if chd.header().is_compressed() {
-                println!(
-                    "Ratio:\t\t{:.1}%",
-                    100.0 * fsize as f64 / chd.header().logical_bytes() as f64
-                );
-            }
-
-            // hash
-            print_hash(chd.header());
-
-            if let Ok(metadata) = chd.metadata_refs().try_into_vec() {
-                for meta in metadata {
-                    let tag = to_fourcc(meta.metatag);
-                    if let Ok(tag) = tag {
-                        println!(
-                            "Metadata:\tTag='{}'  Index={}  Length={} bytes",
-                            tag.iter().collect::<String>(),
-                            meta.index,
-                            meta.length
-                        );
-                    } else {
-                        println!(
-                            "Metadata:\tTag={:0x}  Index={}  Length={} bytes",
-                            meta.metatag, meta.index, meta.length
-                        );
-                    }
-                    print!("              \t");
-                    println!("{}",meta.value.iter().map(|u| if u.is_ascii_alphanumeric() || u.is_ascii_whitespace() || u.is_ascii_punctuation() { *u as char } else { '.' }).collect::<String>());
-                }
-            }
-
-            if *verbose {
-                print_verbose(&chd)?;
-            }
-        }
-        Commands::Benchmark { input, .. } => benchmark(input),
+        Commands::Info { input, verbose } => info(input, *verbose)?,
+        Commands::Benchmark { input } => benchmark(input),
+        Commands::Verify { input, inputparent } => verify(input, inputparent.as_deref())?
     }
     Ok(())
 }
