@@ -343,7 +343,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                     }
                 }
             }
-            MapEntry::LegacyEntry(_) => Err(ChdError::InvalidParameter)
+            MapEntry::LegacyEntry(_) => Err(ChdError::InvalidParameter),
         }
     }
 
@@ -385,9 +385,7 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
             MapEntry::V5Uncompressed(map_entry) => {
                 (map_entry.block_offset()?, map_entry.block_size())
             }
-            MapEntry::LegacyEntry(map_entry) => {
-                (map_entry.block_offset(), map_entry.block_size())
-            }
+            MapEntry::LegacyEntry(map_entry) => (map_entry.block_offset(), map_entry.block_size()),
         };
 
         output.resize(size as usize, 0);

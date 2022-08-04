@@ -14,17 +14,29 @@ use num_traits::FromPrimitive;
 #[derive(FromPrimitive, Copy, Clone)]
 #[repr(u32)]
 pub enum KnownMetadata {
+    /// Wildcard for search (0)
     Wildcard = 0,
+    /// Hard Disk (`GDDD`)
     HardDisk = make_tag(b"GDDD"),
+    /// Hard Disk Identifier (`IDNT`)
     HardDiskIdent = make_tag(b"IDNT"),
+    /// Hard Disk Key (`KEY `)
     HardDiskKey = make_tag(b"KEY "),
+    /// PCMCIA Card Information (`CIS `)
     PcmciaCIS = make_tag(b"CIS "),
+    /// Legacy CD-ROM metadata (`CHCD`)
     CdRomOld = make_tag(b"CHCD"),
+    /// CD-ROM track metadata (`CHTR`)
     CdRomTrack = make_tag(b"CHTR"),
+    /// CD-ROM track metadata (`CHT2`)
     CdRomTrack2 = make_tag(b"CHT2"),
+    /// Legacy GD-ROM metadata (`CHGT`)
     GdRomOld = make_tag(b"CHGT"),
+    /// GD-ROM track metadata (`CHGD`)
     GdRomTrack = make_tag(b"CHGD"),
+    /// A/V metadata (`AVAV`)
     AudioVideo = make_tag(b"AVAV"),
+    /// LaserDisc A/V metadata (`AVLD`)
     AudioVideoLaserDisc = make_tag(b"AVLD"),
 }
 

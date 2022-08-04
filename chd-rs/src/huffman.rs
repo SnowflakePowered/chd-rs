@@ -319,7 +319,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
     }
 
     fn build_lookup_table(&mut self, huffnode_array: &[HuffmanNode<'a>; NUM_CODES]) {
-        for (curr_code, node) in huffnode_array.iter().enumerate().take(NUM_CODES)  {
+        for (curr_code, node) in huffnode_array.iter().enumerate().take(NUM_CODES) {
             if node.num_bits > 0 {
                 // Get entry
                 let value = Self::make_lookup(curr_code as u16, node.num_bits);

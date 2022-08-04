@@ -2,11 +2,11 @@
 //! These APIs should be considered unstable and will be replaced with APIs
 //! based around GATs and `LendingIterator` once stabilized. See [rust#44265](https://github.com/rust-lang/rust/issues/44265)
 //! for the tracking issue on GAT stabilization.
+use crate::metadata::{ChdMetadata, ChdMetadataTag, MetadataRef, MetadataRefIter};
 use crate::Result;
 use crate::{ChdFile, ChdHunk};
-use std::io::{Read, Seek};
 use lending_iterator::prelude::*;
-use crate::metadata::{ChdMetadata, ChdMetadataTag, MetadataRef, MetadataRefIter};
+use std::io::{Read, Seek};
 
 #[::nougat::gat(Item)]
 /// A `LendingIterator` definition re-exported from the [lending-iterator](https://crates.io/crates/lending-iterator)
@@ -39,8 +39,9 @@ impl<'a, F: Read + Seek> HunkIter<'a, F> {
 #[::nougat::gat]
 impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
     type Item<'next>
-        where
-            Self: 'next, = ChdHunk<'next, F>;
+    where
+        Self: 'next,
+    = ChdHunk<'next, F>;
 
     fn next(&'_ mut self) -> Option<ChdHunk<'_, F>> {
         if self.current_hunk == self.last_hunk {
@@ -86,8 +87,9 @@ impl<'a, F: Read + Seek + 'a> ChdMetadataTag for MetadataEntry<'a, F> {
 #[::nougat::gat]
 impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
     type Item<'next>
-        where
-            Self: 'next, = MetadataEntry<'next, F>;
+    where
+        Self: 'next,
+    = MetadataEntry<'next, F>;
 
     fn next(&'_ mut self) -> Option<Item<'_, Self>> {
         let next = self.inner.next();

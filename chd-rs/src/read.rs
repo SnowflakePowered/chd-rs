@@ -160,32 +160,31 @@ impl<F: Read + Seek> Seek for ChdFileReader<F> {
             SeekFrom::Start(n) => {
                 if n >= len {
                     self.eof = true;
-                    return Ok(len)
+                    return Ok(len);
                 }
                 let hunk_num = n / hunk_size as u64;
                 let hunk_off = n % hunk_size as u64;
                 return if let Ok(mut hunk) = self.chd.hunk(hunk_num as u32) {
                     self.eof = false;
                     self.current_hunk = hunk_num as u32;
-                    let mut buf_read = ChdHunkBufReader::new_in(&mut hunk,
-                                                                &mut self.cmp_buf,
-                                                                Vec::new())?;
+                    let mut buf_read =
+                        ChdHunkBufReader::new_in(&mut hunk, &mut self.cmp_buf, Vec::new())?;
                     buf_read.inner.seek(SeekFrom::Start(hunk_off))?;
                     self.buf_read = Some(buf_read);
                     Ok(n)
                 } else {
                     self.eof = true;
                     Ok(n)
-                }
-            },
+                };
+            }
             SeekFrom::End(n) => (len, n),
             SeekFrom::Current(n) => {
                 let hunk_pos = match &self.buf_read {
                     None => 0,
-                    Some(hunk) => hunk.inner.position()
+                    Some(hunk) => hunk.inner.position(),
                 };
                 (hunk_pos, n)
-            },
+            }
         };
 
         // todo: !#[feature(mixed_integer_ops)]
@@ -194,23 +193,22 @@ impl<F: Read + Seek> Seek for ChdFileReader<F> {
                 let n = n as u64;
                 if n >= len {
                     self.eof = true;
-                    return Ok(len)
+                    return Ok(len);
                 }
                 let hunk_num = n / hunk_size as u64;
                 let hunk_off = n % hunk_size as u64;
                 return if let Ok(mut hunk) = self.chd.hunk(hunk_num as u32) {
                     self.eof = false;
                     self.current_hunk = hunk_num as u32;
-                    let mut buf_read = ChdHunkBufReader::new_in(&mut hunk,
-                                                                &mut self.cmp_buf,
-                                                                Vec::new())?;
+                    let mut buf_read =
+                        ChdHunkBufReader::new_in(&mut hunk, &mut self.cmp_buf, Vec::new())?;
                     buf_read.inner.seek(SeekFrom::Start(hunk_off))?;
                     self.buf_read = Some(buf_read);
                     Ok(n)
                 } else {
                     self.eof = true;
                     Ok(n)
-                }
+                };
             }
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
