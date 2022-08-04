@@ -47,7 +47,7 @@ hunk level. A buffered adapter at the file level is also available.
 
 ### Lending Iterators
 With `unstable_lending_iterators`, hunks and metadata can be slightly more ergonomically iterated over
-albeit with a `while let` loop. This API is unstable until [Generalized Associated Types](https://github.com/rust-lang/rust/pull/96709)
+albeit with a `while let` loop. This API is unstable until [Generic Associated Types](https://github.com/rust-lang/rust/pull/96709)
 and the `LendingIterator` trait is stabilized.
 
 
@@ -60,7 +60,7 @@ Then hunks can be iterated like so.
 
 ```rust
 fn main() -> Result<()> {
-    let mut f = BufReader::new(File::open("image.chd")?;
+    let mut f = BufReader::new(File::open("image.chd")?);
     let mut chd = ChdFile::open(&mut f, None)?;
     
     // buffer to store decompressed hunks

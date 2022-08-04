@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
@@ -9,23 +9,27 @@ repository = "https://github.com/SnowflakePowered/chd-rs"
 readme = "../README.md"
 categories = ["emulators", "compression", "encoding"]
 keywords = ["mame", "chd", "decompression"]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = ["want_subcode", "want_raw_data_sector"]
+
+# disabled by default for speed
 verify_block_crc = ["want_subcode", "want_raw_data_sector"]
-want_subcode = []
-want_raw_data_sector = []
+
 huffman_api = []
 codec_api = []
-docsrs = []
 unstable_lending_iterators = [ "lending-iterator", "nougat" ]
+fast_zlib = ["flate2/zlib-ng"]
+
+# if
+want_subcode = []
+want_raw_data_sector = []
 
 [dependencies]
 byteorder = "1"
 num-traits = "0.2"
 num-derive = "0.3"
-regex = { version = "1", features = ["std", "perf"] }
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
 once_cell = "1.10.0"
 flate2 = "1"
 lzma-rs = { package = "lzma-rs-headerless", version = "0.5.3", features = ["raw_decoder"] }
