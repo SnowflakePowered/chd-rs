@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_cfg_hide))]
-// `unsound_owning_iterators` is quite literally unsound, so we don't need to condition on that.
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
 //! for CHD V1-5.

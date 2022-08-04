@@ -24,19 +24,33 @@ const MAP_ENTRY_FLAG_NO_CRC: u8 = 0x10; // no crc is present
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
 pub enum V5CompressionType {
+    /// The first compression codec specified in the header for this CHD.
     CompressionType0 = 0,
+    /// The second compression codec specified in the header for this CHD.
     CompressionType1 = 1,
+    /// The third compression codec specified in the header for this CHD.
     CompressionType2 = 2,
+    /// The fourth compression codec specified in the header for this CHD.
     CompressionType3 = 3,
+    /// Uncompressed hunk.
     CompressionNone = 4,
+    /// Copy from another hunk in this CHD.
     CompressionSelf = 5,
+    /// Copy from another hunk in the parent CHD.
     CompressionParent = 6,
+    /// Small-repetition Huffman RLE. Only used for map compression.
     CompressionRleSmall = 7,
+    /// Large-repetition Huffman RLE. Only used for map compression.
     CompressionRleLarge = 8,
+    /// RLE Pseudo-codec for copy-from-self with 0-repetition. Only used for map compression.
     CompressionSelf0 = 9,
+    /// RLE Pseudo-codec for copy-from-self with 1-repetition. Only used for map compression.
     CompressionSelf1 = 10,
+    /// RLE Pseudo-codec for copy-from-parent with self-offset. Only used for map compression.
     CompressionParentSelf = 11,
+    /// RLE Pseudo-codec for copy-from-parent for 1-repetition. Only used for map compression.
     CompressionParent0 = 12,
+    /// RLE Pseudo-codec for copy-from-parent for 0-repetition. Only used for map compression.
     CompressionParent1 = 13,
 }
 
@@ -215,14 +229,19 @@ impl V5UncompressedEntry<'_> {
 
 /// The hunk map for a CHD file.
 pub enum ChdMap {
+    /// A CHD v5 hunk map.
     V5(V5MapData), // compressed
+    /// A CHD v1-4 hunk map.
     Legacy(LegacyMapData),
 }
 
 /// A map entry for a CHD file of unspecified version.
 pub enum MapEntry<'a> {
+    /// A CHD v5 map entry for a compressed hunk.
     V5Compressed(V5CompressedEntry<'a>),
+    /// A CHD v5 map entry for an uncompressed hunk.
     V5Uncompressed(V5UncompressedEntry<'a>),
+    /// A CHD v1-4 map entry.
     LegacyEntry(&'a LegacyMapEntry),
 }
 
