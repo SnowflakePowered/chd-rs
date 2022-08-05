@@ -15,48 +15,20 @@ use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use std::ops::{Index, IndexMut};
 
 pub(crate) enum ChdCodecs {
     Single(Box<dyn CompressionCodec>),
     Four([Box<dyn CompressionCodec>; 4]),
 }
 
-impl Index<usize> for ChdCodecs {
-    type Output = Box<dyn CompressionCodec>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        if index == 0 {
-            match self {
-                ChdCodecs::Single(c) => c,
-                ChdCodecs::Four([c, ..]) => c,
-            }
-        } else {
-            match self {
-                ChdCodecs::Four(a) => &a[index],
-                _ => panic!("index out of bounds, only a single codec is loaded"),
-            }
-        }
-    }
-}
-
-impl IndexMut<usize> for ChdCodecs {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        if index == 0 {
-            match self {
-                ChdCodecs::Single(c) => c,
-                ChdCodecs::Four([c, ..]) => c,
-            }
-        } else {
-            match self {
-                ChdCodecs::Four(a) => &mut a[index],
-                _ => panic!("index out of bounds, only a single codec is loaded"),
-            }
-        }
-    }
-}
-
 impl ChdCodecs {
+    pub fn first_mut(&mut self) -> &mut Box<dyn CompressionCodec> {
+        match self {
+            ChdCodecs::Single(c) => c,
+            ChdCodecs::Four([c, ..]) => c,
+        }
+    }
+
     pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn CompressionCodec>> {
         if index == 0 {
             match self {
@@ -243,7 +215,11 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
                         // buffer the compressed data
                         let proof = entry.prove_compressed()?;
                         self.read_compressed_in(proof, comp_buf)?;
-                        let res = &self.inner.codecs[0].decompress(&comp_buf[..block_len], dest)?;
+                        let res = &self
+                            .inner
+                            .codecs
+                            .first_mut()
+                            .decompress(&comp_buf[..block_len], dest)?;
 
                         Crc::<u32>::verify_block_checksum(block_crc, dest, res.total_out())
                     }
