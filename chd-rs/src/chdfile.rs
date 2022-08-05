@@ -15,6 +15,62 @@ use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::ops::{Index, IndexMut};
+
+pub(crate) enum ChdCodecs {
+    Single(Box<dyn CompressionCodec>),
+    Four([Box<dyn CompressionCodec>; 4]),
+}
+
+impl Index<usize> for ChdCodecs {
+    type Output = Box<dyn CompressionCodec>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        if index == 0 {
+            match self {
+                ChdCodecs::Single(c) => c,
+                ChdCodecs::Four([c, ..]) => c,
+            }
+        } else {
+            match self {
+                ChdCodecs::Four(a) => &a[index],
+                _ => panic!("index out of bounds, only a single codec is loaded"),
+            }
+        }
+    }
+}
+
+impl IndexMut<usize> for ChdCodecs {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        if index == 0 {
+            match self {
+                ChdCodecs::Single(c) => c,
+                ChdCodecs::Four([c, ..]) => c,
+            }
+        } else {
+            match self {
+                ChdCodecs::Four(a) => &mut a[index],
+                _ => panic!("index out of bounds, only a single codec is loaded"),
+            }
+        }
+    }
+}
+
+impl ChdCodecs {
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn CompressionCodec>> {
+        if index == 0 {
+            match self {
+                ChdCodecs::Single(c) => Some(c),
+                ChdCodecs::Four([c, ..]) => Some(c),
+            }
+        } else {
+            match self {
+                ChdCodecs::Four(a) => Some(&mut a[index]),
+                _ => None,
+            }
+        }
+    }
+}
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct ChdFile<F: Read + Seek> {
@@ -23,7 +79,7 @@ pub struct ChdFile<F: Read + Seek> {
     // feature(generic_associated_types) to be generic over all possible parents of G: Read+Seek?
     parent: Option<Box<ChdFile<F>>>,
     map: ChdMap,
-    codecs: Vec<Box<dyn CompressionCodec>>,
+    codecs: ChdCodecs,
 }
 
 impl<F: Read + Seek> ChdFile<F> {
