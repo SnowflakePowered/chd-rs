@@ -5,13 +5,13 @@ use chd::map::{LegacyEntryType, MapEntry, V5CompressionType};
 use chd::ChdFile;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
+use sha1::{Digest, Sha1};
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thousands::Separable;
-use sha1::{Sha1, Digest};
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
@@ -34,7 +34,7 @@ fn try_fourcc_to_u32(s: &str) -> anyhow::Result<u32> {
         s.get(0).map_or(b' ', |f| *f),
         s.get(1).map_or(b' ', |f| *f),
         s.get(2).map_or(b' ', |f| *f),
-        s.get(3).map_or(b' ', |f| *f)
+        s.get(3).map_or(b' ', |f| *f),
     ];
 
     Ok(make_tag(&tag))
@@ -106,8 +106,7 @@ enum Commands {
         /// parent file name for input CHD
         #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
         inputparent: Option<PathBuf>,
-    }
-
+    },
 }
 
 fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
@@ -168,7 +167,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
             CodecType::FlacV5 => "FLAC",
             CodecType::LzmaV5 => "LZMA",
             CodecType::AVHuffV5 => "A/V Huffman",
-            CodecType::HuffV5 => "Huffman"
+            CodecType::HuffV5 => "Huffman",
         }
     }
 
@@ -186,7 +185,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                 CodecType::FlacV5 => "flac (FLAC)",
                 CodecType::LzmaV5 => "lzma (LZMA)",
                 CodecType::AVHuffV5 => "avhu (A/V Huffman)",
-                CodecType::HuffV5 => "huff (Huffman)"
+                CodecType::HuffV5 => "huff (Huffman)",
             }
         }
 
@@ -198,20 +197,32 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
 
         match header {
             ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
-                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+                println!(
+                    "{}",
+                    to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
+                );
             }
             ChdHeader::V3Header(h) => {
-                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+                println!(
+                    "{}",
+                    to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
+                );
             }
             ChdHeader::V4Header(h) => {
-                println!("{}", to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap()));
+                println!(
+                    "{}",
+                    to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
+                );
             }
             ChdHeader::V5Header(h) => {
                 for compression in h.compression {
                     if compression == 0 {
                         break;
                     }
-                    print!("{}, ", to_chdman_compression_name(CodecType::from_u32(compression).unwrap()));
+                    print!(
+                        "{}, ",
+                        to_chdman_compression_name(CodecType::from_u32(compression).unwrap())
+                    );
                 }
                 println!();
             }
@@ -243,37 +254,38 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
         println!("     Hunks  Percent  Name");
         println!("----------  -------  ------------------------------------");
 
-
         for i in 0..num_hunks {
             let hunk = chd.map().get_entry(i).unwrap();
             match hunk {
-                MapEntry::V5Compressed(c) => {
-                    match c.hunk_type()? {
-                        V5CompressionType::CompressionType0 => {
-                            hunk_count[0] += 1;
-                        }
-                        V5CompressionType::CompressionType1 => {
-                            hunk_count[1] += 1;
-                        }
-                        V5CompressionType::CompressionType2 => {
-                            hunk_count[2] += 1;
-                        }
-                        V5CompressionType::CompressionType3 => {
-                            hunk_count[3] += 1;
-                        }
-                        V5CompressionType::CompressionNone => {
-                            hunk_count[4] += 1;
-                        }
-                        V5CompressionType::CompressionSelf | V5CompressionType::CompressionSelf0 | V5CompressionType::CompressionSelf1 => {
-                            hunk_count[5] += 1;
-                        }
-                        V5CompressionType::CompressionParent
-                        | V5CompressionType::CompressionParentSelf | V5CompressionType::CompressionParent0 | V5CompressionType::CompressionParent1 => {}
-                        _ => {
-                            hunk_count[6] += 1;
-                        }
+                MapEntry::V5Compressed(c) => match c.hunk_type()? {
+                    V5CompressionType::CompressionType0 => {
+                        hunk_count[0] += 1;
                     }
-                }
+                    V5CompressionType::CompressionType1 => {
+                        hunk_count[1] += 1;
+                    }
+                    V5CompressionType::CompressionType2 => {
+                        hunk_count[2] += 1;
+                    }
+                    V5CompressionType::CompressionType3 => {
+                        hunk_count[3] += 1;
+                    }
+                    V5CompressionType::CompressionNone => {
+                        hunk_count[4] += 1;
+                    }
+                    V5CompressionType::CompressionSelf
+                    | V5CompressionType::CompressionSelf0
+                    | V5CompressionType::CompressionSelf1 => {
+                        hunk_count[5] += 1;
+                    }
+                    V5CompressionType::CompressionParent
+                    | V5CompressionType::CompressionParentSelf
+                    | V5CompressionType::CompressionParent0
+                    | V5CompressionType::CompressionParent1 => {}
+                    _ => {
+                        hunk_count[6] += 1;
+                    }
+                },
                 MapEntry::V5Uncompressed(_) => {
                     hunk_count[4] += 1;
                 }
@@ -304,40 +316,55 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
             }
         }
 
-        let results: Vec<(u64, f64, &'static str)> = hunk_count.iter().enumerate().map(|(i, count)| {
-            let percent = *count as f64 / num_hunks as f64;
-            let name = match i {
-                4 => "Uncompressed",
-                5 => "Copy from self",
-                6 => "Copy from parent",
-                7 => "Legacy 8-byte mini",
-                8 => "Unknown",
-                i => codec_name(CodecType::from_u32(match chd.header() {
-                    ChdHeader::V1Header(h) => h.compression,
-                    ChdHeader::V2Header(h) => h.compression,
-                    ChdHeader::V3Header(h) => h.compression,
-                    ChdHeader::V4Header(h) => h.compression,
-                    ChdHeader::V5Header(h) => h.compression[i]
-                }).unwrap())
-            };
-            (*count, percent, name)
-        }).collect();
-
+        let results: Vec<(u64, f64, &'static str)> = hunk_count
+            .iter()
+            .enumerate()
+            .map(|(i, count)| {
+                let percent = *count as f64 / num_hunks as f64;
+                let name = match i {
+                    4 => "Uncompressed",
+                    5 => "Copy from self",
+                    6 => "Copy from parent",
+                    7 => "Legacy 8-byte mini",
+                    8 => "Unknown",
+                    i => codec_name(
+                        CodecType::from_u32(match chd.header() {
+                            ChdHeader::V1Header(h) => h.compression,
+                            ChdHeader::V2Header(h) => h.compression,
+                            ChdHeader::V3Header(h) => h.compression,
+                            ChdHeader::V4Header(h) => h.compression,
+                            ChdHeader::V5Header(h) => h.compression[i],
+                        })
+                        .unwrap(),
+                    ),
+                };
+                (*count, percent, name)
+            })
+            .collect();
 
         for (count, percent, name) in &results[4..] {
             if *count == 0u64 {
                 continue;
             }
-            println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+            println!(
+                "{:>10}   {:>5.1}%  {:<40}",
+                count.separate_with_commas(),
+                100f64 * percent,
+                name
+            );
         }
 
         for (count, percent, name) in &results[..4] {
             if *count == 0u64 {
                 continue;
             }
-            println!("{:>10}   {:>5.1}%  {:<40}", count.separate_with_commas(), 100f64 * percent, name);
+            println!(
+                "{:>10}   {:>5.1}%  {:<40}",
+                count.separate_with_commas(),
+                100f64 * percent,
+                name
+            );
         }
-
 
         Ok(())
     }
@@ -398,7 +425,22 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                 );
             }
             print!("              \t");
-            println!("{}",meta.value.iter().map(|u| if u.is_ascii_alphanumeric() || u.is_ascii_whitespace() || u.is_ascii_punctuation() { *u as char } else { '.' }).collect::<String>());
+            println!(
+                "{}",
+                meta.value
+                    .iter()
+                    .map(|u| {
+                        if u.is_ascii_alphanumeric()
+                            || u.is_ascii_whitespace()
+                            || u.is_ascii_punctuation()
+                        {
+                            *u as char
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect::<String>()
+            );
         }
     }
 
@@ -429,7 +471,12 @@ fn benchmark(p: impl AsRef<Path>) -> anyhow::Result<()> {
     });
 
     let time = Instant::now().saturating_duration_since(start);
-    println!("Read {} bytes ({} hunks) in {} seconds", bytes, hunk_num, time.as_secs_f64());
+    println!(
+        "Read {} bytes ({} hunks) in {} seconds",
+        bytes,
+        hunk_num,
+        time.as_secs_f64()
+    );
     println!(
         "Rate is {} MB/s",
         (bytes / (1024 * 1024)) as f64 / time.as_secs_f64()
@@ -454,14 +501,14 @@ fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> any
 
     let header = chd.header();
     if !header.is_compressed() {
-        return Err(anyhow!("No verification to be done; CHD is uncompressed"))
+        return Err(anyhow!("No verification to be done; CHD is uncompressed"));
     }
 
     let raw_sha1 = match header {
         ChdHeader::V3Header(h) => h.sha1,
         ChdHeader::V4Header(h) => h.raw_sha1,
         ChdHeader::V5Header(h) => h.raw_sha1,
-        _ => return Err(anyhow!("No verification to be done; CHD has no checksum"))
+        _ => return Err(anyhow!("No verification to be done; CHD has no checksum")),
     };
 
     let mut hasher = Sha1::new();
@@ -477,21 +524,33 @@ fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> any
     if raw_result[..] == raw_sha1[..] {
         println!("Raw SHA1 verification successful!");
     } else {
-        eprintln!("Error: Raw SHA1 in header = {}\n              actual SHA1 = {}\n", hex::encode(raw_sha1), hex::encode(raw_result));
+        eprintln!(
+            "Error: Raw SHA1 in header = {}\n              actual SHA1 = {}\n",
+            hex::encode(raw_sha1),
+            hex::encode(raw_result)
+        );
     }
 
     // todo: full verification
     Ok(())
 }
 
-fn dumpmeta(input: impl AsRef<Path>, output: Option<&PathBuf>, force: bool, tag: u32, index: u32) -> anyhow::Result<()> {
+fn dumpmeta(
+    input: impl AsRef<Path>,
+    output: Option<&PathBuf>,
+    force: bool,
+    tag: u32,
+    index: u32,
+) -> anyhow::Result<()> {
     println!("\nchd-rs - rchdman dumpmeta");
 
     let mut f = BufReader::new(File::open(input)?);
     let mut chd = ChdFile::open(&mut f, None)?;
 
     let metas = chd.metadata_refs().try_into_vec()?;
-    let tag = metas.iter().find(|p| p.metatag == tag && p.index == index)
+    let tag = metas
+        .iter()
+        .find(|p| p.metatag == tag && p.index == index)
         .ok_or_else(|| anyhow!("Error reading metadata: can't find metadata"))?;
 
     if let Some(output) = output {
@@ -509,14 +568,21 @@ fn dumpmeta(input: impl AsRef<Path>, output: Option<&PathBuf>, force: bool, tag:
     Ok(())
 }
 
-fn extractraw(input: &PathBuf, inputparent: Option<impl AsRef<Path>>, output: &PathBuf, force: bool) -> anyhow::Result<()>{
+fn extractraw(
+    input: &PathBuf,
+    inputparent: Option<impl AsRef<Path>>,
+    output: &PathBuf,
+    force: bool,
+) -> anyhow::Result<()> {
     println!("\nchd-rs - rchdman extractraw");
-    let mut output_file = BufWriter::new(OpenOptions::new()
-        .write(true)
-        .create_new(!force)
-        .create(true)
-        .truncate(true)
-        .open(output)?);
+    let mut output_file = BufWriter::new(
+        OpenOptions::new()
+            .write(true)
+            .create_new(!force)
+            .create(true)
+            .truncate(true)
+            .open(output)?,
+    );
 
     println!("Output File:  {}", output.display());
     println!("Input CHD:    {}", input.display());
@@ -544,15 +610,25 @@ fn extractraw(input: &PathBuf, inputparent: Option<impl AsRef<Path>>, output: &P
     Ok(())
 }
 
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Info { input, verbose } => info(input, *verbose)?,
         Commands::Benchmark { input } => benchmark(input)?,
         Commands::Verify { input, inputparent } => verify(input, inputparent.as_deref())?,
-        Commands::Dumpmeta { input, output, force, tag, index} => dumpmeta(input, output.as_ref(), *force, *tag, *index)?,
-        Commands::Extractraw { input, inputparent, force, output} => extractraw(input, inputparent.as_deref(), output, *force)?
+        Commands::Dumpmeta {
+            input,
+            output,
+            force,
+            tag,
+            index,
+        } => dumpmeta(input, output.as_ref(), *force, *tag, *index)?,
+        Commands::Extractraw {
+            input,
+            inputparent,
+            force,
+            output,
+        } => extractraw(input, inputparent.as_deref(), output, *force)?,
     }
     Ok(())
 }

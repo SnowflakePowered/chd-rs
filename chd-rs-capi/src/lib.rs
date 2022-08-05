@@ -190,7 +190,11 @@ pub unsafe extern "C" fn chd_get_header(chd: *const chd_file) -> *const chd_head
 /// * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
 /// * `buffer` must an aligned pointer to a block of initialized memory of exactly the hunk size for the input `chd_file*` that is valid for both reads and writes. This size can be found with [`chd_get_header`](crate::chd_get_header).
 /// * If `chd` is `NULL`, returns `CHDERR_INVALID_PARAMETER`.
-pub unsafe extern "C" fn chd_read(chd: *mut chd_file, hunknum: u32, buffer: *mut c_void) -> chd_error {
+pub unsafe extern "C" fn chd_read(
+    chd: *mut chd_file,
+    hunknum: u32,
+    buffer: *mut c_void,
+) -> chd_error {
     match unsafe { chd.as_mut() } {
         None => chd_error::InvalidParameter,
         Some(chd) => {
