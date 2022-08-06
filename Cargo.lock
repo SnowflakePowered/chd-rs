@@ -153,25 +153,6 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chd"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2efa2c36454fb8c64d42ed93bae9d9da70d887037a84c4755e1a6712b4695893"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc 3.0.0",
- "flate2",
- "lzma-rs-headerless",
- "num-derive",
- "num-traits",
- "once_cell",
- "regex",
-]
-
-[[package]]
-name = "chd"
 version = "0.1.6"
 dependencies = [
  "arrayvec",
@@ -182,8 +163,27 @@ dependencies = [
  "crc 3.0.0",
  "flate2",
  "lending-iterator",
- "lzma-rs-headerless",
+ "lzma-rs",
  "nougat",
+ "num-derive",
+ "num-traits",
+ "once_cell",
+ "regex",
+]
+
+[[package]]
+name = "chd"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "497f7e9b05b3da6f1301744fcc529ed213c6319435ca92f752418d93edf86a84"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc 3.0.0",
+ "flate2",
+ "lzma-rs-headerless",
  "num-derive",
  "num-traits",
  "once_cell",
@@ -196,7 +196,7 @@ version = "0.1.4"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.1.4",
+ "chd 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "cmake",
 ]
 
@@ -412,6 +412,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
+name = "grid"
+version = "0.6.1-alpha.0"
+source = "git+https://github.com/chyyran/grid-rs?branch=feature-fill#2891f6e8cf98a613890f8c2bacc37747c8dd1607"
+dependencies = [
+ "no-std-compat",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,6 +550,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rs"
+version = "0.2.0"
+source = "git+https://github.com/chyyran/lzma-rs/?branch=feature-perf-experiments#0fea5c8dc803ae2f7fdb283c1f6383e21f80c39d"
+dependencies = [
+ "byteorder",
+ "crc 1.8.1",
+ "grid",
+]
+
+[[package]]
 name = "lzma-rs-headerless"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -595,6 +613,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf5a574dadd7941adeaa71823ecba5e28331b8313fb2e1c6a5c7e5981ea53ad6"
 
 [[package]]
+name = "no-std-compat"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
 name = "nom"
 version = "7.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -606,9 +630,9 @@ dependencies = [
 
 [[package]]
 name = "nougat"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d6048f986fc14d0fac8c92eea37e15f8d77aa9bc1099ac685a608aaeb976fc"
+checksum = "d0385a8df23614e42efa99414320c691c2db19285e7c09267c878d604d8265a0"
 dependencies = [
  "macro_rules_attribute",
  "nougat-proc_macros",
@@ -616,9 +640,9 @@ dependencies = [
 
 [[package]]
 name = "nougat-proc_macros"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b511ac0f3a0ac000d01e44b8bc99d3a790d77088e2d8759661e8bc1623958357"
+checksum = "c75bf19de64b3a4daf992679e7490be3569766060cb7e8e664638c9e3ce53812"
 dependencies = [
  "proc-macro2",
  "quote",

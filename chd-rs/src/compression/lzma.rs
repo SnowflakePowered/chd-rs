@@ -3,7 +3,7 @@ use crate::compression::{
 };
 use crate::error::{ChdError, Result};
 use crate::header::CodecType;
-use lzma_rs::decompress::raw::{LzmaDecoder, LzmaParams, LzmaProperties};
+use lzma_rs::decompress::raw::{LzmaDecoder, LzmaParams, LzmaProperties, LzAccumBuffer};
 use std::io::Cursor;
 // use lzma_rs_headerless::decompress::LzmaDecoder;
 
@@ -104,18 +104,20 @@ impl CompressionCodecType for LzmaCodec {
 
 impl CodecImplementation for LzmaCodec {
     fn new(hunk_size: u32) -> Result<Self> {
+        let dict_size = get_lzma_dict_size(9, hunk_size);
         Ok(LzmaCodec {
-            engine: LzmaDecoder::new(
+            engine: LzmaDecoder::new_with_buffer(
                 LzmaParams::new(
                     LzmaProperties {
                         lc: 3,
                         lp: 0,
                         pb: 2,
                     },
-                    get_lzma_dict_size(9, hunk_size),
+                    dict_size,
                     None,
                 ),
                 None,
+                vec![0; dict_size as usize],
             )
             .map_err(|_| ChdError::DecompressionError)?,
         })
@@ -126,7 +128,7 @@ impl CodecImplementation for LzmaCodec {
         let len = output.len();
         self.engine.reset(Some(Some(len as u64)));
         self.engine
-            .decompress(&mut read, &mut output)
+            .decompress_with_buffer::<_, _, LzAccumBuffer<_>>(&mut read, &mut output)
             .map_err(|_| ChdError::DecompressionError)?;
         Ok(DecompressResult::new(len, read.position() as usize))
     }

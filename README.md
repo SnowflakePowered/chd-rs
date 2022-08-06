@@ -16,6 +16,34 @@ LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs), and FLAC decompre
 [claxon](https://crates.io/crates/claxon). While performance is not ignored, the focus
 is on readability and correctness.
 
+## `perf-experiments`
+The `perf-experiments` branch is for compatibility with a [custom lzma-rs fork](https://github.com/chyyran/lzma-rs/tree/feature-perf-experiments) that focuses on
+performance at the expense of memory usage. This allows us to get within 10% of libchdr for CHD files compressed mainly with LZMA.
+
+### chd-rs benchmark
+```
+chd-rs - rchdman benchmark
+Read 657101952 bytes (33553 hunks) in 6.34081 seconds
+Rate is 98.72555714490736 MB/s
+```
+
+### libchdr benchmark
+```
+libchdr benchmark tool....
+Read 657101952 bytes in 5.791000 seconds
+Rate is 108.212961 MB/s
+```
+
+### Test file details
+```
+     Hunks  Percent  Name
+----------  -------  ------------------------------------
+     1,304     3.9%  Copy from self
+    13,071    39.0%  CD LZMA
+       500     1.5%  CD Deflate
+    18,678    55.7%  CD FLAC
+```
+
 ## Usage
 Open a `ChdFile` with `ChdFile::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
 read hunks.
