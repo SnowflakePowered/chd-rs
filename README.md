@@ -18,13 +18,14 @@ is on readability and correctness.
 
 ## `perf-experiments`
 The `perf-experiments` branch is for compatibility with a [custom lzma-rs fork](https://github.com/chyyran/lzma-rs/tree/feature-perf-experiments) that focuses on
-performance at the expense of memory usage. This allows us to get within 10% of libchdr for CHD files compressed mainly with LZMA.
+performance at the expense of memory usage. This, with some more enhancements like using `zlib-ng` for the zlib backend 
+and building with `codegen-units = 1` allows us to get within less than 10% of libchdr depending on compression codecs used.
 
 ### chd-rs benchmark
 ```
 chd-rs - rchdman benchmark
-Read 657101952 bytes (33553 hunks) in 6.34081 seconds
-Rate is 98.72555714490736 MB/s
+Read 657101952 bytes (33553 hunks) in 6.1268126 seconds
+Rate is 102.17384484715592 MB/s
 ```
 
 ### libchdr benchmark
