@@ -12,8 +12,7 @@ a Rust compiler, without the need for a full C/C++ toolchain.
 
 Performance is competitive but a little slower than libchdr in benchmarks from using more immature (but fully correct) 
 pure Rust implementations of compression codecs. Deflate (zlib) compression is backed by [flate2](https://crates.io/crates/flate2), 
-LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs) (modified slightly to allow 
-[headerless decoding of LZMA chunks](https://crates.io/crates/lzma-rs-headerless)), and FLAC decompression is backed by
+LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs), and FLAC decompression is backed by
 [claxon](https://crates.io/crates/claxon). While performance is not ignored, the focus
 is on readability and correctness.
 
