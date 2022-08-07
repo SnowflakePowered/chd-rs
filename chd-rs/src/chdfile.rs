@@ -16,39 +16,10 @@ use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
-pub(crate) enum ChdCodecs {
-    Single(Box<dyn CompressionCodec>),
-    Four([Box<dyn CompressionCodec>; 4]),
-}
-
-impl ChdCodecs {
-    pub fn first_mut(&mut self) -> &mut Box<dyn CompressionCodec> {
-        match self {
-            ChdCodecs::Single(c) => c,
-            ChdCodecs::Four([c, ..]) => c,
-        }
-    }
-
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn CompressionCodec>> {
-        if index == 0 {
-            match self {
-                ChdCodecs::Single(c) => Some(c),
-                ChdCodecs::Four([c, ..]) => Some(c),
-            }
-        } else {
-            match self {
-                ChdCodecs::Four(a) => Some(&mut a[index]),
-                _ => None,
-            }
-        }
-    }
-}
-
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct ChdFile<F: Read + Seek> {
     file: F,
     header: ChdHeader,
-    // feature(generic_associated_types) to be generic over all possible parents of G: Read+Seek?
     parent: Option<Box<ChdFile<F>>>,
     map: ChdMap,
     codecs: ChdCodecs,
@@ -430,5 +401,33 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     /// Returns the length of this hunk in bytes.
     pub fn len(&self) -> usize {
         self.inner.header.hunk_size() as usize
+    }
+}
+
+pub(crate) enum ChdCodecs {
+    Single(Box<dyn CompressionCodec>),
+    Four([Box<dyn CompressionCodec>; 4]),
+}
+
+impl ChdCodecs {
+    pub fn first_mut(&mut self) -> &mut Box<dyn CompressionCodec> {
+        match self {
+            ChdCodecs::Single(c) => c,
+            ChdCodecs::Four([c, ..]) => c,
+        }
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn CompressionCodec>> {
+        if index == 0 {
+            match self {
+                ChdCodecs::Single(c) => Some(c),
+                ChdCodecs::Four([c, ..]) => Some(c),
+            }
+        } else {
+            match self {
+                ChdCodecs::Four(a) => Some(&mut a[index]),
+                _ => None,
+            }
+        }
     }
 }
