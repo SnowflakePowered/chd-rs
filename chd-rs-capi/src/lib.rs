@@ -106,6 +106,7 @@ fn ffi_open_chd(
 /// * `filename` is a valid, null-terminated **UTF-8** string.
 /// * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
 /// * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
+/// * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
 #[no_mangle]
 pub unsafe extern "C" fn chd_open(
     filename: *const c_char,
@@ -413,6 +414,7 @@ pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_s
 /// * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
 /// * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
 /// * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
+/// * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
 pub unsafe extern "C" fn chd_open_file(
     file: *mut chdcorefile_sys::core_file,
     mode: c_int,
@@ -453,6 +455,7 @@ pub unsafe extern "C" fn chd_open_file(
 /// * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
 /// * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
 /// * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
+/// * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
 pub unsafe extern "C" fn chd_open_core_file(
     file: *mut chdcorefile_sys::core_file,
     mode: c_int,

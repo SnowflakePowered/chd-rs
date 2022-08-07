@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "chd-capi"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "bindgen",
  "cbindgen",

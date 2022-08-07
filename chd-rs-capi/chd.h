@@ -221,6 +221,7 @@ extern "C" {
  * * `filename` is a valid, null-terminated **UTF-8** string.
  * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
  * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
+ * * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
  */
 chd_error chd_open(const char *filename,
                    int mode,
@@ -342,6 +343,7 @@ core_file *chd_core_file(struct chd_file *chd);
  * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
  * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
  * * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
+ * * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
  */
 chd_error chd_open_file(core_file *file,
                         int mode,
@@ -359,6 +361,7 @@ chd_error chd_open_file(core_file *file,
  * * `parent` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
  * * `out` is aligned and can store a pointer to a `chd_file*`. On success, `out` will point to a valid `chd_file*`.
  * * Until the returned `chd_file*` in `out` is closed with [`chd_close`](crate::chd_close) or [`chd_core_file`](crate::chd_core_file), external mutation of `file` will result in undefined behaviour.
+ * * After this function returns, `parent` is invalid and must not be used, otherwise it will be undefined behaviour. There is no way to retake ownership of `parent`.
  */
 chd_error chd_open_core_file(core_file *file,
                              int mode,
