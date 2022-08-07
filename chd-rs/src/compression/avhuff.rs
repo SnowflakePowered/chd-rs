@@ -134,13 +134,6 @@ fn avhuff_write_header(
 }
 
 impl CodecImplementation for AVHuffCodec {
-    fn is_lossy(&self) -> bool
-    where
-        Self: Sized,
-    {
-        false
-    }
-
     fn new(_hunk_bytes: u32) -> Result<Self> {
         Ok(AVHuffCodec { buffer: Vec::new() })
     }

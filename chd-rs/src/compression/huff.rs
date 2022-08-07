@@ -24,10 +24,6 @@ use bitreader::BitReader;
 /// when decompressed.
 pub struct HuffmanCodec;
 impl CodecImplementation for HuffmanCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(_: u32) -> Result<Self> {
         Ok(HuffmanCodec)
     }

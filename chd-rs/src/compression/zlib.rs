@@ -19,10 +19,6 @@ pub struct ZlibCodec {
 }
 
 impl CodecImplementation for ZlibCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(_: u32) -> Result<Self> {
         Ok(ZlibCodec {
             engine: Decompress::new(false),

@@ -23,13 +23,6 @@ struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
 }
 
 impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, CHANNELS> {
-    fn is_lossy(&self) -> bool
-    where
-        Self: Sized,
-    {
-        false
-    }
-
     fn new(hunk_bytes: u32) -> Result<Self>
     where
         Self: Sized,
@@ -136,10 +129,6 @@ impl CompressionCodecType for RawFlacCodec {
 }
 
 impl CodecImplementation for RawFlacCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(hunk_bytes: u32) -> Result<Self> {
         Ok(RawFlacCodec {
             be: FlacCodec::new(hunk_bytes)?,
@@ -205,10 +194,6 @@ impl CompressionCodecType for CdFlacCodec {
 }
 
 impl CodecImplementation for CdFlacCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(hunk_size: u32) -> Result<Self>
     where
         Self: Sized,

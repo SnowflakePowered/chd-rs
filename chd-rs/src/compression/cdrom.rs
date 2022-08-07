@@ -120,10 +120,6 @@ pub struct CdCodec<Engine: CodecImplementation, SubEngine: CodecImplementation> 
 impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplementation
     for CdCodec<Engine, SubEngine>
 {
-    fn is_lossy(&self) -> bool {
-        self.engine.is_lossy() && self.sub_engine.is_lossy()
-    }
-
     fn new(hunk_size: u32) -> Result<Self> {
         if hunk_size % CD_FRAME_SIZE != 0 {
             return Err(ChdError::CodecError);

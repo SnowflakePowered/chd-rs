@@ -41,11 +41,6 @@ pub trait CompressionCodecType {
 
 /// Trait for a CHD decompression codec implementation.
 pub trait CodecImplementation {
-    /// Returns whether the is codec is lossy or not.
-    fn is_lossy(&self) -> bool
-    where
-        Self: Sized;
-
     /// Creates a new instance of this codec for the provided hunk size.
     fn new(hunk_size: u32) -> Result<Self>
     where

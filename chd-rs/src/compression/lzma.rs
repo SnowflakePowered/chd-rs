@@ -103,10 +103,6 @@ impl CompressionCodecType for LzmaCodec {
 }
 
 impl CodecImplementation for LzmaCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(hunk_size: u32) -> Result<Self> {
         Ok(LzmaCodec {
             engine: LzmaDecoder::new(

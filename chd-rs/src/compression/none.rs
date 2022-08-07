@@ -12,10 +12,6 @@ use std::io::Write;
 /// The input buffer must be exactly the same length as the output buffer.
 pub struct NoneCodec;
 impl CodecImplementation for NoneCodec {
-    fn is_lossy(&self) -> bool {
-        false
-    }
-
     fn new(_: u32) -> Result<Self> {
         Ok(NoneCodec)
     }
