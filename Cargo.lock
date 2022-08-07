@@ -19,9 +19,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.59"
+version = "1.0.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91f1f46651137be86f3a2b9a8359f9ab421d04d941c62b5982e1ca21113adf9"
+checksum = "c794e162a5eff65c72ef524dfe393eb923c354e350bb78b9c7383df13f3bc142"
 
 [[package]]
 name = "arrayvec"
@@ -412,14 +412,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
-name = "grid"
-version = "0.6.1-alpha.0"
-source = "git+https://github.com/chyyran/grid-rs?branch=feature-fill#2891f6e8cf98a613890f8c2bacc37747c8dd1607"
-dependencies = [
- "no-std-compat",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,11 +544,10 @@ dependencies = [
 [[package]]
 name = "lzma-rs"
 version = "0.2.0"
-source = "git+https://github.com/chyyran/lzma-rs/?branch=feature-perf-experiments#0fea5c8dc803ae2f7fdb283c1f6383e21f80c39d"
+source = "git+https://github.com/chyyran/lzma-rs/?branch=feature-perf-experiments#d93b1f80924f51591e8649f1050f10941b49e6e1"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
- "grid",
 ]
 
 [[package]]
@@ -611,12 +602,6 @@ name = "never-say-never"
 version = "6.6.666"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf5a574dadd7941adeaa71823ecba5e28331b8313fb2e1c6a5c7e5981ea53ad6"
-
-[[package]]
-name = "no-std-compat"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 
 [[package]]
 name = "nom"

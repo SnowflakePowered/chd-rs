@@ -20,12 +20,21 @@ is on readability and correctness.
 The `perf-experiments` branch is for compatibility with a [custom lzma-rs fork](https://github.com/chyyran/lzma-rs/tree/feature-perf-experiments) that focuses on
 performance at the expense of memory usage. This, with some more enhancements like using `zlib-ng` for the zlib backend 
 and building with `codegen-units = 1` allows us to get within less than 10% of libchdr depending on compression codecs used.
+With PGO enabled, chd-rs is within 1% of libchdr in decompression benchmarks. 
 
 ### chd-rs benchmark
 ```
 chd-rs - rchdman benchmark
 Read 657101952 bytes (33553 hunks) in 6.1268126 seconds
 Rate is 102.17384484715592 MB/s
+```
+
+#### With PGO Enabled
+PGO enabled with [cargo-pgo](https://github.com/vadimcn/cargo-pgo) 
+```
+chd-rs - rchdman benchmark
+Read 657101952 bytes (33553 hunks) in 5.8354865 seconds
+Rate is 107.27468909404554 MB/s
 ```
 
 ### libchdr benchmark
