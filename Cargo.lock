@@ -173,9 +173,9 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "497f7e9b05b3da6f1301744fcc529ed213c6319435ca92f752418d93edf86a84"
+checksum = "a181015f84aafc0db0f49ee12bc4a0bc54cf00bd0f888b7d1a68f0bdc42ebae2"
 dependencies = [
  "arrayvec",
  "bitreader",
@@ -186,8 +186,7 @@ dependencies = [
  "lzma-rs-headerless",
  "num-derive",
  "num-traits",
- "once_cell",
- "regex",
+ "text_io",
 ]
 
 [[package]]
@@ -196,7 +195,7 @@ version = "0.1.4"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chd 0.1.8",
  "cmake",
 ]
 
@@ -483,9 +482,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "lending-iterator"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cf9a2f04ccd4ca58caba6656c1d6a254d35f0fe0136e8593cae258757f4eb66"
+checksum = "76556389dff21705decf4c3a5aec578de8c2f55a483261dd0b772b7a354bf0c5"
 dependencies = [
  "extension-traits",
  "lending-iterator-proc_macros",
@@ -497,9 +496,9 @@ dependencies = [
 
 [[package]]
 name = "lending-iterator-proc_macros"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72570a23b6d0be3157f24ea6dae182a1d25dcf158dbca246f1aae8c61ae2d00e"
+checksum = "3aab3450d67ed49ded01ef75628c98c8e86ebd12d281f0efe6f434677bea957a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -544,7 +543,7 @@ dependencies = [
 [[package]]
 name = "lzma-rs"
 version = "0.2.0"
-source = "git+https://github.com/chyyran/lzma-rs/?branch=feature-perf-experiments#d93b1f80924f51591e8649f1050f10941b49e6e1"
+source = "git+https://github.com/chyyran/lzma-rs/?branch=feature-perf-experiments#ceece6b193294362f44f40f3285de607713221b8"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
@@ -615,9 +614,9 @@ dependencies = [
 
 [[package]]
 name = "nougat"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0385a8df23614e42efa99414320c691c2db19285e7c09267c878d604d8265a0"
+checksum = "97b57b9ced431322f054fc673f1d3c7fa52d80efd9df74ad2fc759f044742510"
 dependencies = [
  "macro_rules_attribute",
  "nougat-proc_macros",
@@ -625,9 +624,9 @@ dependencies = [
 
 [[package]]
 name = "nougat-proc_macros"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c75bf19de64b3a4daf992679e7490be3569766060cb7e8e664638c9e3ce53812"
+checksum = "c84f77a45e99a2f9b492695d99e1c23844619caa5f3e57647cffacad773ca257"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -788,18 +787,18 @@ checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
 
 [[package]]
 name = "serde"
-version = "1.0.142"
+version = "1.0.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e590c437916fb6b221e1d00df6e3294f3fccd70ca7e92541c475d6ed6ef5fee2"
+checksum = "53e8e5d5b70924f74ff5c6d64d9a5acd91422117c60f48c4e07855238a254553"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.142"
+version = "1.0.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34b5b8d809babe02f538c2cfec6f2c1ed10804c0e5a6a041a049a4f5588ccc2e"
+checksum = "d3d8e8de557aee63c26b85b947f5e59b690d0454c753f3adeb5cd7835ab88391"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -873,6 +872,12 @@ checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "text_io"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5f0c8eb2ad70c12a6a69508f499b3051c924f4b1cfeae85bfad96e6bc5bba46"
 
 [[package]]
 name = "textwrap"

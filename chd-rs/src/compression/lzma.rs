@@ -128,7 +128,7 @@ impl CodecImplementation for LzmaCodec {
         let len = output.len();
         self.engine.reset(Some(Some(len as u64)));
         self.engine
-            .decompress_with_buffer::<_, _, LzAccumBuffer<_>>(&mut read, &mut output)
+            .decompress_with_buffer::<LzAccumBuffer<_>, _, _>(&mut read, &mut output)
             .map_err(|_| ChdError::DecompressionError)?;
         Ok(DecompressResult::new(len, read.position() as usize))
     }
