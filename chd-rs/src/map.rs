@@ -264,12 +264,12 @@ impl CompressedEntryProof {
 /// An instance of this type can only be constructed from an uncompressed hunk.
 pub(crate) struct UncompressedEntryProof(u64, u32);
 impl UncompressedEntryProof {
-    /// The offset to the compressed data of this hunk.
+    /// The offset to the uncompressed data of this hunk.
     pub fn block_offset(&self) -> u64 {
         self.0
     }
 
-    /// Returns the size of the compressed hunk.
+    /// Returns the size of the uncompressed hunk.
     pub fn block_size(&self) -> u32 {
         self.1
     }

@@ -275,6 +275,7 @@ pub struct HeaderV5 {
 }
 
 /// A CHD header of unspecified version.
+#[derive(Clone)]
 pub enum ChdHeader {
     /// A CHD V1 header.
     V1Header(HeaderV1),
