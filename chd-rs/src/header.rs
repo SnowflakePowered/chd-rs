@@ -429,6 +429,55 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the SHA1 of the CHD file if available.
+    pub fn sha1(&self) -> Option<[u8; SHA1_BYTES]> {
+        match self {
+            ChdHeader::V3Header(c) => Some(c.sha1),
+            ChdHeader::V4Header(c) => Some(c.sha1),
+            ChdHeader::V5Header(c) => Some(c.sha1),
+            _ => None,
+        }
+    }
+
+    /// Returns the SHA1 of the parent of the CHD if available.
+    pub fn parent_sha1(&self) -> Option<[u8; SHA1_BYTES]> {
+        match self {
+            ChdHeader::V3Header(c) => Some(c.parent_sha1),
+            ChdHeader::V4Header(c) => Some(c.parent_sha1),
+            ChdHeader::V5Header(c) => Some(c.parent_sha1),
+            _ => None,
+        }
+    }
+
+    /// Returns the raw (hunk data only) SHA1 of the CHD file if available.
+    pub fn raw_sha1(&self) -> Option<[u8; SHA1_BYTES]> {
+        match self {
+            ChdHeader::V4Header(c) => Some(c.raw_sha1),
+            ChdHeader::V5Header(c) => Some(c.raw_sha1),
+            _ => None,
+        }
+    }
+
+    /// Returns the MD5 of the CHD file if available.
+    pub fn md5(&self) -> Option<[u8; MD5_BYTES]> {
+        match self {
+            ChdHeader::V1Header(c) => Some(c.md5),
+            ChdHeader::V2Header(c) => Some(c.md5),
+            ChdHeader::V3Header(c) => Some(c.md5),
+            _ => None,
+        }
+    }
+
+    /// Returns the MD5 of the parent CHD file if available.
+    pub fn parent_md5(&self) -> Option<[u8; MD5_BYTES]> {
+        match self {
+            ChdHeader::V1Header(c) => Some(c.parent_md5),
+            ChdHeader::V2Header(c) => Some(c.parent_md5),
+            ChdHeader::V3Header(c) => Some(c.parent_md5),
+            _ => None,
+        }
+    }
+
     /// Returns the length of the header.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {

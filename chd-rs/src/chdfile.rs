@@ -32,14 +32,32 @@ impl<F: Read + Seek> ChdFile<F> {
     /// type.
     ///
     /// The CHD header and hunk map are read and validated immediately.
+    ///
+    /// If the CHD file requires a parent, and a parent is provided, the parent hash is
+    /// validated. If hash validation fails, returns [`ChdError::InvalidParent`](crate::ChdError::InvalidParent).
+    ///
+    /// If the CHD file does not require a parent, and a parent is provided, returns
+    /// [`ChdError::InvalidParameter`](crate::ChdError::InvalidParameter).
+
+    /// If no parent CHD is provided and the file requires a CHD, the parent will not be
+    /// validated immediately. However, calls to [`read_hunk_in`](crate::ChdHunk::read_hunk_in) will
+    /// fail with [`ChdError::RequiresParent`](crate::ChdError::RequiresParent).
     pub fn open(mut file: F, parent: Option<Box<ChdFile<F>>>) -> Result<ChdFile<F>> {
         let header = ChdHeader::try_read_header(&mut file)?;
         // No point in checking writable because traits are read only.
         // In the future if we want to support a Write feature, will need to ensure writable.
 
-        // Make sure we have a parent if we have one
-        if parent.is_none() && header.has_parent() {
-            return Err(ChdError::RequiresParent);
+        if let Some(p) = parent.as_ref() {
+            if !header.has_parent() {
+                return Err(ChdError::InvalidParameter);
+            }
+            if p.header().sha1() != p.header().sha1() {
+                return Err(ChdError::InvalidParent);
+            }
+            // should be None for V4+
+            if p.header().md5() != p.header.md5() {
+                return Err(ChdError::InvalidParent);
+            }
         }
 
         let map = ChdMap::try_read_map(&header, &mut file)?;
@@ -358,6 +376,13 @@ impl<'a, F: Read + Seek> ChdHunk<'a, F> {
     ///
     /// Returns the number of bytes decompressed on success, which should be the length of
     /// the output buffer.
+    ///
+    /// If the hunk refers to a parent CHD that was not provided, this will return
+    /// [`ChdError::RequiresParent`](crate::ChdError::RequiresParent).
+    ///
+    /// If the provided output buffer is the wrong length, this will return
+    /// If the hunk refers to a parent CHD that was not provided, this will return
+    /// [`ChdError::OutOfMemory`](crate::ChdError::OutOfMemory).
     pub fn read_hunk_in(
         &mut self,
         compressed_buffer: &mut Vec<u8>,
