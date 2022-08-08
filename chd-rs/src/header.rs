@@ -418,6 +418,17 @@ impl ChdHeader {
         }
     }
 
+    /// Returns the CHD header version.
+    pub fn version(&self) -> Version {
+        match self {
+            ChdHeader::V1Header(c) => c.version,
+            ChdHeader::V2Header(c) => c.version,
+            ChdHeader::V3Header(c) => c.version,
+            ChdHeader::V4Header(c) => c.version,
+            ChdHeader::V5Header(c) => c.version,
+        }
+    }
+
     /// Returns the length of the header.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {
