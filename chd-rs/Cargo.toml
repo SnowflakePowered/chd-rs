@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
@@ -21,7 +21,7 @@ codec_api = []
 unstable_lending_iterators = [ "lending-iterator", "nougat" ]
 fast_zlib = ["flate2/zlib-ng"]
 
-# if
+# if disabled results may be unwanted
 want_subcode = []
 want_raw_data_sector = []
 
@@ -29,14 +29,17 @@ want_raw_data_sector = []
 byteorder = "1"
 num-traits = "0.2"
 num-derive = "0.3"
-regex = { version = "1", default-features = false, features = ["std", "perf"] }
-once_cell = "1.10.0"
+crc = "3"
+arrayvec = "0.7.2"
+text_io = "0.1"
+
+# codecs
 flate2 = "1"
 lzma-rs = { package = "lzma-rs-headerless", version = "0.5.3", features = ["raw_decoder"] }
 claxon = "0.4"
 bitreader = "0.3.6"
-crc = "3"
-arrayvec = "0.7.2"
+
+# lending-iterator
 lending-iterator = { version = "0.1", optional = true }
 nougat = { version = "0.2", optional = true }
 

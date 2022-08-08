@@ -19,9 +19,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.59"
+version = "1.0.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91f1f46651137be86f3a2b9a8359f9ab421d04d941c62b5982e1ca21113adf9"
+checksum = "c794e162a5eff65c72ef524dfe393eb923c354e350bb78b9c7383df13f3bc142"
 
 [[package]]
 name = "arrayvec"
@@ -153,9 +153,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chd"
-version = "0.1.4"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2efa2c36454fb8c64d42ed93bae9d9da70d887037a84c4755e1a6712b4695893"
+checksum = "1948d5d34995452bfc9c46ecbcab6042787c9d0196e038d789a5e1b4c7847430"
 dependencies = [
  "arrayvec",
  "bitreader",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.1.6"
+version = "0.1.8"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -186,8 +186,7 @@ dependencies = [
  "nougat",
  "num-derive",
  "num-traits",
- "once_cell",
- "regex",
+ "text_io",
 ]
 
 [[package]]
@@ -196,7 +195,7 @@ version = "0.1.4"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.1.4",
+ "chd 0.1.7",
  "cmake",
 ]
 
@@ -606,9 +605,9 @@ dependencies = [
 
 [[package]]
 name = "nougat"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d6048f986fc14d0fac8c92eea37e15f8d77aa9bc1099ac685a608aaeb976fc"
+checksum = "d0385a8df23614e42efa99414320c691c2db19285e7c09267c878d604d8265a0"
 dependencies = [
  "macro_rules_attribute",
  "nougat-proc_macros",
@@ -616,9 +615,9 @@ dependencies = [
 
 [[package]]
 name = "nougat-proc_macros"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b511ac0f3a0ac000d01e44b8bc99d3a790d77088e2d8759661e8bc1623958357"
+checksum = "c75bf19de64b3a4daf992679e7490be3569766060cb7e8e664638c9e3ce53812"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -722,7 +721,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.1.6",
+ "chd 0.1.8",
  "clap",
  "hex",
  "num-traits",
@@ -864,6 +863,12 @@ checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "text_io"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5f0c8eb2ad70c12a6a69508f499b3051c924f4b1cfeae85bfad96e6bc5bba46"
 
 [[package]]
 name = "textwrap"

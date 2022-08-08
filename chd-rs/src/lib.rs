@@ -1,7 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_cfg_hide))]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-
 //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
 //! for CHD V1-5.
 //!

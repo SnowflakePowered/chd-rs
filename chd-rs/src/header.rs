@@ -20,10 +20,9 @@ use arrayvec::ArrayVec;
 use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use once_cell::sync::OnceCell;
-use regex::bytes::Regex;
 use std::ffi::CStr;
 use std::io::{Cursor, Read, Seek, SeekFrom};
+use text_io::try_scan;
 
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
@@ -761,24 +760,28 @@ fn read_v4_header<T: Read + Seek, F: Read + Seek>(
     })
 }
 
-fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
-    static RE_BPS: OnceCell<Regex> = OnceCell::new();
-    let bps_regex: &'static Regex = RE_BPS.get_or_init(|| Regex::new(r"(?-u)(BPS:)(\d+)").unwrap());
+fn extract_bps_value(bps_meta: &[u8]) -> Option<u32> {
+    fn extract_bps_inner(bps_meta: &[u8]) -> std::result::Result<u32, Box<text_io::Error>> {
+        let cyls: u32;
+        let heads: u32;
+        let secs: u32;
+        let bps: u32;
+        try_scan!(bps_meta.iter().copied() => "CYLS:{},HEADS:{},SECS:{},BPS:{}\0", cyls, heads, secs, bps);
+        Ok(bps)
+    }
+    extract_bps_inner(bps_meta).ok()
+}
 
+fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     let metas: Vec<_> = MetadataRefIter::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
         .iter()
         .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)
     {
         if let Ok(text) = hard_disk.read(chd) {
-            let caps = bps_regex
-                .captures(&text.value)
-                .and_then(|c| c.get(1))
-                .map(|c| c.as_bytes())
-                .and_then(|c| std::str::from_utf8(c).ok())
-                .and_then(|c| c.parse::<u32>().ok());
+            let bps = extract_bps_value(&text.value);
             // Only return this if we can parse it properly. Fallback to cdrom otherwise.
-            if let Some(bps) = caps {
+            if let Some(bps) = bps {
                 return Some(bps);
             }
         }
@@ -838,4 +841,14 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
         hunk_count,
         map_entry_bytes,
     })
+}
+
+#[cfg(test)]
+mod test {
+    use crate::header::extract_bps_value;
+
+    #[test]
+    fn extract_hard_drive_unit_bytes_test() {
+        assert_eq!(Some(10), extract_bps_value(b"CYLS:2,HEADS:3,SECS:4,BPS:10"))
+    }
 }
