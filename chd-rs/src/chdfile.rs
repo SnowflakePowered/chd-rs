@@ -15,6 +15,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::panic::AssertUnwindSafe;
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct ChdFile<F: Read + Seek> {
@@ -22,7 +23,8 @@ pub struct ChdFile<F: Read + Seek> {
     header: ChdHeader,
     parent: Option<Box<ChdFile<F>>>,
     map: ChdMap,
-    codecs: ChdCodecs,
+    // codecs contain Box<dyn CompressionCodec> which are all UnwindSafe.
+    codecs: AssertUnwindSafe<ChdCodecs>,
 }
 
 impl<F: Read + Seek> ChdFile<F> {
@@ -41,7 +43,7 @@ impl<F: Read + Seek> ChdFile<F> {
         }
 
         let map = ChdMap::try_read_map(&header, &mut file)?;
-        let codecs = header.create_compression_codecs()?;
+        let codecs = AssertUnwindSafe(header.create_compression_codecs()?);
 
         Ok(ChdFile {
             file,
