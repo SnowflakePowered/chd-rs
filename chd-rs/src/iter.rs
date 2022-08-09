@@ -37,7 +37,7 @@
 //!    let metadata = metadata.read()?;
 //! }
 //! ```
-use crate::metadata::{ChdMetadataTag, Metadata, MetadataRef, MetadataRefs};
+use crate::metadata::{MetadataTag, Metadata, MetadataRef, MetadataRefs};
 use crate::Result;
 use crate::{Chd, Hunk};
 use lending_iterator::prelude::*;
@@ -113,7 +113,7 @@ pub struct MetadataEntry<'a, F: Read + Seek + 'a> {
     file: &'a mut F,
 }
 
-impl<'a, F: Read + Seek + 'a> ChdMetadataTag for MetadataEntry<'a, F> {
+impl<'a, F: Read + Seek + 'a> MetadataTag for MetadataEntry<'a, F> {
     fn metatag(&self) -> u32 {
         self.meta_ref.metatag()
     }
