@@ -100,6 +100,7 @@ impl CompressionCodecType for LzmaCodec {
     }
 }
 
+#[cfg(not(feature = "fast_lzma"))]
 impl CodecImplementation for LzmaCodec {
     fn new(hunk_size: u32) -> Result<Self> {
         Ok(LzmaCodec {
@@ -125,6 +126,40 @@ impl CodecImplementation for LzmaCodec {
         self.engine.reset(Some(Some(len as u64)));
         self.engine
             .decompress(&mut read, &mut output)
+            .map_err(|_| Error::DecompressionError)?;
+        Ok(DecompressResult::new(len, read.position() as usize))
+    }
+}
+
+#[cfg(feature = "fast_lzma")]
+impl CodecImplementation for LzmaCodec {
+    fn new(hunk_size: u32) -> Result<Self> {
+        let dict_size = get_lzma_dict_size(9, hunk_size);
+        Ok(LzmaCodec {
+            engine: LzmaDecoder::new_with_buffer(
+                LzmaParams::new(
+                    LzmaProperties {
+                        lc: 3,
+                        lp: 0,
+                        pb: 2,
+                    },
+                    dict_size,
+                    None,
+                ),
+                None,
+                vec![0; dict_size as usize],
+            )
+            .map_err(|_| Error::DecompressionError)?,
+        })
+    }
+
+    fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
+        use lzma_rs::decompress::raw::LzAccumBuffer;
+        let mut read = Cursor::new(input);
+        let len = output.len();
+        self.engine.reset(Some(Some(len as u64)));
+        self.engine
+            .decompress_with_buffer::<LzAccumBuffer<_>, _, _>(&mut read, &mut output)
             .map_err(|_| Error::DecompressionError)?;
         Ok(DecompressResult::new(len, read.position() as usize))
     }
