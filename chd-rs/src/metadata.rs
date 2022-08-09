@@ -1,6 +1,6 @@
 //! Types and methods relating to metadata stored in a CHD file.
 
-use crate::error::{ChdError, Result};
+use crate::error::{Error, Result};
 use crate::make_tag;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::convert::TryInto;
@@ -71,7 +71,7 @@ impl ChdMetadataTag for KnownMetadata {
 
 /// A complete CHD metadata entry with contents read into memory.
 #[derive(Debug)]
-pub struct ChdMetadata {
+pub struct Metadata {
     /// The FourCC metadata tag.
     pub metatag: u32,
     /// The contents of this metadata entry.
@@ -84,7 +84,7 @@ pub struct ChdMetadata {
     pub length: u32,
 }
 
-impl ChdMetadataTag for ChdMetadata {
+impl ChdMetadataTag for Metadata {
     fn metatag(&self) -> u32 {
         self.metatag
     }
@@ -109,10 +109,10 @@ impl MetadataRef {
 
     /// Read the contents of the metadata from the input stream. The `ChdMetadataRef` must have
     /// the same provenance as the input stream for a successful read.
-    pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<ChdMetadata> {
+    pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<Metadata> {
         let mut buf = vec![0u8; self.length as usize];
         self.read_into(file, &mut buf)?;
-        Ok(ChdMetadata {
+        Ok(Metadata {
             metatag: self.metatag,
             value: buf,
             flags: self.flags,
@@ -131,8 +131,8 @@ impl ChdMetadataTag for MetadataRef {
 
 /// An iterator over references to the metadata entries of a CHD file.
 /// If `unstable_lending_iterators` is enabled, metadata can be
-/// more ergonomically iterated over with [`MetadataIter`](crate::iter::MetadataIter).
-pub struct MetadataRefIter<'a, F: Read + Seek + 'a> {
+/// more ergonomically iterated over with [`MetadataEntries`](crate::iter::MetadataEntries).
+pub struct MetadataRefs<'a, F: Read + Seek + 'a> {
     pub(crate) file: &'a mut F,
     curr_offset: u64,
     curr: Option<MetadataRef>,
@@ -140,9 +140,9 @@ pub struct MetadataRefIter<'a, F: Read + Seek + 'a> {
     indices: Vec<(u32, u32)>,
 }
 
-impl<'a, F: Read + Seek + 'a> MetadataRefIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
     pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
-        MetadataRefIter {
+        MetadataRefs {
             file,
             curr_offset: initial_offset,
             curr: None,
@@ -151,7 +151,7 @@ impl<'a, F: Read + Seek + 'a> MetadataRefIter<'a, F> {
     }
 
     pub(crate) fn dead(file: &'a mut F) -> Self {
-        MetadataRefIter {
+        MetadataRefs {
             file,
             curr_offset: 0,
             curr: None,
@@ -161,22 +161,22 @@ impl<'a, F: Read + Seek + 'a> MetadataRefIter<'a, F> {
 
     /// Consumes the iterator, collecting all remaining metadata references and
     /// reads all their contents into a `Vec<ChdMetadata>`.
-    pub fn try_into_vec(self) -> Result<Vec<ChdMetadata>> {
+    pub fn try_into_vec(self) -> Result<Vec<Metadata>> {
         self.try_into()
     }
 }
 
-impl<'a, F: Read + Seek + 'a> TryInto<Vec<ChdMetadata>> for MetadataRefIter<'a, F> {
-    type Error = ChdError;
+impl<'a, F: Read + Seek + 'a> TryInto<Vec<Metadata>> for MetadataRefs<'a, F> {
+    type Error = Error;
 
-    fn try_into(mut self) -> std::result::Result<Vec<ChdMetadata>, Self::Error> {
+    fn try_into(mut self) -> std::result::Result<Vec<Metadata>, Self::Error> {
         let metas = &mut self;
         let metas: Vec<_> = metas.collect();
         metas.iter().map(|e| e.read(&mut self.file)).collect()
     }
 }
 
-impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefIter<'a, F> {
+impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
     // really need GATs to do this properly...
     type Item = MetadataRef;
 
@@ -185,14 +185,12 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefIter<'a, F> {
             return None;
         }
 
-        fn next_inner<'a, F: Read + Seek + 'a>(
-            s: &mut MetadataRefIter<'a, F>,
-        ) -> Result<MetadataRef> {
+        fn next_inner<'a, F: Read + Seek + 'a>(s: &mut MetadataRefs<'a, F>) -> Result<MetadataRef> {
             let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
             let count = s.file.read(&mut raw_header)?;
             if count != METADATA_HEADER_SIZE {
-                return Err(ChdError::MetadataNotFound);
+                return Err(Error::MetadataNotFound);
             }
             let mut cursor = Cursor::new(raw_header);
             cursor.seek(SeekFrom::Start(0))?;

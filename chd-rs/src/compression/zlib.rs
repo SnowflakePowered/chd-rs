@@ -1,7 +1,7 @@
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
-use crate::error::{ChdError, Result};
+use crate::error::{Error, Result};
 use crate::header::CodecType;
 use flate2::{Decompress, FlushDecompress};
 
@@ -30,15 +30,15 @@ impl CodecImplementation for ZlibCodec {
         let status = self
             .engine
             .decompress(input, output, FlushDecompress::Finish)
-            .map_err(|_| ChdError::DecompressionError)?;
+            .map_err(|_| Error::DecompressionError)?;
 
         if status == flate2::Status::BufError {
-            return Err(ChdError::CompressionError);
+            return Err(Error::CompressionError);
         }
 
         let total_out = self.engine.total_out();
         if self.engine.total_out() != output.len() as u64 {
-            return Err(ChdError::DecompressionError);
+            return Err(Error::DecompressionError);
         }
 
         Ok(DecompressResult::new(

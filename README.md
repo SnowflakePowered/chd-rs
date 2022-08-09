@@ -17,7 +17,7 @@ LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs), and FLAC decompre
 is on readability and correctness.
 
 ## Usage
-Open a `ChdFile` with `ChdFile::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
+Open a `Chd` with `Chd::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
 read hunks.
 
 The size of the destination buffer must be exactly `chd.header().hunk_size()` to decompress with
@@ -26,7 +26,7 @@ The size of the destination buffer must be exactly `chd.header().hunk_size()` to
 ```rust
 fn main() -> Result<()> {
     let mut f = BufReader::new(File::open("image.chd")?;
-    let mut chd = ChdFile::open(&mut f, None)?;
+    let mut chd = Chd::open(&mut f, None)?;
     let hunk_count = chd.header().hunk_count();
     let hunk_size = chd.header().hunk_size();
     
@@ -60,7 +60,7 @@ Then hunks can be iterated like so.
 ```rust
 fn main() -> Result<()> {
     let mut f = BufReader::new(File::open("image.chd")?);
-    let mut chd = ChdFile::open(&mut f, None)?;
+    let mut chd = Chd::open(&mut f, None)?;
     
     // buffer to store decompressed hunks
     let mut out_buf = chd.get_hunksized_buffer();
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
 }
 ```
 
-A similar API exists for metadata in `ChdFile::metadata`.
+A similar API exists for metadata in `Chd::metadata`.
 
 
 ### Verifying Hunk Checksums

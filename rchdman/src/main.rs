@@ -1,8 +1,8 @@
 use anyhow::anyhow;
-use chd::header::{ChdHeader, CodecType};
+use chd::header::{CodecType, Header};
 use chd::iter::LendingIterator;
-use chd::map::{LegacyEntryType, MapEntry, V5CompressionType};
-use chd::ChdFile;
+use chd::map::{CompressionTypeLegacy, MapEntry, CompressionTypeV5};
+use chd::Chd;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
 use sha1::{Digest, Sha1};
@@ -110,25 +110,25 @@ enum Commands {
 }
 
 fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
-    fn get_file_version(chd: &ChdHeader) -> usize {
+    fn get_file_version(chd: &Header) -> usize {
         match chd {
-            ChdHeader::V1Header(_) => 1,
-            ChdHeader::V2Header(_) => 2,
-            ChdHeader::V3Header(_) => 3,
-            ChdHeader::V4Header(_) => 4,
-            ChdHeader::V5Header(_) => 5,
+            Header::V1Header(_) => 1,
+            Header::V2Header(_) => 2,
+            Header::V3Header(_) => 3,
+            Header::V4Header(_) => 4,
+            Header::V5Header(_) => 5,
         }
     }
 
-    fn print_hash(header: &ChdHeader) {
+    fn print_hash(header: &Header) {
         match header {
-            ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
+            Header::V1Header(h) | Header::V2Header(h) => {
                 println!("MD5:\t\t{}", hex::encode(h.md5));
                 if header.has_parent() {
                     println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
                 }
             }
-            ChdHeader::V3Header(h) => {
+            Header::V3Header(h) => {
                 println!("MD5:\t\t{}", hex::encode(h.md5));
                 if header.has_parent() {
                     println!("Parent MD5:\t{}", hex::encode(h.parent_md5));
@@ -138,13 +138,13 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                     println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
                 }
             }
-            ChdHeader::V4Header(h) => {
+            Header::V4Header(h) => {
                 println!("SHA1:\t\t{}", hex::encode(h.sha1));
                 if header.has_parent() {
                     println!("Parent SHA1:\t{}", hex::encode(h.parent_sha1));
                 }
             }
-            ChdHeader::V5Header(h) => {
+            Header::V5Header(h) => {
                 println!("SHA1:\t\t{}", hex::encode(h.sha1));
                 println!("Data SHA1:\t{}", hex::encode(h.raw_sha1));
                 if header.has_parent() {
@@ -171,7 +171,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
         }
     }
 
-    fn print_compression(header: &ChdHeader) {
+    fn print_compression(header: &Header) {
         fn to_chdman_compression_name(ty: CodecType) -> &'static str {
             match ty {
                 CodecType::None => "none",
@@ -196,25 +196,25 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
         }
 
         match header {
-            ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => {
+            Header::V1Header(h) | Header::V2Header(h) => {
                 println!(
                     "{}",
                     to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
                 );
             }
-            ChdHeader::V3Header(h) => {
+            Header::V3Header(h) => {
                 println!(
                     "{}",
                     to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
                 );
             }
-            ChdHeader::V4Header(h) => {
+            Header::V4Header(h) => {
                 println!(
                     "{}",
                     to_chdman_compression_name(CodecType::from_u32(h.compression).unwrap())
                 );
             }
-            ChdHeader::V5Header(h) => {
+            Header::V5Header(h) => {
                 for compression in h.compression {
                     if compression == 0 {
                         break;
@@ -243,7 +243,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
         Ok(res.map(Option::unwrap))
     }
 
-    fn print_verbose<F: Seek + Read>(chd: &ChdFile<F>) -> anyhow::Result<()> {
+    fn print_verbose<F: Seek + Read>(chd: &Chd<F>) -> anyhow::Result<()> {
         // can only have 4 comptypes.
         // first four is for the four comp types.
         // next four is NONE, SELF, PARENT, MINI, UNKNOWN
@@ -258,30 +258,30 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
             let hunk = chd.map().get_entry(i).unwrap();
             match hunk {
                 MapEntry::V5Compressed(c) => match c.hunk_type()? {
-                    V5CompressionType::CompressionType0 => {
+                    CompressionTypeV5::CompressionType0 => {
                         hunk_count[0] += 1;
                     }
-                    V5CompressionType::CompressionType1 => {
+                    CompressionTypeV5::CompressionType1 => {
                         hunk_count[1] += 1;
                     }
-                    V5CompressionType::CompressionType2 => {
+                    CompressionTypeV5::CompressionType2 => {
                         hunk_count[2] += 1;
                     }
-                    V5CompressionType::CompressionType3 => {
+                    CompressionTypeV5::CompressionType3 => {
                         hunk_count[3] += 1;
                     }
-                    V5CompressionType::CompressionNone => {
+                    CompressionTypeV5::CompressionNone => {
                         hunk_count[4] += 1;
                     }
-                    V5CompressionType::CompressionSelf
-                    | V5CompressionType::CompressionSelf0
-                    | V5CompressionType::CompressionSelf1 => {
+                    CompressionTypeV5::CompressionSelf
+                    | CompressionTypeV5::CompressionSelf0
+                    | CompressionTypeV5::CompressionSelf1 => {
                         hunk_count[5] += 1;
                     }
-                    V5CompressionType::CompressionParent
-                    | V5CompressionType::CompressionParentSelf
-                    | V5CompressionType::CompressionParent0
-                    | V5CompressionType::CompressionParent1 => {}
+                    CompressionTypeV5::CompressionParent
+                    | CompressionTypeV5::CompressionParentSelf
+                    | CompressionTypeV5::CompressionParent0
+                    | CompressionTypeV5::CompressionParent1 => {}
                     _ => {
                         hunk_count[6] += 1;
                     }
@@ -291,23 +291,23 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                 }
                 MapEntry::LegacyEntry(c) => {
                     match c.hunk_type()? {
-                        LegacyEntryType::Invalid => {}
-                        LegacyEntryType::Compressed => {
+                        CompressionTypeLegacy::Invalid => {}
+                        CompressionTypeLegacy::Compressed => {
                             hunk_count[0] += 1;
                         }
-                        LegacyEntryType::Uncompressed => {
+                        CompressionTypeLegacy::Uncompressed => {
                             hunk_count[4] += 1;
                         }
-                        LegacyEntryType::Mini => {
+                        CompressionTypeLegacy::Mini => {
                             hunk_count[7] += 1;
                         }
-                        LegacyEntryType::SelfHunk => {
+                        CompressionTypeLegacy::SelfHunk => {
                             hunk_count[5] += 1;
                         }
-                        LegacyEntryType::ParentHunk => {
+                        CompressionTypeLegacy::ParentHunk => {
                             hunk_count[6] += 1;
                         }
-                        LegacyEntryType::ExternalCompressed => {
+                        CompressionTypeLegacy::ExternalCompressed => {
                             // not sure this is valid.
                             hunk_count[8] += 1;
                         }
@@ -329,11 +329,11 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                     8 => "Unknown",
                     i => codec_name(
                         CodecType::from_u32(match chd.header() {
-                            ChdHeader::V1Header(h) => h.compression,
-                            ChdHeader::V2Header(h) => h.compression,
-                            ChdHeader::V3Header(h) => h.compression,
-                            ChdHeader::V4Header(h) => h.compression,
-                            ChdHeader::V5Header(h) => h.compression[i],
+                            Header::V1Header(h) => h.compression,
+                            Header::V2Header(h) => h.compression,
+                            Header::V3Header(h) => h.compression,
+                            Header::V4Header(h) => h.compression,
+                            Header::V5Header(h) => h.compression[i],
                         })
                         .unwrap(),
                     ),
@@ -372,7 +372,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
     println!("\nchd-rs - rchdman info");
     let mut f = File::open(input)?;
     let fsize = f.metadata()?.len();
-    let mut chd = ChdFile::open(&mut f, None)?;
+    let mut chd = Chd::open(&mut f, None)?;
     println!("Input file:\t{}", input.display());
     println!("File Version:\t{}", get_file_version(chd.header()));
     println!(
@@ -456,7 +456,7 @@ fn benchmark(p: impl AsRef<Path>) -> anyhow::Result<()> {
     let mut f = BufReader::new(File::open(p)?);
 
     let start = Instant::now();
-    let mut chd = ChdFile::open(&mut f, None)?;
+    let mut chd = Chd::open(&mut f, None)?;
     let mut hunk_buf = chd.get_hunksized_buffer();
     let mut cmp_buf = Vec::new();
     let hunk_iter = chd.hunks();
@@ -491,13 +491,13 @@ fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> any
 
     let p = if let Some(parent) = inputparent {
         let f = BufReader::new(File::open(parent)?);
-        let parent_chd = ChdFile::open(f, None)?;
+        let parent_chd = Chd::open(f, None)?;
         Some(Box::new(parent_chd))
     } else {
         None
     };
 
-    let mut chd = ChdFile::open(f, p)?;
+    let mut chd = Chd::open(f, p)?;
 
     let header = chd.header();
     if !header.is_compressed() {
@@ -505,9 +505,9 @@ fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> any
     }
 
     let raw_sha1 = match header {
-        ChdHeader::V3Header(h) => h.sha1,
-        ChdHeader::V4Header(h) => h.raw_sha1,
-        ChdHeader::V5Header(h) => h.raw_sha1,
+        Header::V3Header(h) => h.sha1,
+        Header::V4Header(h) => h.raw_sha1,
+        Header::V5Header(h) => h.raw_sha1,
         _ => return Err(anyhow!("No verification to be done; CHD has no checksum")),
     };
 
@@ -545,7 +545,7 @@ fn dumpmeta(
     println!("\nchd-rs - rchdman dumpmeta");
 
     let mut f = BufReader::new(File::open(input)?);
-    let mut chd = ChdFile::open(&mut f, None)?;
+    let mut chd = Chd::open(&mut f, None)?;
 
     let metas = chd.metadata_refs().try_into_vec()?;
     let tag = metas
@@ -591,13 +591,13 @@ fn extractraw(
 
     let p = if let Some(parent) = inputparent {
         let f = BufReader::new(File::open(parent)?);
-        let parent_chd = ChdFile::open(f, None)?;
+        let parent_chd = Chd::open(f, None)?;
         Some(Box::new(parent_chd))
     } else {
         None
     };
 
-    let mut chd = ChdFile::open(f, p)?;
+    let mut chd = Chd::open(f, p)?;
     let mut cmp_buf = Vec::new();
     let mut out_buf = chd.get_hunksized_buffer();
     let mut hunk_iter = chd.hunks();

@@ -18,17 +18,17 @@
 //! * AVHU (AV Huffman)
 //!
 //! ## Iterating over hunks
-//! Because [`ChdHunk`](crate::ChdHunk) keeps a mutable reference to its owning
-//! [`ChdFile`](crate::ChdFile), direct iteration of hunks is not possible without
+//! Because [`Hunk`](crate::Hunk) keeps a mutable reference to its owning
+//! [`Chd`](crate::Chd), direct iteration of hunks is not possible without
 //! Generic Associated Types. Instead, the hunk indices should be iterated over.
 //!
-//! ```rust
+//!```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
-//! use chd::ChdFile;
+//! use chd::Chd;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let mut chd = Chd::open(&mut f, None)?;
 //! let hunk_count = chd.header().hunk_count();
 //! let hunk_size = chd.header().hunk_size();
 //!
@@ -51,10 +51,10 @@
 //! ```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
-//! use chd::ChdFile;
+//! use chd::Chd;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let mut chd = Chd::open(&mut f, None)?;
 //! let entries = chd.metadata_refs()?;
 //! for entry in entries {
 //!     let metadata = entry.read(&mut f)?;
@@ -64,13 +64,13 @@
 //! ```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
-//! use chd::ChdFile;
-//! use chd::metadata::ChdMetadata;
+//! use chd::Chd;
+//! use chd::metadata::Metadata;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = ChdFile::open(&mut f, None)?;
+//! let mut chd = Chd::open(&mut f, None)?;
 //! let entries = chd.metadata_refs()?;
-//! let metadatas: Vec<ChdMetadata> = entries.try_into()?;
+//! let metadatas: Vec<Metadata> = entries.try_into()?;
 //!```
 //!
 
@@ -100,7 +100,7 @@ mod huffman;
 ///
 /// Each codec may have restrictions on the hunk size, lengths and contents
 /// of the buffer. If [`decompress`](crate::codecs::CodecImplementation::decompress) is called
-/// with buffers that do not satisfy the constraints, it may return [`CompressionError`](crate::ChdError),
+/// with buffers that do not satisfy the constraints, it may return [`CompressionError`](crate::Error),
 /// or panic, especially if the output buffer does not satisfy length requirements.
 ///
 /// Because codecs are allowed to be used outside of a hunk-sized granularity, such as in
@@ -134,8 +134,8 @@ macro_rules! const_assert {
 
 pub(crate) use const_assert;
 
-pub use chdfile::{ChdFile, ChdHunk};
-pub use error::{ChdError, Result};
+pub use chdfile::{Chd, Hunk};
+pub use error::{Error, Result};
 pub mod header;
 pub mod map;
 pub mod metadata;
@@ -147,9 +147,9 @@ pub mod iter;
 
 #[cfg(test)]
 mod tests {
-    use crate::metadata::ChdMetadata;
-    use crate::read::{ChdFileReader, ChdHunkBufReader};
-    use crate::ChdFile;
+    use crate::metadata::Metadata;
+    use crate::read::{HunkBufReader, ChdReader};
+    use crate::Chd;
     use std::convert::TryInto;
     use std::fs::File;
     use std::io::{BufReader, Read, Write};
@@ -160,9 +160,9 @@ mod tests {
     #[test]
     fn read_metas_test() {
         let mut f = File::open(".testimages/Test.chd").expect("");
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
 
-        let metadatas: Vec<ChdMetadata> = chd.metadata_refs().try_into().expect("");
+        let metadatas: Vec<Metadata> = chd.metadata_refs().try_into().expect("");
         let meta_datas: Vec<_> = metadatas
             .into_iter()
             .map(|s| String::from_utf8(s.value).unwrap())
@@ -173,14 +173,14 @@ mod tests {
     #[test]
     fn read_hunk_buffer_test() {
         let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
 
         let mut hunk_buf = Vec::new();
         let mut cmp_buf = Vec::new();
         for hunk_num in 0..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
-            let read = ChdHunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
+            let read = HunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
             hunk_buf = read.into_inner();
         }
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn read_hunk_test() {
         let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
 
         let mut hunk_buf = chd.get_hunksized_buffer();
@@ -205,8 +205,8 @@ mod tests {
     #[test]
     fn read_file_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
-        let chd = ChdFile::open(&mut f, None).expect("file");
-        let mut read = ChdFileReader::new(chd);
+        let chd = Chd::open(&mut f, None).expect("file");
+        let mut read = ChdReader::new(chd);
 
         let mut buf = Vec::new(); // this is really bad..
         read.read_to_end(&mut buf).expect("can read to end");
@@ -220,7 +220,7 @@ mod tests {
         let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
         let mut f_cursor = Cursor::new(f_bytes);
         // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f_cursor, None).expect("file");
+        let mut chd = Chd::open(&mut f_cursor, None).expect("file");
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
         for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
@@ -235,7 +235,7 @@ mod tests {
         let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
         // let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
 
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         let mut hunk_buf = chd.get_hunksized_buffer();
         let mut comp_buf = Vec::new();
         let mut hunks = chd.hunks();
@@ -251,7 +251,7 @@ mod tests {
     #[cfg(feature = "unstable_lending_iterators")]
     fn metadata_iter_lending_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         let mut metas = chd.metadata();
         while let Some(mut meta) = metas.next() {
             let contents = meta.read().expect("metadata entry could not be read");
@@ -263,7 +263,7 @@ mod tests {
     #[cfg(feature = "unsound_owning_iterators")]
     fn metadata_iter_test() {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         for mut meta in chd.metadata().expect("metadata could not be read") {
             let contents = meta.read().expect("metadata entry could not be read");
             println!("{:?}", String::from_utf8(contents.value));

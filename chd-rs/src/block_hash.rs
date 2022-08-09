@@ -2,7 +2,7 @@ use crate::Result;
 use num_traits::ToPrimitive;
 
 #[cfg(feature = "verify_block_crc")]
-use crate::ChdError;
+use crate::Error;
 
 #[allow(unused_imports)]
 use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
@@ -41,7 +41,7 @@ impl ChdBlockChecksum for Crc<u16> {
     ) -> Result<R> {
         #[cfg(feature = "verify_block_crc")]
         match crc.and_then(|f| f.to_u16()) {
-            Some(crc) if CRC16.checksum(buf) != crc => Err(ChdError::DecompressionError),
+            Some(crc) if CRC16.checksum(buf) != crc => Err(Error::DecompressionError),
             _ => Ok(result),
         }
 
@@ -60,7 +60,7 @@ impl ChdBlockChecksum for Crc<u32> {
     ) -> Result<R> {
         #[cfg(feature = "verify_block_crc")]
         match crc.and_then(|f| f.to_u32()) {
-            Some(crc) if CRC32.checksum(buf) != crc => Err(ChdError::DecompressionError),
+            Some(crc) if CRC32.checksum(buf) != crc => Err(Error::DecompressionError),
             _ => Ok(result),
         }
 

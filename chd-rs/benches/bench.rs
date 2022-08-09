@@ -1,6 +1,6 @@
 use bencher::{benchmark_group, benchmark_main, Bencher};
-use chd::read::ChdHunkBufReader;
-use chd::ChdFile;
+use chd::read::HunkBufReader;
+use chd::Chd;
 use std::env::args;
 use std::fs::File;
 use std::io::BufReader;
@@ -9,7 +9,7 @@ fn read_hunks_unbuf_bench(bench: &mut Bencher) {
     let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
 
     bench.iter(|| {
-        let mut chd = ChdFile::open(&mut f, None).expect("file");
+        let mut chd = Chd::open(&mut f, None).expect("file");
         let hunk_count = chd.header().hunk_count();
         let hunk_size = chd.header().hunk_size() as usize;
         let mut hunk_buf = vec![0u8; hunk_size];

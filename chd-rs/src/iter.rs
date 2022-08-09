@@ -2,9 +2,9 @@
 //! These APIs should be considered unstable and will be replaced with APIs
 //! based around GATs and `LendingIterator` once stabilized. See [rust#44265](https://github.com/rust-lang/rust/issues/44265)
 //! for the tracking issue on GAT stabilization.
-use crate::metadata::{ChdMetadata, ChdMetadataTag, MetadataRef, MetadataRefIter};
+use crate::metadata::{ChdMetadataTag, Metadata, MetadataRef, MetadataRefs};
 use crate::Result;
-use crate::{ChdFile, ChdHunk};
+use crate::{Chd, Hunk};
 use lending_iterator::prelude::*;
 use std::io::{Read, Seek};
 
@@ -19,16 +19,16 @@ use std::io::{Read, Seek};
 pub use lending_iterator::lending_iterator::LendingIterator;
 
 /// An iterator over the hunks of a CHD file.
-pub struct HunkIter<'a, F: Read + Seek> {
-    inner: &'a mut ChdFile<F>,
+pub struct Hunks<'a, F: Read + Seek> {
+    inner: &'a mut Chd<F>,
     last_hunk: u32,
     current_hunk: u32,
 }
 
-impl<'a, F: Read + Seek> HunkIter<'a, F> {
-    pub(crate) fn new(inner: &'a mut ChdFile<F>) -> Self {
+impl<'a, F: Read + Seek> Hunks<'a, F> {
+    pub(crate) fn new(inner: &'a mut Chd<F>) -> Self {
         let last_hunk = inner.header().hunk_count();
-        HunkIter {
+        Hunks {
             inner,
             last_hunk,
             current_hunk: 0,
@@ -37,13 +37,13 @@ impl<'a, F: Read + Seek> HunkIter<'a, F> {
 }
 
 #[::nougat::gat]
-impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
+impl<'a, F: Read + Seek> LendingIterator for Hunks<'a, F> {
     type Item<'next>
     where
         Self: 'next,
-    = ChdHunk<'next, F>;
+    = Hunk<'next, F>;
 
-    fn next(&'_ mut self) -> Option<ChdHunk<'_, F>> {
+    fn next(&'_ mut self) -> Option<Hunk<'_, F>> {
         if self.current_hunk == self.last_hunk {
             return None;
         }
@@ -54,19 +54,19 @@ impl<'a, F: Read + Seek> LendingIterator for HunkIter<'a, F> {
 }
 
 /// An iterator over the metadata entries of a CHD file.
-pub struct MetadataIter<'a, F: Read + Seek + 'a> {
-    inner: MetadataRefIter<'a, F>,
+pub struct MetadataEntries<'a, F: Read + Seek + 'a> {
+    inner: MetadataRefs<'a, F>,
 }
 
-impl<'a, F: Read + Seek + 'a> MetadataIter<'a, F> {
-    pub(crate) fn new(inner: MetadataRefIter<'a, F>) -> Self {
-        MetadataIter { inner }
+impl<'a, F: Read + Seek + 'a> MetadataEntries<'a, F> {
+    pub(crate) fn new(inner: MetadataRefs<'a, F>) -> Self {
+        MetadataEntries { inner }
     }
 }
 
 impl<'a, F: Read + Seek + 'a> MetadataEntry<'a, F> {
     /// Read the contents of the metadata from the input stream.
-    pub fn read(&mut self) -> Result<ChdMetadata> {
+    pub fn read(&mut self) -> Result<Metadata> {
         self.meta_ref.read(self.file)
     }
 }
@@ -85,7 +85,7 @@ impl<'a, F: Read + Seek + 'a> ChdMetadataTag for MetadataEntry<'a, F> {
 }
 
 #[::nougat::gat]
-impl<'a, F: Read + Seek> LendingIterator for MetadataIter<'a, F> {
+impl<'a, F: Read + Seek> LendingIterator for MetadataEntries<'a, F> {
     type Item<'next>
     where
         Self: 'next,

@@ -3,7 +3,7 @@ use crate::compression::{
 };
 use crate::header::CodecType;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder};
-use crate::{huffman, ChdError, Result};
+use crate::{huffman, Error, Result};
 use bitreader::BitReader;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use claxon::frame::FrameReader;
@@ -141,7 +141,7 @@ impl CodecImplementation for AVHuffCodec {
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         // https://github.com/mamedev/mame/blob/master/src/lib/util/avhuff.cpp#L723
         if input.len() < 8 {
-            return Err(ChdError::DecompressionError);
+            return Err(Error::DecompressionError);
         }
 
         let mut input_cursor = Cursor::new(input);
@@ -153,7 +153,7 @@ impl CodecImplementation for AVHuffCodec {
 
         // Each channel length entry is u16 = 2 bytes.
         if input.len() < AVHU_COMP_HEADER_LEN + 2 * channels as usize {
-            return Err(ChdError::DecompressionError);
+            return Err(Error::DecompressionError);
         }
 
         // Total expected length of input in bytes
@@ -175,7 +175,7 @@ impl CodecImplementation for AVHuffCodec {
 
         // Input length has to have enough data for all the channel data.
         if total_in >= input.len() {
-            return Err(ChdError::DecompressionError);
+            return Err(Error::DecompressionError);
         }
 
         // Write the MAME compressed AV header.
@@ -280,11 +280,11 @@ impl AVHuffCodec {
                         for sample in block.channel(0) {
                             channel_out
                                 .write_i16::<BigEndian>(*sample as i16)
-                                .map_err(|_| ChdError::DecompressionError)?;
+                                .map_err(|_| Error::DecompressionError)?;
                         }
                         block_buf = block.into_buffer();
                     }
-                    _ => return Err(ChdError::DecompressionError),
+                    _ => return Err(Error::DecompressionError),
                 }
             }
             total_read += frame_read.into_inner().position();
@@ -357,7 +357,7 @@ impl AVHuffCodec {
 
                 bit_reader.align(1)?;
                 if bit_reader.remaining() != 0 {
-                    return Err(ChdError::DecompressionError);
+                    return Err(Error::DecompressionError);
                 }
 
                 source = &source[tree_size as usize..];
@@ -404,7 +404,7 @@ impl AVHuffCodec {
     ) -> Result<DecompressResult> {
         if input[0] & 0x80 == 0 {
             // avhuff.cpp only supports lossless format.
-            return Err(ChdError::UnsupportedFormat);
+            return Err(Error::UnsupportedFormat);
         }
 
         // Skip first byte that indicates lossless.
@@ -443,7 +443,7 @@ impl AVHuffCodec {
 
         bit_reader.align(1)?;
         if bit_reader.remaining() != 0 {
-            return Err(ChdError::DecompressionError);
+            return Err(Error::DecompressionError);
         }
 
         // If we don't fill the output buffer, fill the remainder with zeroes.
