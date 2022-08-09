@@ -58,12 +58,12 @@ impl KnownMetadata {
 }
 
 /// Trait for structs that contain or represent tagged metadata.
-pub trait ChdMetadataTag {
+pub trait MetadataTag {
     /// Returns the FourCC metatag that this struct represents or refers to.
     fn metatag(&self) -> u32;
 }
 
-impl ChdMetadataTag for KnownMetadata {
+impl MetadataTag for KnownMetadata {
     fn metatag(&self) -> u32 {
         *self as u32
     }
@@ -84,7 +84,7 @@ pub struct Metadata {
     pub length: u32,
 }
 
-impl ChdMetadataTag for Metadata {
+impl MetadataTag for Metadata {
     fn metatag(&self) -> u32 {
         self.metatag
     }
@@ -122,7 +122,7 @@ impl MetadataRef {
     }
 }
 
-impl ChdMetadataTag for MetadataRef {
+impl MetadataTag for MetadataRef {
     #[inline(always)]
     fn metatag(&self) -> u32 {
         self.metatag
