@@ -5,7 +5,6 @@ use crate::error::{ChdError, Result};
 use crate::header::CodecType;
 use lzma_rs::decompress::raw::{LzmaDecoder, LzmaParams, LzmaProperties};
 use std::io::Cursor;
-// use lzma_rs_headerless::decompress::LzmaDecoder;
 
 /// LZMA (lzma) decompression codec.
 ///

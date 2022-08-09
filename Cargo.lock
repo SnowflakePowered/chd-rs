@@ -182,7 +182,7 @@ dependencies = [
  "crc 3.0.0",
  "flate2",
  "lending-iterator",
- "lzma-rs-headerless",
+ "lzma-rs-perf-exp",
  "nougat",
  "num-derive",
  "num-traits",
@@ -548,6 +548,16 @@ checksum = "239bf52949e99f1561efd5494f9303c5719aa65884f0792faa850aebf8519987"
 dependencies = [
  "byteorder",
  "crc 1.8.1",
+]
+
+[[package]]
+name = "lzma-rs-perf-exp"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38435c1305548bb408c98242841c3cf161246323e72a3e4433787f3c05bf18ee"
+dependencies = [
+ "byteorder",
+ "crc 3.0.0",
 ]
 
 [[package]]

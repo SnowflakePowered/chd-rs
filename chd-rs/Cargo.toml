@@ -35,7 +35,7 @@ text_io = "0.1"
 
 # codecs
 flate2 = "1"
-lzma-rs = { package = "lzma-rs-headerless", version = "0.5.3", features = ["raw_decoder"] }
+lzma-rs = { package = "lzma-rs-perf-exp", version = "0.2", features = ["raw_decoder"] }
 claxon = "0.4"
 bitreader = "0.3.6"
 
