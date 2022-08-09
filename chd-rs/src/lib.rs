@@ -72,6 +72,16 @@
 //! let entries = chd.metadata_refs()?;
 //! let metadatas: Vec<ChdMetadata> = entries.try_into()?;
 //!```
+//!
+
+#[cfg(not(feature = "std"))]
+compile_error!(
+    "The feature `std` is required. \
+     no_std support is blocked on Rust issue \
+     #48331 <https://github.com/rust-lang/rust/issues/48331>.\
+    "
+);
+
 mod error;
 
 mod block_hash;
