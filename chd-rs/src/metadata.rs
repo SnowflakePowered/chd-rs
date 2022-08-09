@@ -3,7 +3,6 @@
 use crate::error::{Error, Result};
 use crate::make_tag;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::convert::TryInto;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
 const METADATA_HEADER_SIZE: usize = 16;
@@ -158,21 +157,15 @@ impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
             indices: Vec::new(),
         }
     }
-
-    /// Consumes the iterator, collecting all remaining metadata references and
-    /// reads all their contents into a `Vec<ChdMetadata>`.
-    pub fn try_into_vec(self) -> Result<Vec<Metadata>> {
-        self.try_into()
-    }
 }
 
-impl<'a, F: Read + Seek + 'a> TryInto<Vec<Metadata>> for MetadataRefs<'a, F> {
+impl<'a, F: Read + Seek + 'a> TryFrom<MetadataRefs<'a, F>> for Vec<Metadata>{
     type Error = Error;
 
-    fn try_into(mut self) -> std::result::Result<Vec<Metadata>, Self::Error> {
-        let metas = &mut self;
+    fn try_from(mut value: MetadataRefs<'a, F>) -> std::result::Result<Self, Self::Error> {
+        let metas = &mut value;
         let metas: Vec<_> = metas.collect();
-        metas.iter().map(|e| e.read(&mut self.file)).collect()
+        metas.iter().map(|e| e.read(&mut value.file)).collect()
     }
 }
 
