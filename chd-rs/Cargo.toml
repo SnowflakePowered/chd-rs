@@ -11,19 +11,24 @@ categories = ["emulators", "compression", "encoding"]
 keywords = ["mame", "chd", "decompression"]
 
 [features]
-default = ["want_subcode", "want_raw_data_sector"]
-
-# disabled by default for speed
+default = ["std", "cd_full"]
 verify_block_crc = ["want_subcode", "want_raw_data_sector"]
+cd_full = ["want_subcode", "want_raw_data_sector"]
+std = []
+# disabled by default for speed
 
 huffman_api = []
 codec_api = []
 unstable_lending_iterators = [ "lending-iterator", "nougat" ]
-fast_zlib = ["flate2/zlib-ng"]
 
 # if disabled results may be unwanted
 want_subcode = []
 want_raw_data_sector = []
+
+# performance tweaks
+max_perf = ["fast_zlib", "fast_lzma"]
+fast_zlib = ["std", "flate2/zlib-ng"]
+fast_lzma = ["std"]
 
 [dependencies]
 byteorder = "1"
