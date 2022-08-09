@@ -1,4 +1,4 @@
-use crate::block_hash::ChdBlockChecksum;
+use crate::block_hash::BlockChecksum;
 use crate::compression::CompressionCodec;
 use crate::error::{Error, Result};
 use crate::header::Header;

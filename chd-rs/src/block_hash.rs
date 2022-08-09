@@ -19,7 +19,7 @@ const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 /// Crate-private trait for the implementation of a CHD-compatible CRC instance for
 /// CRC bit widths.
-pub(crate) trait ChdBlockChecksum {
+pub(crate) trait BlockChecksum {
     /// Checks the integrity of the decompressed data with the CHD hunk checksum for
     /// the given bit width using the CHD-native CRC instance for that bit width.
     ///
@@ -31,7 +31,7 @@ pub(crate) trait ChdBlockChecksum {
         -> Result<R>;
 }
 
-impl ChdBlockChecksum for Crc<u16> {
+impl BlockChecksum for Crc<u16> {
     #[inline(always)]
     #[allow(unused_variables)]
     fn verify_block_checksum<C: ToPrimitive, R>(
@@ -50,7 +50,7 @@ impl ChdBlockChecksum for Crc<u16> {
     }
 }
 
-impl ChdBlockChecksum for Crc<u32> {
+impl BlockChecksum for Crc<u32> {
     #[inline(always)]
     #[allow(unused_variables)]
     fn verify_block_checksum<C: ToPrimitive, R>(
