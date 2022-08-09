@@ -39,7 +39,7 @@
 //!    let metadata = metadata.read()?;
 //! }
 //! ```
-use crate::metadata::{MetadataTag, Metadata, MetadataRef, MetadataRefs};
+use crate::metadata::{Metadata, MetadataRef, MetadataRefs, MetadataTag};
 use crate::Result;
 use crate::{Chd, Hunk};
 use lending_iterator::prelude::*;

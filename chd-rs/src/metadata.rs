@@ -159,7 +159,7 @@ impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
     }
 }
 
-impl<'a, F: Read + Seek + 'a> TryFrom<MetadataRefs<'a, F>> for Vec<Metadata>{
+impl<'a, F: Read + Seek + 'a> TryFrom<MetadataRefs<'a, F>> for Vec<Metadata> {
     type Error = Error;
 
     fn try_from(mut value: MetadataRefs<'a, F>) -> std::result::Result<Self, Self::Error> {

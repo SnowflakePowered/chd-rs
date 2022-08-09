@@ -71,7 +71,7 @@
 //! let mut f = BufReader::new(File::open("file.chd")?);
 //! // chd takes ownership of f here
 //! let mut chd = Chd::open(f, None)?;
-//! 
+//!
 //! let metadatas: Vec<Metadata> = chd.metadata_refs()?.try_into()?;
 //!```
 //!
@@ -150,7 +150,7 @@ pub mod iter;
 #[cfg(test)]
 mod tests {
     use crate::metadata::Metadata;
-    use crate::read::{HunkBufReader, ChdReader};
+    use crate::read::{ChdReader, HunkBufReader};
     use crate::Chd;
     use std::convert::TryInto;
     use std::fs::File;

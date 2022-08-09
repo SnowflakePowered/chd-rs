@@ -3,7 +3,8 @@ use crate::compression::CompressionCodec;
 use crate::error::{Error, Result};
 use crate::header::Header;
 use crate::map::{
-    CompressedEntryProof, CompressionTypeLegacy, Map, MapEntry, UncompressedEntryProof, CompressionTypeV5,
+    CompressedEntryProof, CompressionTypeLegacy, CompressionTypeV5, Map, MapEntry,
+    UncompressedEntryProof,
 };
 
 #[cfg(feature = "unstable_lending_iterators")]
