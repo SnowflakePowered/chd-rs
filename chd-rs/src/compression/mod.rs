@@ -9,9 +9,6 @@ mod flac;
 mod lzma;
 mod none;
 mod zlib;
-
-#[cfg(feature = "flac_header")]
-mod flac_header;
 mod huff;
 
 pub mod codecs {
