@@ -1,7 +1,6 @@
 use crate::huffman::HuffmanError;
 use bitreader::BitReaderError;
 use std::array::TryFromSliceError;
-use std::error::Error;
 use std::ffi::FromBytesWithNulError;
 use std::fmt::Display;
 use std::io::ErrorKind;
@@ -13,7 +12,7 @@ use std::str::Utf8Error;
 /// given sane defaults in the C compiler. See [repr(C) in the Rustonomicon](https://doc.rust-lang.org/nomicon/other-reprs.html#reprc) for more details.
 #[derive(Debug)]
 #[repr(C)]
-pub enum ChdError {
+pub enum Error {
     /// No error.
     /// This is only used by the C API bindings.
     None,
@@ -88,107 +87,107 @@ pub enum ChdError {
     Unknown,
 }
 
-impl Error for ChdError {}
+impl std::error::Error for Error {}
 
-impl Display for ChdError {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ChdError::None => f.write_str("no error"),
-            ChdError::NoInterface => f.write_str("no drive interface"),
-            ChdError::OutOfMemory => f.write_str("out of memory"),
-            ChdError::InvalidFile => f.write_str("invalid file"),
-            ChdError::InvalidParameter => f.write_str("invalid parameter"),
-            ChdError::InvalidData => f.write_str("invalid data"),
-            ChdError::FileNotFound => f.write_str("file not found"),
-            ChdError::RequiresParent => f.write_str("requires parent"),
-            ChdError::FileNotWriteable => f.write_str("file not writeable"),
-            ChdError::ReadError => f.write_str("read error"),
-            ChdError::WriteError => f.write_str("write error"),
-            ChdError::CodecError => f.write_str("codec error"),
-            ChdError::InvalidParent => f.write_str("invalid parent"),
-            ChdError::HunkOutOfRange => f.write_str("hunk out of range"),
-            ChdError::DecompressionError => f.write_str("decompression error"),
-            ChdError::CompressionError => f.write_str("compression error"),
-            ChdError::CantCreateFile => f.write_str("can't create file"),
-            ChdError::CantVerify => f.write_str("can't verify file"),
-            ChdError::NotSupported => f.write_str("operation not supported"),
-            ChdError::MetadataNotFound => f.write_str("can't find metadata"),
-            ChdError::InvalidMetadataSize => f.write_str("invalid metadata size"),
-            ChdError::UnsupportedVersion => f.write_str("unsupported CHD version"),
-            ChdError::VerifyIncomplete => f.write_str("incomplete verify"),
-            ChdError::InvalidMetadata => f.write_str("invalid metadata"),
-            ChdError::InvalidState => f.write_str("invalid state"),
-            ChdError::OperationPending => f.write_str("operation pending"),
-            ChdError::NoAsyncOperation => f.write_str("no async operation in progress"),
-            ChdError::UnsupportedFormat => f.write_str("unsupported format"),
-            ChdError::Unknown => f.write_str("undocumented error"),
+            Error::None => f.write_str("no error"),
+            Error::NoInterface => f.write_str("no drive interface"),
+            Error::OutOfMemory => f.write_str("out of memory"),
+            Error::InvalidFile => f.write_str("invalid file"),
+            Error::InvalidParameter => f.write_str("invalid parameter"),
+            Error::InvalidData => f.write_str("invalid data"),
+            Error::FileNotFound => f.write_str("file not found"),
+            Error::RequiresParent => f.write_str("requires parent"),
+            Error::FileNotWriteable => f.write_str("file not writeable"),
+            Error::ReadError => f.write_str("read error"),
+            Error::WriteError => f.write_str("write error"),
+            Error::CodecError => f.write_str("codec error"),
+            Error::InvalidParent => f.write_str("invalid parent"),
+            Error::HunkOutOfRange => f.write_str("hunk out of range"),
+            Error::DecompressionError => f.write_str("decompression error"),
+            Error::CompressionError => f.write_str("compression error"),
+            Error::CantCreateFile => f.write_str("can't create file"),
+            Error::CantVerify => f.write_str("can't verify file"),
+            Error::NotSupported => f.write_str("operation not supported"),
+            Error::MetadataNotFound => f.write_str("can't find metadata"),
+            Error::InvalidMetadataSize => f.write_str("invalid metadata size"),
+            Error::UnsupportedVersion => f.write_str("unsupported CHD version"),
+            Error::VerifyIncomplete => f.write_str("incomplete verify"),
+            Error::InvalidMetadata => f.write_str("invalid metadata"),
+            Error::InvalidState => f.write_str("invalid state"),
+            Error::OperationPending => f.write_str("operation pending"),
+            Error::NoAsyncOperation => f.write_str("no async operation in progress"),
+            Error::UnsupportedFormat => f.write_str("unsupported format"),
+            Error::Unknown => f.write_str("undocumented error"),
         }
     }
 }
 
-impl From<TryFromSliceError> for ChdError {
+impl From<TryFromSliceError> for Error {
     fn from(_: TryFromSliceError) -> Self {
-        ChdError::InvalidFile
+        Error::InvalidFile
     }
 }
 
-impl From<BitReaderError> for ChdError {
+impl From<BitReaderError> for Error {
     fn from(_: BitReaderError) -> Self {
-        ChdError::ReadError
+        Error::ReadError
     }
 }
 
-impl From<FromBytesWithNulError> for ChdError {
+impl From<FromBytesWithNulError> for Error {
     fn from(_: FromBytesWithNulError) -> Self {
-        ChdError::InvalidData
+        Error::InvalidData
     }
 }
 
-impl From<Utf8Error> for ChdError {
+impl From<Utf8Error> for Error {
     fn from(_: Utf8Error) -> Self {
-        ChdError::InvalidData
+        Error::InvalidData
     }
 }
 
-impl From<std::io::Error> for ChdError {
+impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         match err.kind() {
-            ErrorKind::NotFound => ChdError::FileNotFound,
-            ErrorKind::PermissionDenied => ChdError::NotSupported,
-            ErrorKind::ConnectionRefused => ChdError::Unknown,
-            ErrorKind::ConnectionReset => ChdError::Unknown,
-            ErrorKind::ConnectionAborted => ChdError::Unknown,
-            ErrorKind::NotConnected => ChdError::Unknown,
-            ErrorKind::AddrInUse => ChdError::Unknown,
-            ErrorKind::AddrNotAvailable => ChdError::Unknown,
-            ErrorKind::BrokenPipe => ChdError::Unknown,
-            ErrorKind::AlreadyExists => ChdError::CantCreateFile,
-            ErrorKind::WouldBlock => ChdError::Unknown,
-            ErrorKind::InvalidInput => ChdError::InvalidParameter,
-            ErrorKind::InvalidData => ChdError::InvalidData,
-            ErrorKind::TimedOut => ChdError::Unknown,
-            ErrorKind::WriteZero => ChdError::WriteError,
-            ErrorKind::Interrupted => ChdError::Unknown,
-            ErrorKind::Other => ChdError::Unknown,
-            ErrorKind::UnexpectedEof => ChdError::ReadError,
-            ErrorKind::Unsupported => ChdError::NotSupported,
-            ErrorKind::OutOfMemory => ChdError::OutOfMemory,
-            _ => ChdError::Unknown,
+            ErrorKind::NotFound => Error::FileNotFound,
+            ErrorKind::PermissionDenied => Error::NotSupported,
+            ErrorKind::ConnectionRefused => Error::Unknown,
+            ErrorKind::ConnectionReset => Error::Unknown,
+            ErrorKind::ConnectionAborted => Error::Unknown,
+            ErrorKind::NotConnected => Error::Unknown,
+            ErrorKind::AddrInUse => Error::Unknown,
+            ErrorKind::AddrNotAvailable => Error::Unknown,
+            ErrorKind::BrokenPipe => Error::Unknown,
+            ErrorKind::AlreadyExists => Error::CantCreateFile,
+            ErrorKind::WouldBlock => Error::Unknown,
+            ErrorKind::InvalidInput => Error::InvalidParameter,
+            ErrorKind::InvalidData => Error::InvalidData,
+            ErrorKind::TimedOut => Error::Unknown,
+            ErrorKind::WriteZero => Error::WriteError,
+            ErrorKind::Interrupted => Error::Unknown,
+            ErrorKind::Other => Error::Unknown,
+            ErrorKind::UnexpectedEof => Error::ReadError,
+            ErrorKind::Unsupported => Error::NotSupported,
+            ErrorKind::OutOfMemory => Error::OutOfMemory,
+            _ => Error::Unknown,
         }
     }
 }
 
-impl From<HuffmanError> for ChdError {
+impl From<HuffmanError> for Error {
     fn from(_e: HuffmanError) -> Self {
-        ChdError::DecompressionError
+        Error::DecompressionError
     }
 }
 
-impl From<ChdError> for std::io::Error {
-    fn from(e: ChdError) -> Self {
+impl From<Error> for std::io::Error {
+    fn from(e: Error) -> Self {
         std::io::Error::new(ErrorKind::Other, e)
     }
 }
 
 /// Result type for chd-rs.
-pub type Result<T> = std::result::Result<T, ChdError>;
+pub type Result<T> = std::result::Result<T, Error>;

@@ -6,7 +6,7 @@ use crate::compression::zlib::ZlibCodec;
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
-use crate::error::{ChdError, Result};
+use crate::error::{Error, Result};
 use crate::header::CodecType;
 use std::convert::TryFrom;
 
@@ -122,7 +122,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
 {
     fn new(hunk_size: u32) -> Result<Self> {
         if hunk_size % CD_FRAME_SIZE != 0 {
-            return Err(ChdError::CodecError);
+            return Err(Error::CodecError);
         }
 
         let buffer = vec![0u8; hunk_size as usize];

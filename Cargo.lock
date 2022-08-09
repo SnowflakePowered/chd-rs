@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -541,6 +541,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rs"
+version = "0.2.0"
+source = "git+https://github.com/chyyran/lzma-rs/?branch=patch-reduce-allocs#8085bead5d236e556e3253b3d9bfa3955dafd542"
+dependencies = [
+ "byteorder",
+ "crc 1.8.1",
+]
+
+[[package]]
 name = "lzma-rs-headerless"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,7 +740,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.1.8",
+ "chd 0.2.0",
  "clap",
  "hex",
  "num-traits",

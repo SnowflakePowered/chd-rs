@@ -9,8 +9,8 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
 use crate::const_assert;
-use crate::error::{ChdError, Result};
-use crate::header::{ChdHeader, HeaderV5};
+use crate::error::{Error, Result};
+use crate::header::{Header, HeaderV5};
 use crate::huffman::{lookup_len, HuffmanDecoder};
 
 pub(crate) const V5_UNCOMPRESSED_MAP_ENTRY_SIZE: usize = 4;
@@ -23,7 +23,7 @@ const MAP_ENTRY_FLAG_NO_CRC: u8 = 0x10; // no crc is present
 /// The types of compression allowed for a CHD V5 hunk.
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
-pub enum V5CompressionType {
+pub enum CompressionTypeV5 {
     /// The first compression codec specified in the header for this CHD.
     CompressionType0 = 0,
     /// The second compression codec specified in the header for this CHD.
@@ -57,7 +57,7 @@ pub enum V5CompressionType {
 /// The types of compression allowed for a CHD V1-4 hunk.
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
-pub enum LegacyEntryType {
+pub enum CompressionTypeLegacy {
     /// Invalid
     Invalid = 0,
     /// Compressed with a standard codec
@@ -75,18 +75,18 @@ pub enum LegacyEntryType {
 }
 
 /// Opaque type for a V5 map.
-pub struct V5MapData(Vec<u8>, bool, u32);
+pub struct RawMapV5(Vec<u8>, bool, u32);
 /// Opaque type for a legacy map.
-pub struct LegacyMapData(Vec<LegacyMapEntry>);
+pub struct RawMapLegacy(Vec<LegacyMapEntry>);
 
-impl From<V5MapData> for Vec<u8> {
-    fn from(map: V5MapData) -> Self {
+impl From<RawMapV5> for Vec<u8> {
+    fn from(map: RawMapV5) -> Self {
         map.0
     }
 }
 
-impl From<&V5MapData> for Vec<u8> {
-    fn from(map: &V5MapData) -> Self {
+impl From<&RawMapV5> for Vec<u8> {
+    fn from(map: &RawMapV5) -> Self {
         map.0.clone()
     }
 }
@@ -100,16 +100,16 @@ pub struct LegacyMapEntry {
 }
 
 /// A CHD V5 map entry for a compressed hunk.
-pub struct V5CompressedEntry<'a>(&'a [u8; V5_COMPRESSED_MAP_ENTRY_SIZE]);
+pub struct V5CompressedMapEntry<'a>(&'a [u8; V5_COMPRESSED_MAP_ENTRY_SIZE]);
 
 /// A CHD V5 map entry for an uncompressed hunk.
-pub struct V5UncompressedEntry<'a>(&'a [u8; V5_UNCOMPRESSED_MAP_ENTRY_SIZE], u32);
+pub struct V5UncompressedMapEntry<'a>(&'a [u8; V5_UNCOMPRESSED_MAP_ENTRY_SIZE], u32);
 
 impl LegacyMapEntry {
     /// Returns the hunk type of the compressed entry.
-    pub fn hunk_type(&self) -> Result<LegacyEntryType> {
-        LegacyEntryType::from_u8(self.flags & MAP_ENTRY_FLAG_TYPE_MASK)
-            .ok_or(ChdError::UnsupportedFormat)
+    pub fn hunk_type(&self) -> Result<CompressionTypeLegacy> {
+        CompressionTypeLegacy::from_u8(self.flags & MAP_ENTRY_FLAG_TYPE_MASK)
+            .ok_or(Error::UnsupportedFormat)
     }
 
     /// Returns the offset to the compressed data of the hunk.
@@ -128,35 +128,35 @@ impl LegacyMapEntry {
     }
 
     /// Obtain a proof that the hunk this entry refers to is compressed.
-    /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    /// If the hunk is uncompressed, returns `Error::InvalidParameter`.
     #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
-            LegacyEntryType::Compressed => {
+            CompressionTypeLegacy::Compressed => {
                 Ok(CompressedEntryProof(self.block_offset(), self.block_size()))
             }
-            _ => Err(ChdError::InvalidParameter),
+            _ => Err(Error::InvalidParameter),
         }
     }
 
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
-    /// If the hunk is compressed, returns `ChdError::InvalidParameter`.
+    /// If the hunk is compressed, returns `Error::InvalidParameter`.
     #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
-            LegacyEntryType::Uncompressed => Ok(UncompressedEntryProof(
+            CompressionTypeLegacy::Uncompressed => Ok(UncompressedEntryProof(
                 self.block_offset(),
                 self.block_size(),
             )),
-            _ => Err(ChdError::InvalidParameter),
+            _ => Err(Error::InvalidParameter),
         }
     }
 }
 
-impl V5CompressedEntry<'_> {
+impl V5CompressedMapEntry<'_> {
     /// Returns the hunk type of the compressed entry.
-    pub fn hunk_type(&self) -> Result<V5CompressionType> {
-        V5CompressionType::from_u8(self.0[0]).ok_or(ChdError::UnsupportedFormat)
+    pub fn hunk_type(&self) -> Result<CompressionTypeV5> {
+        CompressionTypeV5::from_u8(self.0[0]).ok_or(Error::UnsupportedFormat)
     }
 
     /// Returns the offset to the compressed data of this hunk.
@@ -175,36 +175,36 @@ impl V5CompressedEntry<'_> {
     }
 
     /// Obtain a proof that the hunk this entry refers to is compressed.
-    /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    /// If the hunk is uncompressed, returns `Error::InvalidParameter`.
     #[inline(always)]
     pub(crate) fn prove_compressed(&self) -> Result<CompressedEntryProof> {
         match self.hunk_type()? {
-            V5CompressionType::CompressionType0
-            | V5CompressionType::CompressionType1
-            | V5CompressionType::CompressionType2
-            | V5CompressionType::CompressionType3 => Ok(CompressedEntryProof(
+            CompressionTypeV5::CompressionType0
+            | CompressionTypeV5::CompressionType1
+            | CompressionTypeV5::CompressionType2
+            | CompressionTypeV5::CompressionType3 => Ok(CompressedEntryProof(
                 self.block_offset()?,
                 self.block_size()?,
             )),
-            _ => Err(ChdError::InvalidParameter),
+            _ => Err(Error::InvalidParameter),
         }
     }
 
     /// Obtain a proof that the hunk this entry refers to is uncompressed.
-    /// If the hunk is uncompressed, returns `ChdError::InvalidParameter`.
+    /// If the hunk is uncompressed, returns `Error::InvalidParameter`.
     #[inline(always)]
     pub(crate) fn prove_uncompressed(&self) -> Result<UncompressedEntryProof> {
         match self.hunk_type()? {
-            V5CompressionType::CompressionNone => Ok(UncompressedEntryProof(
+            CompressionTypeV5::CompressionNone => Ok(UncompressedEntryProof(
                 self.block_offset()?,
                 self.block_size()?,
             )),
-            _ => Err(ChdError::InvalidParameter),
+            _ => Err(Error::InvalidParameter),
         }
     }
 }
 
-impl V5UncompressedEntry<'_> {
+impl V5UncompressedMapEntry<'_> {
     /// Returns the offset to the data of this hunk.
     pub fn block_offset(&self) -> Result<u64> {
         let off = Cursor::new(self.0).read_u32::<BigEndian>()?;
@@ -212,7 +212,7 @@ impl V5UncompressedEntry<'_> {
     }
 
     /// Returns size of the hunk data. For an uncompressed hunk, this is equal to the hunk
-    /// size of the [`ChdFile`](crate::ChdFile).
+    /// size of the [`Chd`](crate::Chd).
     pub fn block_size(&self) -> u32 {
         self.1
     }
@@ -228,19 +228,19 @@ impl V5UncompressedEntry<'_> {
 }
 
 /// The hunk map for a CHD file.
-pub enum ChdMap {
+pub enum Map {
     /// A CHD v5 hunk map.
-    V5(V5MapData), // compressed
+    V5(RawMapV5), // compressed
     /// A CHD v1-4 hunk map.
-    Legacy(LegacyMapData),
+    Legacy(RawMapLegacy),
 }
 
 /// A map entry for a CHD file of unspecified version.
 pub enum MapEntry<'a> {
     /// A CHD v5 map entry for a compressed hunk.
-    V5Compressed(V5CompressedEntry<'a>),
+    V5Compressed(V5CompressedMapEntry<'a>),
     /// A CHD v5 map entry for an uncompressed hunk.
-    V5Uncompressed(V5UncompressedEntry<'a>),
+    V5Uncompressed(V5UncompressedMapEntry<'a>),
     /// A CHD v1-4 map entry.
     LegacyEntry(&'a LegacyMapEntry),
 }
@@ -275,13 +275,13 @@ impl UncompressedEntryProof {
     }
 }
 
-/// Iterator for `ChdMap`
-pub struct MapEntryIter<'a> {
-    map: &'a ChdMap,
+/// Iterator for [`Map`](crate::map::Map).
+pub struct MapEntries<'a> {
+    map: &'a Map,
     curr: usize,
 }
 
-impl<'a> Iterator for MapEntryIter<'a> {
+impl<'a> Iterator for MapEntries<'a> {
     type Item = MapEntry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -295,12 +295,12 @@ impl<'a> Iterator for MapEntryIter<'a> {
     }
 }
 
-impl ChdMap {
+impl Map {
     /// Gets the number of entries in the CHD Map.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         match self {
-            ChdMap::V5(m) => {
+            Map::V5(m) => {
                 // map_entry_bytes = 12 if compressed, else 4
                 let map_entry_bytes = if m.1 {
                     V5_COMPRESSED_MAP_ENTRY_SIZE
@@ -309,14 +309,14 @@ impl ChdMap {
                 };
                 m.0.len() / map_entry_bytes
             }
-            ChdMap::Legacy(m) => m.0.len(),
+            Map::Legacy(m) => m.0.len(),
         }
     }
 
     /// Gets the `MapEntry` for the specified hunk number if it exists.
     pub fn get_entry(&self, hunk_num: usize) -> Option<MapEntry> {
         match self {
-            ChdMap::V5(m) => {
+            Map::V5(m) => {
                 let map_entry_bytes = if m.1 { 12 } else { 4 };
 
                 let entry_slice =
@@ -324,56 +324,50 @@ impl ChdMap {
                 if let &Some(entry_slice) = entry_slice {
                     return if m.1 {
                         <&[u8; 12]>::try_from(entry_slice)
-                            .map(|e| MapEntry::V5Compressed(V5CompressedEntry(e)))
+                            .map(|e| MapEntry::V5Compressed(V5CompressedMapEntry(e)))
                             .ok()
                     } else {
                         <&[u8; 4]>::try_from(entry_slice)
-                            .map(|e| MapEntry::V5Uncompressed(V5UncompressedEntry(e, m.2)))
+                            .map(|e| MapEntry::V5Uncompressed(V5UncompressedMapEntry(e, m.2)))
                             .ok()
                     };
                 }
                 None
             }
-            ChdMap::Legacy(m) => m.0.get(hunk_num).map(MapEntry::LegacyEntry),
+            Map::Legacy(m) => m.0.get(hunk_num).map(MapEntry::LegacyEntry),
         }
     }
 
     /// Gets an iterator over the entries of this hunk map.
-    pub fn iter(&self) -> MapEntryIter {
-        MapEntryIter { map: self, curr: 0 }
+    pub fn iter(&self) -> MapEntries {
+        MapEntries { map: self, curr: 0 }
     }
 
     /// Reads the hunk map from the provided stream given the parameters in the header,
     /// which must have the same stream provenance as the input header.
-    pub fn try_read_map<F: Read + Seek>(header: &ChdHeader, mut file: F) -> Result<ChdMap> {
+    pub fn try_read_map<F: Read + Seek>(header: &Header, mut file: F) -> Result<Map> {
         match header {
-            ChdHeader::V5Header(v5) => Ok(ChdMap::V5(read_map_v5(
-                v5,
-                &mut file,
-                header.is_compressed(),
-            )?)),
-            ChdHeader::V3Header(_) | ChdHeader::V4Header(_) => {
-                Ok(ChdMap::Legacy(LegacyMapData(read_map_legacy::<
+            Header::V5Header(v5) => {
+                Ok(Map::V5(read_map_v5(v5, &mut file, header.is_compressed())?))
+            }
+            Header::V3Header(_) | Header::V4Header(_) => {
+                Ok(Map::Legacy(RawMapLegacy(read_map_legacy::<
                     _,
                     V3_MAP_ENTRY_SIZE,
-                >(
-                    header, file
-                )?)))
+                >(header, file)?)))
             }
-            ChdHeader::V2Header(_) | ChdHeader::V1Header(_) => {
-                Ok(ChdMap::Legacy(LegacyMapData(read_map_legacy::<
+            Header::V2Header(_) | Header::V1Header(_) => {
+                Ok(Map::Legacy(RawMapLegacy(read_map_legacy::<
                     _,
                     V1_MAP_ENTRY_SIZE,
-                >(
-                    header, file
-                )?)))
+                >(header, file)?)))
             }
         }
     }
 }
 
 fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
-    header: &ChdHeader,
+    header: &Header,
     mut file: F,
 ) -> Result<Vec<LegacyMapEntry>> {
     // Probably can express this better in the type system once const generics get a bit more stabilized.
@@ -407,8 +401,8 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
             _ => unreachable!(),
         };
 
-        if let Some(LegacyEntryType::Compressed) | Some(LegacyEntryType::Uncompressed) =
-            LegacyEntryType::from_u8(entry.flags & MAP_ENTRY_FLAG_TYPE_MASK)
+        if let Some(CompressionTypeLegacy::Compressed) | Some(CompressionTypeLegacy::Uncompressed) =
+            CompressionTypeLegacy::from_u8(entry.flags & MAP_ENTRY_FLAG_TYPE_MASK)
         {
             max_off = std::cmp::max(max_off, entry.offset + entry.length as u64);
         }
@@ -420,11 +414,11 @@ fn read_map_legacy<F: Read + Seek, const MAP_ENTRY_SIZE: usize>(
 
     // need to confirm this is the same behaviour
     if &cookie[..] < b"EndOfListCookie\0" {
-        return Err(ChdError::InvalidFile);
+        return Err(Error::InvalidFile);
     }
 
     if max_off > file.seek(SeekFrom::End(0))? {
-        return Err(ChdError::InvalidFile);
+        return Err(Error::InvalidFile);
     }
 
     Ok(map)
@@ -435,9 +429,9 @@ fn read_map_entry_v1(val: u64, hunk_bytes: u32) -> LegacyMapEntry {
     let length = (val >> 44) as u32;
     let flags = MAP_ENTRY_FLAG_NO_CRC
         | if length == hunk_bytes {
-            LegacyEntryType::Uncompressed as u8
+            CompressionTypeLegacy::Uncompressed as u8
         } else {
-            LegacyEntryType::Compressed as u8
+            CompressionTypeLegacy::Compressed as u8
         };
     let offset = (val << 20) >> 20;
     LegacyMapEntry {
@@ -468,14 +462,14 @@ fn read_map_v5<F: Read + Seek>(
     header: &HeaderV5,
     mut file: F,
     is_compressed: bool,
-) -> Result<V5MapData> {
+) -> Result<RawMapV5> {
     let map_size = header.hunk_count as usize * header.map_entry_bytes as usize;
     let mut raw_map = vec![0u8; map_size];
 
     if !is_compressed {
         file.seek(SeekFrom::Start(header.map_offset))?;
         file.read_exact(&mut raw_map[..])?;
-        return Ok(V5MapData(raw_map, is_compressed, header.hunk_bytes));
+        return Ok(RawMapV5(raw_map, is_compressed, header.hunk_bytes));
     }
 
     // Read compressed map parameters.
@@ -506,13 +500,13 @@ fn read_map_v5<F: Read + Seek>(
             rep_count -= 1;
         } else {
             let val = decoder.decode_one(&mut bitstream)? as u8;
-            match V5CompressionType::from_u8(val).ok_or(ChdError::DecompressionError)? {
-                V5CompressionType::CompressionRleSmall => {
+            match CompressionTypeV5::from_u8(val).ok_or(Error::DecompressionError)? {
+                CompressionTypeV5::CompressionRleSmall => {
                     // COMPRESSION_RLE_SMALL
                     map_slice[0] = last_cmp;
                     rep_count = 2 + decoder.decode_one(&mut bitstream)?;
                 }
-                V5CompressionType::CompressionRleLarge => {
+                CompressionTypeV5::CompressionRleLarge => {
                     // COMPRESSION_RLE_LARGE
                     map_slice[0] = last_cmp;
                     rep_count = 2 + 16 + (decoder.decode_one(&mut bitstream)? << 4);
@@ -539,52 +533,52 @@ fn read_map_v5<F: Read + Seek>(
         let mut len: u32 = 0;
         let mut crc: u16 = 0;
 
-        match V5CompressionType::from_u8(map_slice[0]).ok_or(ChdError::DecompressionError)? {
-            V5CompressionType::CompressionType0
-            | V5CompressionType::CompressionType1
-            | V5CompressionType::CompressionType2
-            | V5CompressionType::CompressionType3 => {
+        match CompressionTypeV5::from_u8(map_slice[0]).ok_or(Error::DecompressionError)? {
+            CompressionTypeV5::CompressionType0
+            | CompressionTypeV5::CompressionType1
+            | CompressionTypeV5::CompressionType2
+            | CompressionTypeV5::CompressionType3 => {
                 len = bitstream.read_u32(length_bits)?;
                 curr_off += len as u64;
                 crc = bitstream.read_u32(16)? as u16;
             }
-            V5CompressionType::CompressionNone => {
+            CompressionTypeV5::CompressionNone => {
                 len = header.hunk_bytes;
                 curr_off += len as u64;
                 crc = bitstream.read_u32(16)? as u16;
             }
-            V5CompressionType::CompressionSelf => {
+            CompressionTypeV5::CompressionSelf => {
                 off = bitstream.read_u64(self_bits)?;
                 last_self = off;
             }
-            V5CompressionType::CompressionParent => {
+            CompressionTypeV5::CompressionParent => {
                 off = bitstream.read_u64(parent_bits)?;
                 last_parent = off;
             }
 
             // Expand pseudo codecs to concrete.
-            V5CompressionType::CompressionSelf1 => {
+            CompressionTypeV5::CompressionSelf1 => {
                 last_self += 1;
-                map_slice[0] = V5CompressionType::CompressionSelf as u8;
+                map_slice[0] = CompressionTypeV5::CompressionSelf as u8;
                 off = last_self;
             }
-            V5CompressionType::CompressionSelf0 => {
-                map_slice[0] = V5CompressionType::CompressionSelf as u8;
+            CompressionTypeV5::CompressionSelf0 => {
+                map_slice[0] = CompressionTypeV5::CompressionSelf as u8;
                 off = last_self;
             }
-            V5CompressionType::CompressionParentSelf => {
-                map_slice[0] = V5CompressionType::CompressionParent as u8;
+            CompressionTypeV5::CompressionParentSelf => {
+                map_slice[0] = CompressionTypeV5::CompressionParent as u8;
                 off = ((hunk_num * header.hunk_bytes as usize) / header.unit_bytes as usize) as u64;
                 last_parent = off;
             }
-            V5CompressionType::CompressionParent1 => {
+            CompressionTypeV5::CompressionParent1 => {
                 last_parent += (header.hunk_bytes / header.unit_bytes) as u64
             }
-            V5CompressionType::CompressionParent0 => {
-                map_slice[0] = V5CompressionType::CompressionParent as u8;
+            CompressionTypeV5::CompressionParent0 => {
+                map_slice[0] = CompressionTypeV5::CompressionParent as u8;
                 off = last_parent;
             }
-            _ => return Err(ChdError::DecompressionError),
+            _ => return Err(Error::DecompressionError),
         }
 
         let mut cursor = Cursor::new(&mut map_slice[1..]);
@@ -595,8 +589,8 @@ fn read_map_v5<F: Read + Seek>(
 
     // Verify map CRC
     if crate::block_hash::CRC16.checksum(&raw_map[0..header.hunk_count as usize * 12]) != map_crc {
-        return Err(ChdError::DecompressionError);
+        return Err(Error::DecompressionError);
     }
 
-    Ok(V5MapData(raw_map, is_compressed, header.hunk_bytes))
+    Ok(RawMapV5(raw_map, is_compressed, header.hunk_bytes))
 }

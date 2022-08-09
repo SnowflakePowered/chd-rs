@@ -1,7 +1,7 @@
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
-use crate::error::{ChdError, Result};
+use crate::error::{Error, Result};
 use crate::header::CodecType;
 use lzma_rs::decompress::raw::{LzmaDecoder, LzmaParams, LzmaProperties};
 use std::io::Cursor;
@@ -116,7 +116,7 @@ impl CodecImplementation for LzmaCodec {
                 ),
                 None,
             )
-            .map_err(|_| ChdError::DecompressionError)?,
+            .map_err(|_| Error::DecompressionError)?,
         })
     }
 
@@ -126,7 +126,7 @@ impl CodecImplementation for LzmaCodec {
         self.engine.reset(Some(Some(len as u64)));
         self.engine
             .decompress(&mut read, &mut output)
-            .map_err(|_| ChdError::DecompressionError)?;
+            .map_err(|_| Error::DecompressionError)?;
         Ok(DecompressResult::new(len, read.position() as usize))
     }
 }

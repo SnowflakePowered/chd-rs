@@ -1,20 +1,20 @@
 //! Types and methods relating to header data for a CHD file.
 //!
 //! CHD V1-5 all have different header formats that are supported by this library.
-//! Common information can be accessed with the [`ChdHeader`](crate::header::ChdHeader) enum,
+//! Common information can be accessed with the [`Header`](crate::header::Header) enum,
 //! but if version-specific information is needed, all fields in each version header struct
 //! can be accessed publicly.
 //!
-//! [`ChdHeader`](crate::header::ChdHeader) makes no ABI guarantees and is not ABI-compatible
+//! [`Header`](crate::header::Header) makes no ABI guarantees and is not ABI-compatible
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
-use crate::chdfile::ChdCodecs;
+use crate::chdfile::Codecs;
 use crate::compression::codecs::{
     AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, HuffmanCodec, LzmaCodec, NoneCodec,
     RawFlacCodec, ZlibCodec,
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
-use crate::error::{ChdError, Result};
-use crate::metadata::{ChdMetadataTag, KnownMetadata, MetadataRefIter};
+use crate::error::{Error, Result};
+use crate::metadata::{ChdMetadataTag, KnownMetadata, MetadataRefs};
 use crate::{make_tag, map};
 use arrayvec::ArrayVec;
 use byteorder::{BigEndian, ReadBytesExt};
@@ -95,7 +95,7 @@ impl CodecType {
                 AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             #[allow(unreachable_patterns)]
-            _ => Err(ChdError::UnsupportedFormat),
+            _ => Err(Error::UnsupportedFormat),
         }
     }
 }
@@ -119,7 +119,7 @@ pub enum Version {
 /// A CHD V1/V2 header. V1 and V2 headers share a similar format with the only difference being
 /// V1 having a fixed 512-byte sector length, and V2 having an arbitrary sector length.
 ///
-/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
 /// of this struct.
 #[derive(Clone)]
 pub struct HeaderV1 {
@@ -162,7 +162,7 @@ pub struct HeaderV1 {
 
 /// A CHD V3 header.
 ///
-/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
 /// of this struct.
 #[derive(Clone)]
 pub struct HeaderV3 {
@@ -200,7 +200,7 @@ pub struct HeaderV3 {
 /// A CHD V4 header. The major difference between a V3 header and V4 header is the absence of MD5
 /// hash information in CHD V4.
 ///
-/// While all members of this struct are public, prefer the [`ChdHeader`](crate::header::ChdHeader) API over the fields
+/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
 /// of this struct.
 #[derive(Clone)]
 pub struct HeaderV4 {
@@ -235,7 +235,7 @@ pub struct HeaderV4 {
 
 /// A CHD V5 header.
 ///
-/// While all members of this struct are public, prefer the `ChdHeader` API over the fields
+/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
 /// of this struct.
 #[derive(Clone)]
 pub struct HeaderV5 {
@@ -275,7 +275,7 @@ pub struct HeaderV5 {
 
 /// A CHD header of unspecified version.
 #[derive(Clone)]
-pub enum ChdHeader {
+pub enum Header {
     /// A CHD V1 header.
     V1Header(HeaderV1),
     /// A CHD V2 header.
@@ -303,18 +303,18 @@ const CHD_V5_HEADER_SIZE: u32 = 124;
 const CHD_MAX_HEADER_SIZE: usize = CHD_V5_HEADER_SIZE as usize;
 // pub const COOKIE_VALUE: u32 = 0xbaadf00d;
 
-impl ChdHeader {
+impl Header {
     /// Reads CHD header data from the provided stream.
     ///
-    /// If the header is not valid, returns `ChdError::InvalidParameter`.
-    /// If the header indicates an unsupported compression format, returns `ChdError::UnsupportedFormat`
-    pub fn try_read_header<F: Read + Seek>(file: &mut F) -> Result<ChdHeader> {
+    /// If the header is not valid, returns `Error::InvalidParameter`.
+    /// If the header indicates an unsupported compression format, returns `Error::UnsupportedFormat`
+    pub fn try_read_header<F: Read + Seek>(file: &mut F) -> Result<Header> {
         let header = read_header(file)?;
         if !header.validate() {
-            return Err(ChdError::InvalidParameter);
+            return Err(Error::InvalidParameter);
         }
         if !header.validate_compression() {
-            return Err(ChdError::UnsupportedFormat);
+            return Err(Error::UnsupportedFormat);
         }
         Ok(header)
     }
@@ -322,95 +322,95 @@ impl ChdHeader {
     /// Returns whether or not the CHD file is compressed.
     pub fn is_compressed(&self) -> bool {
         match self {
-            ChdHeader::V1Header(c) => c.compression != CodecType::None as u32,
-            ChdHeader::V2Header(c) => c.compression != CodecType::None as u32,
-            ChdHeader::V3Header(c) => c.compression != CodecType::None as u32,
-            ChdHeader::V4Header(c) => c.compression != CodecType::None as u32,
-            ChdHeader::V5Header(c) => c.compression[0] != CodecType::None as u32,
+            Header::V1Header(c) => c.compression != CodecType::None as u32,
+            Header::V2Header(c) => c.compression != CodecType::None as u32,
+            Header::V3Header(c) => c.compression != CodecType::None as u32,
+            Header::V4Header(c) => c.compression != CodecType::None as u32,
+            Header::V5Header(c) => c.compression[0] != CodecType::None as u32,
         }
     }
 
     /// Returns the offset of the CHD metadata, if available.
     pub fn meta_offset(&self) -> Option<u64> {
         match self {
-            ChdHeader::V1Header(_c) => None,
-            ChdHeader::V2Header(_c) => None,
-            ChdHeader::V3Header(c) => Some(c.meta_offset),
-            ChdHeader::V4Header(c) => Some(c.meta_offset),
-            ChdHeader::V5Header(c) => Some(c.meta_offset),
+            Header::V1Header(_c) => None,
+            Header::V2Header(_c) => None,
+            Header::V3Header(c) => Some(c.meta_offset),
+            Header::V4Header(c) => Some(c.meta_offset),
+            Header::V5Header(c) => Some(c.meta_offset),
         }
     }
 
     /// Returns the flags of the CHD file, if available.
     pub fn flags(&self) -> Option<u32> {
         match self {
-            ChdHeader::V1Header(c) => Some(c.flags),
-            ChdHeader::V2Header(c) => Some(c.flags),
-            ChdHeader::V3Header(c) => Some(c.flags),
-            ChdHeader::V4Header(c) => Some(c.flags),
-            ChdHeader::V5Header(_c) => None,
+            Header::V1Header(c) => Some(c.flags),
+            Header::V2Header(c) => Some(c.flags),
+            Header::V3Header(c) => Some(c.flags),
+            Header::V4Header(c) => Some(c.flags),
+            Header::V5Header(_c) => None,
         }
     }
 
     /// Returns the total number of hunks in the CHD file.
     pub fn hunk_count(&self) -> u32 {
         match self {
-            ChdHeader::V1Header(c) => c.total_hunks,
-            ChdHeader::V2Header(c) => c.total_hunks,
-            ChdHeader::V3Header(c) => c.total_hunks,
-            ChdHeader::V4Header(c) => c.total_hunks,
-            ChdHeader::V5Header(c) => c.hunk_count,
+            Header::V1Header(c) => c.total_hunks,
+            Header::V2Header(c) => c.total_hunks,
+            Header::V3Header(c) => c.total_hunks,
+            Header::V4Header(c) => c.total_hunks,
+            Header::V5Header(c) => c.hunk_count,
         }
     }
 
     /// Returns the size of each hunk in the CHD file in bytes.
     pub fn hunk_size(&self) -> u32 {
         match self {
-            ChdHeader::V1Header(c) => c.hunk_bytes,
-            ChdHeader::V2Header(c) => c.hunk_bytes,
-            ChdHeader::V3Header(c) => c.hunk_bytes,
-            ChdHeader::V4Header(c) => c.hunk_bytes,
-            ChdHeader::V5Header(c) => c.hunk_bytes,
+            Header::V1Header(c) => c.hunk_bytes,
+            Header::V2Header(c) => c.hunk_bytes,
+            Header::V3Header(c) => c.hunk_bytes,
+            Header::V4Header(c) => c.hunk_bytes,
+            Header::V5Header(c) => c.hunk_bytes,
         }
     }
 
     /// Returns the logical size of the compressed data in bytes.
     pub fn logical_bytes(&self) -> u64 {
         match self {
-            ChdHeader::V1Header(c) => c.logical_bytes,
-            ChdHeader::V2Header(c) => c.logical_bytes,
-            ChdHeader::V3Header(c) => c.logical_bytes,
-            ChdHeader::V4Header(c) => c.logical_bytes,
-            ChdHeader::V5Header(c) => c.logical_bytes,
+            Header::V1Header(c) => c.logical_bytes,
+            Header::V2Header(c) => c.logical_bytes,
+            Header::V3Header(c) => c.logical_bytes,
+            Header::V4Header(c) => c.logical_bytes,
+            Header::V5Header(c) => c.logical_bytes,
         }
     }
 
     /// Returns the number of bytes per unit within each hunk.
     pub fn unit_bytes(&self) -> u32 {
         match self {
-            ChdHeader::V1Header(c) => c.unit_bytes,
-            ChdHeader::V2Header(c) => c.unit_bytes,
-            ChdHeader::V3Header(c) => c.unit_bytes,
-            ChdHeader::V4Header(c) => c.unit_bytes,
-            ChdHeader::V5Header(c) => c.unit_bytes,
+            Header::V1Header(c) => c.unit_bytes,
+            Header::V2Header(c) => c.unit_bytes,
+            Header::V3Header(c) => c.unit_bytes,
+            Header::V4Header(c) => c.unit_bytes,
+            Header::V5Header(c) => c.unit_bytes,
         }
     }
 
     /// Returns the number of units per hunk.
     pub fn unit_count(&self) -> u64 {
         match self {
-            ChdHeader::V1Header(c) => c.unit_count,
-            ChdHeader::V2Header(c) => c.unit_count,
-            ChdHeader::V3Header(c) => c.unit_count,
-            ChdHeader::V4Header(c) => c.unit_count,
-            ChdHeader::V5Header(c) => c.unit_count,
+            Header::V1Header(c) => c.unit_count,
+            Header::V2Header(c) => c.unit_count,
+            Header::V3Header(c) => c.unit_count,
+            Header::V4Header(c) => c.unit_count,
+            Header::V5Header(c) => c.unit_count,
         }
     }
 
     /// Returns whether or not this CHD file has a parent.
     pub fn has_parent(&self) -> bool {
         match self {
-            ChdHeader::V5Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
+            Header::V5Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
             _ => self
                 .flags()
                 .map(|f| (f & Flags::HasParent as u32) != 0)
@@ -421,20 +421,20 @@ impl ChdHeader {
     /// Returns the CHD header version.
     pub fn version(&self) -> Version {
         match self {
-            ChdHeader::V1Header(c) => c.version,
-            ChdHeader::V2Header(c) => c.version,
-            ChdHeader::V3Header(c) => c.version,
-            ChdHeader::V4Header(c) => c.version,
-            ChdHeader::V5Header(c) => c.version,
+            Header::V1Header(c) => c.version,
+            Header::V2Header(c) => c.version,
+            Header::V3Header(c) => c.version,
+            Header::V4Header(c) => c.version,
+            Header::V5Header(c) => c.version,
         }
     }
 
     /// Returns the SHA1 of the CHD file if available.
     pub fn sha1(&self) -> Option<[u8; SHA1_BYTES]> {
         match self {
-            ChdHeader::V3Header(c) => Some(c.sha1),
-            ChdHeader::V4Header(c) => Some(c.sha1),
-            ChdHeader::V5Header(c) => Some(c.sha1),
+            Header::V3Header(c) => Some(c.sha1),
+            Header::V4Header(c) => Some(c.sha1),
+            Header::V5Header(c) => Some(c.sha1),
             _ => None,
         }
     }
@@ -442,9 +442,9 @@ impl ChdHeader {
     /// Returns the SHA1 of the parent of the CHD if available.
     pub fn parent_sha1(&self) -> Option<[u8; SHA1_BYTES]> {
         match self {
-            ChdHeader::V3Header(c) => Some(c.parent_sha1),
-            ChdHeader::V4Header(c) => Some(c.parent_sha1),
-            ChdHeader::V5Header(c) => Some(c.parent_sha1),
+            Header::V3Header(c) => Some(c.parent_sha1),
+            Header::V4Header(c) => Some(c.parent_sha1),
+            Header::V5Header(c) => Some(c.parent_sha1),
             _ => None,
         }
     }
@@ -452,8 +452,8 @@ impl ChdHeader {
     /// Returns the raw (hunk data only) SHA1 of the CHD file if available.
     pub fn raw_sha1(&self) -> Option<[u8; SHA1_BYTES]> {
         match self {
-            ChdHeader::V4Header(c) => Some(c.raw_sha1),
-            ChdHeader::V5Header(c) => Some(c.raw_sha1),
+            Header::V4Header(c) => Some(c.raw_sha1),
+            Header::V5Header(c) => Some(c.raw_sha1),
             _ => None,
         }
     }
@@ -461,9 +461,9 @@ impl ChdHeader {
     /// Returns the MD5 of the CHD file if available.
     pub fn md5(&self) -> Option<[u8; MD5_BYTES]> {
         match self {
-            ChdHeader::V1Header(c) => Some(c.md5),
-            ChdHeader::V2Header(c) => Some(c.md5),
-            ChdHeader::V3Header(c) => Some(c.md5),
+            Header::V1Header(c) => Some(c.md5),
+            Header::V2Header(c) => Some(c.md5),
+            Header::V3Header(c) => Some(c.md5),
             _ => None,
         }
     }
@@ -471,9 +471,9 @@ impl ChdHeader {
     /// Returns the MD5 of the parent CHD file if available.
     pub fn parent_md5(&self) -> Option<[u8; MD5_BYTES]> {
         match self {
-            ChdHeader::V1Header(c) => Some(c.parent_md5),
-            ChdHeader::V2Header(c) => Some(c.parent_md5),
-            ChdHeader::V3Header(c) => Some(c.parent_md5),
+            Header::V1Header(c) => Some(c.parent_md5),
+            Header::V2Header(c) => Some(c.parent_md5),
+            Header::V3Header(c) => Some(c.parent_md5),
             _ => None,
         }
     }
@@ -482,42 +482,42 @@ impl ChdHeader {
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {
         match self {
-            ChdHeader::V1Header(c) => c.length,
-            ChdHeader::V2Header(c) => c.length,
-            ChdHeader::V3Header(c) => c.length,
-            ChdHeader::V4Header(c) => c.length,
-            ChdHeader::V5Header(c) => c.length,
+            Header::V1Header(c) => c.length,
+            Header::V2Header(c) => c.length,
+            Header::V3Header(c) => c.length,
+            Header::V4Header(c) => c.length,
+            Header::V5Header(c) => c.length,
         }
     }
 
-    pub(crate) fn create_compression_codecs(&self) -> Result<ChdCodecs> {
+    pub(crate) fn create_compression_codecs(&self) -> Result<Codecs> {
         match self {
-            ChdHeader::V1Header(c) => CodecType::from_u32(c.compression)
+            Header::V1Header(c) => CodecType::from_u32(c.compression)
                 .map(|e| (e.init(self.hunk_size())))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| ChdCodecs::Single(e)),
-            ChdHeader::V2Header(c) => CodecType::from_u32(c.compression)
+                .ok_or(Error::UnsupportedFormat)?
+                .map(|e| Codecs::Single(e)),
+            Header::V2Header(c) => CodecType::from_u32(c.compression)
                 .map(|e| e.init(self.hunk_size()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| ChdCodecs::Single(e)),
-            ChdHeader::V3Header(c) => CodecType::from_u32(c.compression)
+                .ok_or(Error::UnsupportedFormat)?
+                .map(|e| Codecs::Single(e)),
+            Header::V3Header(c) => CodecType::from_u32(c.compression)
                 .map(|e| e.init(self.hunk_size()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| ChdCodecs::Single(e)),
-            ChdHeader::V4Header(c) => CodecType::from_u32(c.compression)
+                .ok_or(Error::UnsupportedFormat)?
+                .map(|e| Codecs::Single(e)),
+            Header::V4Header(c) => CodecType::from_u32(c.compression)
                 .map(|e| e.init(self.hunk_size()))
-                .ok_or(ChdError::UnsupportedFormat)?
-                .map(|e| ChdCodecs::Single(e)),
-            ChdHeader::V5Header(c) => {
+                .ok_or(Error::UnsupportedFormat)?
+                .map(|e| Codecs::Single(e)),
+            Header::V5Header(c) => {
                 let array = c
                     .compression
                     .map(CodecType::from_u32)
-                    .map(|f| f.ok_or(ChdError::UnsupportedFormat))
+                    .map(|f| f.ok_or(Error::UnsupportedFormat))
                     .map(|f| f.and_then(|f| f.init(self.hunk_size())))
                     .into_iter()
                     .collect::<Result<ArrayVec<Box<dyn CompressionCodec>, 4>>>()?;
-                Ok(ChdCodecs::Four(
-                    array.into_inner().map_err(|_| ChdError::InvalidFile)?,
+                Ok(Codecs::Four(
+                    array.into_inner().map_err(|_| Error::InvalidFile)?,
                 ))
             }
         }
@@ -526,11 +526,11 @@ impl ChdHeader {
     /// Validate the header.
     fn validate(&self) -> bool {
         let length_valid = match self {
-            ChdHeader::V1Header(c) => c.length == CHD_V1_HEADER_SIZE,
-            ChdHeader::V2Header(c) => c.length == CHD_V2_HEADER_SIZE,
-            ChdHeader::V3Header(c) => c.length == CHD_V3_HEADER_SIZE,
-            ChdHeader::V4Header(c) => c.length == CHD_V4_HEADER_SIZE,
-            ChdHeader::V5Header(c) => c.length == CHD_V5_HEADER_SIZE,
+            Header::V1Header(c) => c.length == CHD_V1_HEADER_SIZE,
+            Header::V2Header(c) => c.length == CHD_V2_HEADER_SIZE,
+            Header::V3Header(c) => c.length == CHD_V3_HEADER_SIZE,
+            Header::V4Header(c) => c.length == CHD_V4_HEADER_SIZE,
+            Header::V5Header(c) => c.length == CHD_V5_HEADER_SIZE,
         };
 
         if !length_valid {
@@ -538,7 +538,7 @@ impl ChdHeader {
         }
 
         // Do not validate V5 header
-        if let ChdHeader::V5Header(_) = self {
+        if let Header::V5Header(_) = self {
             return true;
         }
 
@@ -562,13 +562,13 @@ impl ChdHeader {
         // if we use a parent make sure we have valid md5
         let parent_ok = if self.has_parent() {
             match self {
-                ChdHeader::V1Header(c) => c.parent_md5 != [0u8; MD5_BYTES],
-                ChdHeader::V2Header(c) => c.parent_md5 != [0u8; MD5_BYTES],
-                ChdHeader::V3Header(c) => {
+                Header::V1Header(c) => c.parent_md5 != [0u8; MD5_BYTES],
+                Header::V2Header(c) => c.parent_md5 != [0u8; MD5_BYTES],
+                Header::V3Header(c) => {
                     c.parent_md5 != [0u8; MD5_BYTES] && c.parent_sha1 != [0u8; SHA1_BYTES]
                 }
-                ChdHeader::V4Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
-                ChdHeader::V5Header(_) => true,
+                Header::V4Header(c) => c.parent_sha1 != [0u8; SHA1_BYTES],
+                Header::V5Header(_) => true,
             }
         } else {
             true
@@ -584,13 +584,13 @@ impl ChdHeader {
     /// Validate the compression types of the CHD file can be read.
     fn validate_compression(&self) -> bool {
         match self {
-            ChdHeader::V1Header(c) => ChdHeader::validate_legacy_compression(c.compression),
-            ChdHeader::V2Header(c) => ChdHeader::validate_legacy_compression(c.compression),
-            ChdHeader::V3Header(c) => ChdHeader::validate_legacy_compression(c.compression),
-            ChdHeader::V4Header(c) => ChdHeader::validate_legacy_compression(c.compression),
-            ChdHeader::V5Header(c) => c
+            Header::V1Header(c) => Header::validate_legacy_compression(c.compression),
+            Header::V2Header(c) => Header::validate_legacy_compression(c.compression),
+            Header::V3Header(c) => Header::validate_legacy_compression(c.compression),
+            Header::V4Header(c) => Header::validate_legacy_compression(c.compression),
+            Header::V5Header(c) => c
                 .compression
-                .map(ChdHeader::validate_v5_compression)
+                .map(Header::validate_v5_compression)
                 .iter()
                 .all(|&x| x),
         }
@@ -625,7 +625,7 @@ pub enum Flags {
     Undefined = 0xfffffffc,
 }
 
-fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
+fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
     let mut raw_header: [u8; CHD_MAX_HEADER_SIZE] = [0; CHD_MAX_HEADER_SIZE];
 
     chd.seek(SeekFrom::Start(0))?;
@@ -633,7 +633,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
 
     let magic = CStr::from_bytes_with_nul(&raw_header[0..9])?.to_str()?;
     if CHD_MAGIC != magic {
-        return Err(ChdError::InvalidData);
+        return Err(Error::InvalidData);
     }
     let mut reader = Cursor::new(&raw_header);
     reader.seek(SeekFrom::Start(8))?;
@@ -642,29 +642,21 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<ChdHeader> {
 
     // ensure version is known and header size match up
     match (version, length) {
-        (1, CHD_V1_HEADER_SIZE) => Ok(ChdHeader::V1Header(read_v1_header(
+        (1, CHD_V1_HEADER_SIZE) => Ok(Header::V1Header(read_v1_header(
             &mut reader,
             version,
             length,
         )?)),
-        (2, CHD_V2_HEADER_SIZE) => Ok(ChdHeader::V2Header(read_v1_header(
+        (2, CHD_V2_HEADER_SIZE) => Ok(Header::V2Header(read_v1_header(
             &mut reader,
             version,
             length,
         )?)),
-        (3, CHD_V3_HEADER_SIZE) => Ok(ChdHeader::V3Header(read_v3_header(
-            &mut reader,
-            length,
-            chd,
-        )?)),
-        (4, CHD_V4_HEADER_SIZE) => Ok(ChdHeader::V4Header(read_v4_header(
-            &mut reader,
-            length,
-            chd,
-        )?)),
-        (5, CHD_V5_HEADER_SIZE) => Ok(ChdHeader::V5Header(read_v5_header(&mut reader, length)?)),
-        (1 | 2 | 3 | 4 | 5, _) => Err(ChdError::InvalidData),
-        _ => Err(ChdError::UnsupportedVersion),
+        (3, CHD_V3_HEADER_SIZE) => Ok(Header::V3Header(read_v3_header(&mut reader, length, chd)?)),
+        (4, CHD_V4_HEADER_SIZE) => Ok(Header::V4Header(read_v4_header(&mut reader, length, chd)?)),
+        (5, CHD_V5_HEADER_SIZE) => Ok(Header::V5Header(read_v5_header(&mut reader, length)?)),
+        (1 | 2 | 3 | 4 | 5, _) => Err(Error::InvalidData),
+        _ => Err(Error::UnsupportedVersion),
     }
 }
 
@@ -694,10 +686,10 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
         (cylinders as u64) * (heads as u64) * (sectors as u64) * (sector_length as u64);
 
     // verify assumptions about hunk sizes.
-    let hunk_bytes: u32 = u32::try_from(sector_length as u64 * hunk_size as u64)
-        .map_err(|_| ChdError::InvalidData)?;
+    let hunk_bytes: u32 =
+        u32::try_from(sector_length as u64 * hunk_size as u64).map_err(|_| Error::InvalidData)?;
     if hunk_bytes == 0 || hunk_size == 0 {
-        return Err(ChdError::InvalidData);
+        return Err(Error::InvalidData);
     }
 
     let unit_bytes = hunk_bytes / hunk_size;
@@ -706,7 +698,7 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
         version: match version {
             1 => Version::ChdV1,
             2 => Version::ChdV2,
-            _ => return Err(ChdError::UnsupportedVersion),
+            _ => return Err(Error::UnsupportedVersion),
         },
         length,
         flags,
@@ -822,7 +814,7 @@ fn extract_bps_value(bps_meta: &[u8]) -> Option<u32> {
 }
 
 fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
-    let metas: Vec<_> = MetadataRefIter::from_stream(chd, off).collect();
+    let metas: Vec<_> = MetadataRefs::from_stream(chd, off).collect();
     if let Some(hard_disk) = metas
         .iter()
         .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)
@@ -857,7 +849,7 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
 
     // guard divide by zero
     if hunk_bytes == 0 || unit_bytes == 0 {
-        return Err(ChdError::InvalidData);
+        return Err(Error::InvalidData);
     }
 
     let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
@@ -871,7 +863,7 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
         // uncompressed map entries are 4 bytes long
         Some(CodecType::None) => map::V5_UNCOMPRESSED_MAP_ENTRY_SIZE as u32,
         Some(_) => map::V5_COMPRESSED_MAP_ENTRY_SIZE as u32,
-        None => return Err(ChdError::UnsupportedFormat),
+        None => return Err(Error::UnsupportedFormat),
     };
 
     Ok(HeaderV5 {

@@ -10,7 +10,7 @@ use crate::compression::zlib::ZlibCodec;
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
-use crate::error::{ChdError, Result};
+use crate::error::{Error, Result};
 use crate::header::CodecType;
 
 /// Generic block decoder for FLAC.
@@ -28,7 +28,7 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
         Self: Sized,
     {
         if hunk_bytes % (CHANNELS * mem::size_of::<i16>()) as u32 != 0 {
-            return Err(ChdError::CodecError);
+            return Err(Error::CodecError);
         }
 
         Ok(FlacCodec {
@@ -85,7 +85,7 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
                 _ => {
                     // If frame_read dies our buffer just gets eaten. The Error return for a failed
                     // read does not expose the inner buffer.
-                    return Err(ChdError::DecompressionError);
+                    return Err(Error::DecompressionError);
                 }
             }
         }
@@ -140,7 +140,7 @@ impl CodecImplementation for RawFlacCodec {
         match input[0] {
             b'L' => self.le.decompress(&input[1..], output),
             b'B' => self.be.decompress(&input[1..], output),
-            _ => Err(ChdError::DecompressionError),
+            _ => Err(Error::DecompressionError),
         }
     }
 }
@@ -199,7 +199,7 @@ impl CodecImplementation for CdFlacCodec {
         Self: Sized,
     {
         if hunk_size % CD_FRAME_SIZE != 0 {
-            return Err(ChdError::CodecError);
+            return Err(Error::CodecError);
         }
 
         // The size of the FLAC data in each cdfl hunk, excluding the subcode data.
