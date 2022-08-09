@@ -1,6 +1,6 @@
 use crate::chd_file;
-use chd::header::{ChdHeader, HeaderV1, HeaderV3, HeaderV4, HeaderV5};
-use chd::map::ChdMap;
+use chd::header::{Header, HeaderV1, HeaderV3, HeaderV4, HeaderV5};
+use chd::map::Map;
 use std::mem;
 
 pub const CHD_MD5_BYTES: usize = 16;
@@ -128,11 +128,11 @@ impl From<&HeaderV4> for chd_header {
 
 pub(crate) fn get_v5_header(chd: &chd_file) -> chd_header {
     let header: HeaderV5 = match chd.header() {
-        ChdHeader::V5Header(h) => h.clone(),
+        Header::V5Header(h) => h.clone(),
         _ => unreachable!(),
     };
     let mut map_data: Vec<u8> = match chd.map() {
-        ChdMap::V5(map) => map.into(),
+        Map::V5(map) => map.into(),
         _ => unreachable!(),
     };
     let version = header.version;

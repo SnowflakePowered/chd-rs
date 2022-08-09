@@ -30,8 +30,10 @@ mod chdcorefile;
 mod chdcorefile_sys;
 
 use crate::header::chd_header;
-use chd::header::ChdHeader;
-use chd::{ChdError, ChdFile};
+use chd::header::Header;
+use chd::metadata::{KnownMetadata, Metadata, MetadataTag};
+pub use chd::Error as chd_error;
+use chd::{Chd, Error};
 use std::any::Any;
 use std::ffi::{CStr, CString};
 use std::fs::File;
@@ -67,16 +69,13 @@ impl SeekRead for Cursor<Vec<u8>> {
 
 #[allow(non_camel_case_types)]
 /// An opaque type for an opened CHD file.
-pub type chd_file = ChdFile<Box<dyn SeekRead>>;
+pub type chd_file = Chd<Box<dyn SeekRead>>;
 
-use chd::metadata::{ChdMetadata, ChdMetadataTag, KnownMetadata};
-pub use chd::ChdError as chd_error;
-
-fn ffi_takeown_chd(chd: *mut chd_file) -> Box<ChdFile<Box<dyn SeekRead>>> {
+fn ffi_takeown_chd(chd: *mut chd_file) -> Box<Chd<Box<dyn SeekRead>>> {
     unsafe { Box::from_raw(chd) }
 }
 
-fn ffi_expose_chd(chd: Box<ChdFile<Box<dyn SeekRead>>>) -> *mut chd_file {
+fn ffi_expose_chd(chd: Box<Chd<Box<dyn SeekRead>>>) -> *mut chd_file {
     Box::into_raw(chd)
 }
 
@@ -92,7 +91,7 @@ fn ffi_open_chd(
     let file = File::open(filename).map_err(|_| chd_error::FileNotFound)?;
 
     let bufread = Box::new(BufReader::new(file)) as Box<dyn SeekRead>;
-    ChdFile::open(bufread, parent)
+    Chd::open(bufread, parent)
 }
 
 /// Opens a CHD file by file name, with a layout-undefined backing file pointer owned by
@@ -162,10 +161,10 @@ pub unsafe extern "C" fn chd_error_string(err: chd_error) -> *const c_char {
 
 fn ffi_chd_get_header(chd: &chd_file) -> chd_header {
     match chd.header() {
-        ChdHeader::V5Header(_) => header::get_v5_header(chd),
-        ChdHeader::V1Header(h) | ChdHeader::V2Header(h) => h.into(),
-        ChdHeader::V3Header(h) => h.into(),
-        ChdHeader::V4Header(h) => h.into(),
+        Header::V5Header(_) => header::get_v5_header(chd),
+        Header::V1Header(h) | Header::V2Header(h) => h.into(),
+        Header::V3Header(h) => h.into(),
+        Header::V4Header(h) => h.into(),
     }
 }
 #[no_mangle]
@@ -223,7 +222,7 @@ fn find_metadata(
     chd: &mut chd_file,
     search_tag: u32,
     mut search_index: u32,
-) -> Result<ChdMetadata, ChdError> {
+) -> Result<Metadata, Error> {
     for entry in chd.metadata_refs() {
         if entry.metatag() == search_tag || entry.metatag() == KnownMetadata::Wildcard.metatag() {
             if search_index == 0 {
@@ -232,7 +231,7 @@ fn find_metadata(
             search_index -= 1;
         }
     }
-    Err(ChdError::MetadataNotFound)
+    Err(Error::MetadataNotFound)
 }
 #[no_mangle]
 /// Get indexed metadata of the given search tag and index.
@@ -285,7 +284,7 @@ pub unsafe extern "C" fn chd_get_metadata(
                         && searchindex == 0
                     {
                         let header = chd.header();
-                        if let ChdHeader::V1Header(header) = header {
+                        if let Header::V1Header(header) = header {
                             let fake_meta = format!(
                                 "CYLS:{},HEADS:{},SECS:{},BPS:{}",
                                 header.cylinders,
@@ -348,10 +347,10 @@ pub unsafe extern "C" fn chd_read_header(
         Ok(chd) => {
             let chd_header = ffi_chd_get_header(&chd);
             match unsafe { header.as_mut() } {
-                None => ChdError::InvalidParameter,
+                None => Error::InvalidParameter,
                 Some(header) => {
                     header.write(chd_header);
-                    ChdError::None
+                    Error::None
                 }
             }
         }
@@ -433,7 +432,7 @@ pub unsafe extern "C" fn chd_open_file(
     };
 
     let core_file = Box::new(crate::chdcorefile::CoreFile(file)) as Box<dyn SeekRead>;
-    let chd = match ChdFile::open(core_file, parent) {
+    let chd = match Chd::open(core_file, parent) {
         Ok(chd) => chd,
         Err(e) => return e,
     };
@@ -561,7 +560,7 @@ pub unsafe extern "C" fn chd_precache_progress(
     let chd_file = ffi_takeown_chd(chd);
     let (_file, parent) = chd_file.into_inner();
 
-    let buffered_chd = match ChdFile::open(stream, parent) {
+    let buffered_chd = match Chd::open(stream, parent) {
         Err(e) => return e,
         Ok(chd) => Box::new(chd),
     };
