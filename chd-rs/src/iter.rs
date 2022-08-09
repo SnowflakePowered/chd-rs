@@ -2,6 +2,41 @@
 //! These APIs should be considered unstable and will be replaced with APIs
 //! based around GATs and `LendingIterator` once stabilized. See [rust#44265](https://github.com/rust-lang/rust/issues/44265)
 //! for the tracking issue on GAT stabilization.
+//!
+//! ## Iterating over hunks with `LendingIterator`
+//! `LendingIterator` allows a more ergonomic interface to iterate over hunks.
+//!```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::Chd;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = Chd::open(&mut f, None)?;
+//!
+//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
+//! let mut hunk_buf = chd.get_hunksized_buffer();
+//! // buffer to store compressed data.
+//! let mut cmp_buf = Vec::new();
+//!
+//! while let Some(hunk) = chd.hunks() {
+//!    hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+//! }
+//! ```
+//!
+//! ## Iterating over metadata with `LendingIterator`
+//! LendingIterator allows iterating over metadata without keeping a reference to the source file.
+//!```rust
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! use chd::Chd;
+//!
+//! let mut f = BufReader::new(File::open("file.chd")?);
+//! let mut chd = Chd::open(&mut f, None)?;
+//!
+//! while let Some(metadata) = chd.metadata() {
+//!    let metadata = metadata.read()?;
+//! }
+//! ```
 use crate::metadata::{ChdMetadataTag, Metadata, MetadataRef, MetadataRefs};
 use crate::Result;
 use crate::{Chd, Hunk};
