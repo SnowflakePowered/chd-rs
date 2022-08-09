@@ -6,10 +6,10 @@ mod avhuff;
 mod cdrom;
 mod ecc;
 mod flac;
+mod huff;
 mod lzma;
 mod none;
 mod zlib;
-mod huff;
 
 pub mod codecs {
     pub use crate::compression::avhuff::AVHuffCodec;

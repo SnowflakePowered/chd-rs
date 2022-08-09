@@ -6,7 +6,7 @@
 //! [`Hunk::read_hunk_in`](crate::Hunk::read_hunk_in) should be used which will
 //! avoid unnecessary buffering.
 use crate::error::Result;
-use crate::{Chd, Hunk, Error};
+use crate::{Chd, Error, Hunk};
 use std::io::{BufRead, Cursor, Read, Seek, SeekFrom};
 
 /// Buffered `BufRead + Seek` adapter for [`Hunk`](crate::Hunk).

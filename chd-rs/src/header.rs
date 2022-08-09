@@ -14,7 +14,7 @@ use crate::compression::codecs::{
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{Error, Result};
-use crate::metadata::{MetadataTag, KnownMetadata, MetadataRefs};
+use crate::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
 use crate::{make_tag, map};
 use arrayvec::ArrayVec;
 use byteorder::{BigEndian, ReadBytesExt};
