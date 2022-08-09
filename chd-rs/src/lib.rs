@@ -60,7 +60,8 @@
 //!     let metadata = entry.read(&mut f)?;
 //! }
 //!```
-//! chd-rs provides a helper to retrieve all metadata content at once for convenience.
+//! `Vec<Metadata>` implements `TryFrom<MetadataRefs>` so all metadata entries
+//! can be collected at once without requiring a reference to the file.
 //! ```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
@@ -68,9 +69,10 @@
 //! use chd::metadata::Metadata;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
-//! let mut chd = Chd::open(&mut f, None)?;
-//! let entries = chd.metadata_refs()?;
-//! let metadatas: Vec<Metadata> = entries.try_into()?;
+//! // chd takes ownership of f here
+//! let mut chd = Chd::open(f, None)?;
+//! 
+//! let metadatas: Vec<Metadata> = chd.metadata_refs()?.try_into()?;
 //!```
 //!
 

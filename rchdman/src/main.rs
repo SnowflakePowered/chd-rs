@@ -12,6 +12,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thousands::Separable;
+use chd::metadata::Metadata;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
@@ -408,7 +409,7 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
     // hash
     print_hash(chd.header());
 
-    if let Ok(metadata) = chd.metadata_refs().try_into_vec() {
+    if let Ok(metadata) = Vec::<Metadata>::try_from(chd.metadata_refs()) {
         for meta in metadata {
             let tag = to_fourcc(meta.metatag);
             if let Ok(tag) = tag {
@@ -547,7 +548,7 @@ fn dumpmeta(
     let mut f = BufReader::new(File::open(input)?);
     let mut chd = Chd::open(&mut f, None)?;
 
-    let metas = chd.metadata_refs().try_into_vec()?;
+    let metas: Vec<Metadata> = chd.metadata_refs().try_into()?;
     let tag = metas
         .iter()
         .find(|p| p.metatag == tag && p.index == index)
