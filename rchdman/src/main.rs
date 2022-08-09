@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 use chd::header::{CodecType, Header};
 use chd::iter::LendingIterator;
-use chd::map::{CompressionTypeLegacy, MapEntry, CompressionTypeV5};
+use chd::map::{CompressionTypeLegacy, CompressionTypeV5, MapEntry};
+use chd::metadata::Metadata;
 use chd::Chd;
 use clap::{Parser, Subcommand};
 use num_traits::cast::FromPrimitive;
@@ -12,7 +13,6 @@ use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thousands::Separable;
-use chd::metadata::Metadata;
 
 fn validate_file_exists(s: &OsStr) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(s);
