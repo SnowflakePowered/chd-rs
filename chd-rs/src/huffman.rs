@@ -93,9 +93,8 @@ impl<'a> PartialOrd for HuffmanNode<'a> {
 // The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
 // I prefer to make explicit the parameters at type instantiation for
 // clarity purposes.
-/// Huffman byte decoder. The encoding parameters for this decoder are
-/// * `NUM_BITS` = 256
-/// * `MAX_BITS` = 16
+/// Huffman byte decoder. The encoding parameters for this decoder are `NUM_BITS` = 256 and
+/// `MAX_BITS` = 16
 pub type Huffman8BitDecoder<'a> = HuffmanDecoder<'a, 256, 16, { lookup_len::<16>() }>;
 
 /// Allocation free CHD huffman decoder.

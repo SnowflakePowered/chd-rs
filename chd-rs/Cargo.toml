@@ -12,11 +12,13 @@ keywords = ["mame", "chd", "decompression"]
 
 [features]
 default = ["std", "cd_full"]
-verify_block_crc = ["want_subcode", "want_raw_data_sector"]
 cd_full = ["want_subcode", "want_raw_data_sector"]
 std = []
-# disabled by default for speed
 
+# disabled by default for speed
+verify_block_crc = ["want_subcode", "want_raw_data_sector"]
+
+# currently unstable APIs
 huffman_api = []
 codec_api = []
 unstable_lending_iterators = [ "lending-iterator", "nougat" ]
