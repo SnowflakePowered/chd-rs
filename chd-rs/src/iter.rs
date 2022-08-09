@@ -8,6 +8,7 @@
 //!```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
+//! use lending_iterator::LendingIterator;
 //! use chd::Chd;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
@@ -17,8 +18,8 @@
 //! let mut hunk_buf = chd.get_hunksized_buffer();
 //! // buffer to store compressed data.
 //! let mut cmp_buf = Vec::new();
-//!
-//! while let Some(hunk) = chd.hunks() {
+//! let mut hunks = chd.hunks();
+//! while let Some(mut hunk) = hunks.next() {
 //!    hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
 //! }
 //! ```
@@ -28,12 +29,13 @@
 //!```rust
 //! use std::fs::File;
 //! use std::io::BufReader;
+//! use lending_iterator::LendingIterator;
 //! use chd::Chd;
 //!
 //! let mut f = BufReader::new(File::open("file.chd")?);
 //! let mut chd = Chd::open(&mut f, None)?;
-//!
-//! while let Some(metadata) = chd.metadata() {
+//! let mut metadata = chd.metadata();
+//! while let Some(mut metadata) = metadata.next() {
 //!    let metadata = metadata.read()?;
 //! }
 //! ```
