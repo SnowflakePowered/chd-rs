@@ -38,10 +38,10 @@ impl<F: Read + Seek> Chd<F> {
     ///
     /// If the CHD file does not require a parent, and a parent is provided, returns
     /// [`Error::InvalidParameter`](crate::Error::InvalidParameter).
-
-    /// If no parent CHD is provided and the file requires a CHD, the parent will not be
-    /// validated immediately. However, calls to [`read_hunk_in`](crate::Hunk::read_hunk_in) will
-    /// fail with [`Error::RequiresParent`](crate::Error::RequiresParent).
+    /// If no parent CHD is provided and the file requires a parent, then the presence of the parent
+    /// will not be immediately violated. However, calls to [`read_hunk_in`](crate::Hunk::read_hunk_in)
+    /// will fail with [`Error::RequiresParent`](crate::Error::RequiresParent) when a hunk is read that
+    /// refers to the parent CHD.
     pub fn open(mut file: F, parent: Option<Box<Chd<F>>>) -> Result<Chd<F>> {
         let header = Header::try_read_header(&mut file)?;
         // No point in checking writable because traits are read only.
