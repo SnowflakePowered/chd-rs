@@ -51,11 +51,11 @@ impl<F: Read + Seek> Chd<F> {
             if !header.has_parent() {
                 return Err(Error::InvalidParameter);
             }
-            if p.header().sha1() != p.header().sha1() {
+            if p.header().sha1() != header.parent_sha1() {
                 return Err(Error::InvalidParent);
             }
             // should be None for V4+
-            if p.header().md5() != p.header.md5() {
+            if p.header().md5() != header.parent_md5() {
                 return Err(Error::InvalidParent);
             }
         }
