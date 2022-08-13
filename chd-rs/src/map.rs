@@ -572,7 +572,9 @@ fn read_map_v5<F: Read + Seek>(
                 last_parent = off;
             }
             CompressionTypeV5::CompressionParent1 => {
-                last_parent += (header.hunk_bytes / header.unit_bytes) as u64
+                last_parent += (header.hunk_bytes / header.unit_bytes) as u64;
+                map_slice[0] = CompressionTypeV5::CompressionParent as u8;
+                off = last_parent;
             }
             CompressionTypeV5::CompressionParent0 => {
                 map_slice[0] = CompressionTypeV5::CompressionParent as u8;

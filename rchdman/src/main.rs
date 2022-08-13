@@ -66,6 +66,9 @@ enum Commands {
         /// input file name
         #[clap(short, long, parse(try_from_os_str = validate_file_exists))]
         input: PathBuf,
+        /// parent file name for input CHD
+        #[clap(short = 'p', long, parse(try_from_os_str = validate_file_exists))]
+        inputparent: Option<PathBuf>,
     },
     /// Verifies the integrity of a CHD
     Verify {
@@ -452,12 +455,20 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn benchmark(p: impl AsRef<Path>) -> anyhow::Result<()> {
+fn benchmark(p: impl AsRef<Path>, ip: Option<impl AsRef<Path>>) -> anyhow::Result<()> {
     println!("\nchd-rs - rchdman benchmark");
-    let mut f = BufReader::new(File::open(p)?);
+    let f = BufReader::new(File::open(p)?);
+    let ipf = ip.map(|ip| BufReader::new(File::open(ip).unwrap()));
 
     let start = Instant::now();
-    let mut chd = Chd::open(&mut f, None)?;
+    let ipchd = ipf.map(|ipf| Chd::open(ipf, None));
+
+    let mut chd = if let Some(ip) = ipchd {
+        Chd::open(f, Some(Box::new(ip?)))?
+    } else {
+        Chd::open(f, None)?
+    };
+
     let mut hunk_buf = chd.get_hunksized_buffer();
     let mut cmp_buf = Vec::new();
     let hunk_iter = chd.hunks();
@@ -615,7 +626,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Info { input, verbose } => info(input, *verbose)?,
-        Commands::Benchmark { input } => benchmark(input)?,
+        Commands::Benchmark { input, inputparent } => benchmark(input, inputparent.as_ref())?,
         Commands::Verify { input, inputparent } => verify(input, inputparent.as_deref())?,
         Commands::Dumpmeta {
             input,

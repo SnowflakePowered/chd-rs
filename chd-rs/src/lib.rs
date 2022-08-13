@@ -217,6 +217,16 @@ mod tests {
     }
 
     #[test]
+    fn read_parent_test() {
+        let mut p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
+        let pchd = Chd::open(p, None).expect("parent");
+
+        let mut f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
+
+        let chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
+    }
+
+    #[test]
     #[cfg(feature = "unsound_owning_iterators")]
     fn hunk_iter_test() {
         let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");

@@ -148,6 +148,23 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chd"
 version = "0.2.0"
+source = "git+https://github.com/SnowflakePowered/chd-rs#af1c507d3113b59375f5437c31cf1c393ad8db8d"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc",
+ "flate2",
+ "lzma-rs-perf-exp",
+ "num-derive",
+ "num-traits",
+ "text_io",
+]
+
+[[package]]
+name = "chd"
+version = "0.2.2"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -165,29 +182,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "chd"
-version = "0.2.0"
-source = "git+https://github.com/SnowflakePowered/chd-rs#af1c507d3113b59375f5437c31cf1c393ad8db8d"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc",
- "flate2",
- "lzma-rs-perf-exp",
- "num-derive",
- "num-traits",
- "text_io",
-]
-
-[[package]]
 name = "chd-capi"
 version = "0.1.5"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.2.0 (git+https://github.com/SnowflakePowered/chd-rs)",
+ "chd 0.2.0",
  "cmake",
 ]
 
@@ -704,7 +704,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.2.0",
+ "chd 0.2.2",
  "clap",
  "hex",
  "num-traits",
