@@ -10,22 +10,25 @@ mod huff;
 mod lzma;
 mod none;
 mod zlib;
+mod zstd;
 
 pub mod codecs {
     pub use crate::compression::avhuff::AVHuffCodec;
     pub use crate::compression::cdrom::CdLzmaCodec;
     pub use crate::compression::cdrom::CdZlibCodec;
+    pub use crate::compression::cdrom::CdZstdCodec;
     pub use crate::compression::flac::CdFlacCodec;
     pub use crate::compression::flac::RawFlacCodec;
     pub use crate::compression::huff::HuffmanCodec;
     pub use crate::compression::lzma::LzmaCodec;
     pub use crate::compression::none::NoneCodec;
     pub use crate::compression::zlib::ZlibCodec;
+    pub use crate::compression::zstd::ZstdCodec;
 }
 
 // unstable(trait_alias)
 /// Marker trait for a codec that can be used to decompress a compressed hunk.
-pub trait CompressionCodec: CodecImplementation + CompressionCodecType + Send + Sync {}
+pub trait CompressionCodec: CodecImplementation + CompressionCodecType {}
 
 /// Trait for a codec that implements a known CHD codec type.
 pub trait CompressionCodecType {

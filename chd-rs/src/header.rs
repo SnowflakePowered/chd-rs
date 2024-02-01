@@ -9,8 +9,8 @@
 //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
 use crate::chdfile::Codecs;
 use crate::compression::codecs::{
-    AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, HuffmanCodec, LzmaCodec, NoneCodec,
-    RawFlacCodec, ZlibCodec,
+    AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, CdZstdCodec, HuffmanCodec, LzmaCodec,
+    NoneCodec, RawFlacCodec, ZlibCodec, ZstdCodec,
 };
 use crate::compression::{CodecImplementation, CompressionCodec};
 use crate::error::{Error, Result};
@@ -50,8 +50,12 @@ pub enum CodecType {
     LzmaV5 = make_tag(b"lzma"),
     /// V5 AV/Huffman compression (avhu)
     AVHuffV5 = make_tag(b"avhu"),
-    /// V5 Huffman compression
+    /// V5 Huffman compression (huff)
     HuffV5 = make_tag(b"huff"),
+    /// V5 Zstandard compression (zstd)
+    ZstdV5 = make_tag(b"zstd"),
+    /// V5 Zstandard CD compression (cdzs)
+    ZstdCdV5 = make_tag(b"cdzs"),
 }
 
 impl CodecType {
@@ -93,6 +97,12 @@ impl CodecType {
             }
             CodecType::AV | CodecType::AVHuffV5 => {
                 AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            }
+            CodecType::ZstdV5 => {
+                ZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            }
+            CodecType::ZstdCdV5 => {
+                CdZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             #[allow(unreachable_patterns)]
             _ => Err(Error::UnsupportedFormat),

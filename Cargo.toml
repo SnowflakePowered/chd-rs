@@ -4,6 +4,6 @@ members = [
     "rchdman",
     "chd-rs-capi"
 ]
-
+resolver = "2"
 [profile.release]
 debug = true
