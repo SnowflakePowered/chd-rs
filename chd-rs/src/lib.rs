@@ -16,6 +16,8 @@
 //! * LZMA (Raw LZMA)
 //! * Huff (MAME Static Huffman)
 //! * AVHU (AV Huffman)
+//! * Zstandard
+//! * CDZS (CD Zstandard)
 //!
 //! ## Iterating over hunks
 //! Because [`Hunk`](crate::Hunk) keeps a mutable reference to its owning

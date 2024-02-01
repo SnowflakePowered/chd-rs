@@ -3,6 +3,7 @@ use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SY
 use crate::compression::ecc::ErrorCorrectedSector;
 use crate::compression::lzma::LzmaCodec;
 use crate::compression::zlib::ZlibCodec;
+use crate::compression::zstd::ZstdCodec;
 use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
@@ -93,6 +94,48 @@ pub type CdLzmaCodec = CdCodec<LzmaCodec, ZlibCodec>;
 /// when decompressed.
 pub type CdZlibCodec = CdCodec<ZlibCodec, ZlibCodec>;
 
+/// CD-ROM wrapper decompression codec (cdzs) using the [Zstandard codec](crate::codecs::ZstdCodec)
+/// for decompression of sector data and the [Zstandard codec](crate::codecs::ZstdCodec) for
+/// decompression of subcode data.
+///
+/// ## Format Details
+/// CD-ROM compressed hunks have a layout with a header, then all compressed frame data
+/// in sequential order, followed by compressed subcode data.
+/// ```c
+/// [Header, Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+/// ```
+///
+/// The slice of the input buffer from `Frame0` to `Frame1` is a single Deflate compressed stream,
+/// followed by the subcode data which is a single Deflate compressed stream.
+///
+/// The size of the header is determined by the number of 2448-byte sized frames that can fit
+/// into a hunk-sized buffer and the length of such buffer. First, the number of ECC bytes
+/// are calculated as `(frames + 7) / 8`. If the hunk size is less than 65536 (0x10000) bytes,
+/// then the length of the compressed sector data is stored as a 2 byte big-endian integer,
+/// otherwise the length is 3 bytes, stored after the number of ECC bytes in the header.
+///
+/// After decompression, the data is swizzled so that each frame is followed by its corresponding
+/// subcode data.
+///
+/// ```c
+/// [Frame0, Subcode0, Frame1, Subcode1, ..., FrameN, SubcodeN]
+/// ```
+/// After swizzling, the following CD sync header will be written to
+/// the first 12 bytes of each frame.
+/// ```
+/// pub const CD_SYNC_HEADER: [u8; 12] = [
+///     0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+/// ];
+/// ```
+/// The ECC data is then regenerated throughout the sector.
+///
+/// ## Buffer Restrictions
+/// Each compressed CDZS hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple of
+/// 2448, the size of each CD frame.
+/// The input buffer must contain exactly enough data to fill the output buffer
+/// when decompressed.
+pub type CdZstdCodec = CdCodec<ZstdCodec, ZstdCodec>;
+
 impl CompressionCodecType for CdLzmaCodec {
     fn codec_type(&self) -> CodecType {
         CodecType::LzmaCdV5
@@ -105,8 +148,15 @@ impl CompressionCodecType for CdZlibCodec {
     }
 }
 
+impl CompressionCodecType for CdZstdCodec {
+    fn codec_type(&self) -> CodecType {
+        CodecType::ZstdCdV5
+    }
+}
+
 impl CompressionCodec for CdZlibCodec {}
 impl CompressionCodec for CdLzmaCodec {}
+impl CompressionCodec for CdZstdCodec {}
 
 // unstable(adt_const_params): const TYPE: CodecType, but marker traits bring us
 // most of the way.
