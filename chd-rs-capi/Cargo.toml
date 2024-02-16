@@ -1,6 +1,6 @@
 [package]
 name = "chd-capi"
-version = "0.1.5"
+version = "0.3.0"
 edition = "2021"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 description = "libchdr-compatible C API for a Rust implementation of the CHD File Format"
