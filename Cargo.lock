@@ -157,23 +157,6 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chd"
-version = "0.2.3"
-source = "git+https://github.com/SnowflakePowered/chd-rs#cd81f48d9a95c69f6ba9844af87ed1771a39755f"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc",
- "flate2",
- "lzma-rs-perf-exp",
- "num-derive 0.3.3",
- "num-traits",
- "text_io",
-]
-
-[[package]]
-name = "chd"
 version = "0.3.0"
 dependencies = [
  "arrayvec",
@@ -186,7 +169,7 @@ dependencies = [
  "lending-iterator",
  "lzma-rs-perf-exp",
  "nougat",
- "num-derive 0.4.1",
+ "num-derive",
  "num-traits",
  "ruzstd",
  "take_mut",
@@ -195,12 +178,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "chd"
+version = "0.3.0"
+source = "git+https://github.com/SnowflakePowered/chd-rs#9b77c96ef25e41c377b7936803b3639d99d88f1d"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc",
+ "flate2",
+ "lzma-rs-perf-exp",
+ "num-derive",
+ "num-traits",
+ "ruzstd",
+ "take_mut",
+ "text_io",
+]
+
+[[package]]
 name = "chd-capi"
 version = "0.1.5"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.2.3",
+ "chd 0.3.0 (git+https://github.com/SnowflakePowered/chd-rs)",
  "cmake",
 ]
 
@@ -644,17 +646,6 @@ name = "nougat-proc_macros"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c84f77a45e99a2f9b492695d99e1c23844619caa5f3e57647cffacad773ca257"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "num-derive"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
 dependencies = [
  "proc-macro2",
  "quote",
