@@ -3,8 +3,6 @@ use crate::compression::{
 };
 use crate::header::CodecType;
 use crate::Error;
-#[cfg(not(feature = "fast_zstd"))]
-use std::io::Read;
 
 /// Zstandard (zstd) decompression codec.
 ///
@@ -17,8 +15,7 @@ use std::io::Read;
 /// when decompressed.
 #[cfg(not(feature = "fast_zstd"))]
 pub struct ZstdCodec {
-    engine: ruzstd::FrameDecoder,
-    buffer: Vec<u8>,
+    decoder: ruzstd::FrameDecoder,
 }
 
 /// Zstandard (zstd) decompression codec.
@@ -37,39 +34,32 @@ pub struct ZstdCodec {
 
 #[cfg(not(feature = "fast_zstd"))]
 impl CodecImplementation for ZstdCodec {
-    fn new(hunk_size: u32) -> crate::Result<Self>
+    fn new(_hunk_size: u32) -> crate::Result<Self>
     where
         Self: Sized,
     {
         Ok(Self {
-            engine: ruzstd::FrameDecoder::new(),
-            buffer: Vec::with_capacity(hunk_size as usize),
+            decoder: ruzstd::FrameDecoder::new(),
         })
     }
 
-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
-        self.buffer.clear();
-        let engine = std::mem::take(&mut self.engine);
-        let mut engine = ruzstd::StreamingDecoder::new_with_decoder(input, engine)
-            .map_err(|_| Error::CodecError)?;
-
-        // If each chunk doesn't output to exactly the same then it's an error
-        let bytes_read = engine
-            .read_to_end(&mut self.buffer)
+    fn decompress(&mut self, mut input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
+        self.decoder.reset(&mut input).map_err(|_| Error::DecompressionError)?;
+        let (_, bytes_out) = self.decoder
+            .decode_from_to(input, output)
             .map_err(|_| Error::DecompressionError)?;
 
-        let bytes_out = self.buffer.len();
-
+        // If each chunk doesn't output to exactly the same then it's an error
         if bytes_out != output.len() {
             return Err(Error::DecompressionError);
         }
 
-        output.clone_from_slice(&self.buffer);
-
-        self.engine = engine.inner();
         Ok(DecompressResult {
-            bytes_out: output.len(),
-            bytes_read,
+            bytes_out,
+            // The "read" value returned by decode_from_to() would be incorrect here,
+            // since reset() modifies the slice length.
+            // bytes_read_from_source() appears to return the whole block length.
+            bytes_read: self.decoder.bytes_read_from_source() as usize,
         })
     }
 }
