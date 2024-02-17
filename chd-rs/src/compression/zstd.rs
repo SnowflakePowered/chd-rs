@@ -3,6 +3,7 @@ use crate::compression::{
 };
 use crate::header::CodecType;
 use crate::Error;
+#[cfg(not(feature = "fast_zstd"))]
 use std::io::Read;
 
 /// Zstandard (zstd) decompression codec.
@@ -31,7 +32,7 @@ pub struct ZstdCodec {
 /// when decompressed.
 #[cfg(feature = "fast_zstd")]
 pub struct ZstdCodec {
-    buffer: Vec<u8>,
+    zstd_context: zstd::zstd_safe::DCtx<'static>
 }
 
 #[cfg(not(feature = "fast_zstd"))]
@@ -75,35 +76,30 @@ impl CodecImplementation for ZstdCodec {
 
 #[cfg(feature = "fast_zstd")]
 impl CodecImplementation for ZstdCodec {
-    fn new(hunk_size: u32) -> crate::Result<Self>
+    fn new(_hunk_size: u32) -> crate::Result<Self>
     where
         Self: Sized,
     {
         Ok(Self {
-            buffer: Vec::with_capacity(hunk_size as usize),
+            zstd_context: zstd::zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?
         })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
-        self.buffer.clear();
-        let mut engine = zstd::Decoder::new(input).map_err(|_| crate::Error::CodecError)?;
-
         // If each chunk doesn't output to exactly the same then it's an error
-        let bytes_read = engine
-            .read_to_end(&mut self.buffer)
+        let bytes_out = self.zstd_context
+            .decompress(output, input)
             .map_err(|_| Error::DecompressionError)?;
-
-        let bytes_out = self.buffer.len();
 
         if bytes_out != output.len() {
             return Err(Error::DecompressionError);
         }
 
-        output.clone_from_slice(&self.buffer);
-
         Ok(DecompressResult {
             bytes_out: output.len(),
-            bytes_read,
+            // ZSTD_decompress() takes the exact size of a number of frames, so it
+            // should've returned an error if it hasn't used the entire input slice.
+            bytes_read: input.len()
         })
     }
 }
