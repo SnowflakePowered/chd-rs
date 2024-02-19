@@ -220,12 +220,12 @@ mod tests {
 
     #[test]
     fn read_parent_test() {
-        let mut p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
+        let p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
         let pchd = Chd::open(p, None).expect("parent");
 
-        let mut f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
+        let f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
 
-        let chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
+        let _chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
     }
 
     #[test]
