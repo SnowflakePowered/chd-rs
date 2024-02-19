@@ -102,9 +102,11 @@ see the [`chd::compression`](https://github.com/SnowflakePowered/chd-rs/tree/mas
 * Deflate (`CHD_CODEC_ZLIB`)
 * FLAC (`CHD_CODEC_FLAC`)
 * Huffman (`CHD_CODEC_HUFF`)
+* Zstandard (`CHD_CODEC_ZSTD`)
 * CD LZMA (`CHD_CODEC_CD_LZMA`)
 * CD Deflate (`CHD_CODEC_CD_ZLIB`)
 * CD FLAC (`CHD_CODEC_CD_FLAC`)
+* CD Zstandard (`CHD_CODEC_CD_ZSTD`)
 * AV Huffman (`CHD_CODEC_AVHUFF`)
 
 #### Codecs and Huffman API 
