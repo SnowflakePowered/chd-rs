@@ -31,7 +31,7 @@ want_raw_data_sector = []
 max_perf = ["fast_zlib", "fast_lzma", "fast_zstd"]
 fast_zlib = ["std", "flate2/zlib-ng"]
 fast_lzma = ["std"]
-fast_zstd = ["std", "zstd"]
+fast_zstd = ["std", "zstd-safe"]
 
 [dependencies]
 byteorder = "1"
@@ -49,7 +49,7 @@ claxon = "0.4"
 bitreader = "0.3.6"
 ruzstd = "0.5"
 
-zstd = { version = "0.13.0", optional = true }
+zstd-safe = { version = "7.0.0", optional = true }
 # lending-iterator
 lending-iterator = { version = "0.1", optional = true }
 nougat = { version = "0.2", optional = true }

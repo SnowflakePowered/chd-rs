@@ -29,7 +29,7 @@ pub struct ZstdCodec {
 /// when decompressed.
 #[cfg(feature = "fast_zstd")]
 pub struct ZstdCodec {
-    zstd_context: zstd::zstd_safe::DCtx<'static>
+    zstd_context: zstd_safe::DCtx<'static>
 }
 
 #[cfg(not(feature = "fast_zstd"))]
@@ -71,7 +71,7 @@ impl CodecImplementation for ZstdCodec {
         Self: Sized,
     {
         Ok(Self {
-            zstd_context: zstd::zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?
+            zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?
         })
     }
 
