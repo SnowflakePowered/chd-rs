@@ -172,6 +172,8 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
             CodecType::LzmaV5 => "LZMA",
             CodecType::AVHuffV5 => "A/V Huffman",
             CodecType::HuffV5 => "Huffman",
+            CodecType::ZstdV5 => "Zstandard",
+            CodecType::ZstdCdV5 => "CD Zstandard",
         }
     }
 
@@ -190,6 +192,8 @@ fn info(input: &PathBuf, verbose: bool) -> anyhow::Result<()> {
                 CodecType::LzmaV5 => "lzma (LZMA)",
                 CodecType::AVHuffV5 => "avhu (A/V Huffman)",
                 CodecType::HuffV5 => "huff (Huffman)",
+                CodecType::ZstdV5 => "zstd (Zstandard)",
+                CodecType::ZstdCdV5 => "cdzs (CD Zstandard)",
             }
         }
 
