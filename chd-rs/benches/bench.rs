@@ -1,7 +1,5 @@
 use bencher::{benchmark_group, benchmark_main, Bencher};
-use chd::read::HunkBufReader;
 use chd::Chd;
-use std::env::args;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -18,13 +16,14 @@ fn read_hunks_unbuf_bench(bench: &mut Bencher) {
         // for hunk_num in 13478..hunk_count {
         let mut cmp_buf = Vec::new();
         let mut bytes = 0;
+        let now = std::time::Instant::now();
         for hunk_num in 0..hunk_count {
             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
             bytes += hunk
                 .read_hunk_in(&mut cmp_buf, &mut hunk_buf)
                 .expect(format!("could not read_hunk {}", hunk_num).as_str());
         }
-        println!("total: {}", bytes);
+        println!("total: {}, {:?}", bytes, now.elapsed());
     });
 }
 
