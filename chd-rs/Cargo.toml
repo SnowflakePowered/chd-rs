@@ -47,7 +47,7 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 lzma-rs = { package = "lzma-rs-perf-exp", version = "0.2", features = ["raw_decoder"] }
 claxon = "0.4"
 bitreader = "0.3.6"
-ruzstd = "0.5"
+ruzstd = "0.6"
 
 zstd-safe = { version = "7.0.0", optional = true }
 # lending-iterator
