@@ -149,7 +149,7 @@ impl CodecImplementation for LzmaCodec {
                 None,
                 vec![0; dict_size as usize],
             )
-            .map_err(|_| Error::DecompressionError)?,
+            .map_err(|_| Error::CodecError)?,
         })
     }
 

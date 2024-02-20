@@ -33,7 +33,7 @@ impl CodecImplementation for ZlibCodec {
             .map_err(|_| Error::DecompressionError)?;
 
         if status == flate2::Status::BufError {
-            return Err(Error::CompressionError);
+            return Err(Error::DecompressionError);
         }
 
         let total_out = self.engine.total_out();
