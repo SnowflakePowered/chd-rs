@@ -48,12 +48,18 @@ impl CodecImplementation for ZstdCodec {
         mut input: &[u8],
         output: &mut [u8],
     ) -> crate::Result<DecompressResult> {
+        use ruzstd::StreamingDecoder;
+        use std::io::Read;
+
         self.decoder
             .reset(&mut input)
             .map_err(|_| Error::DecompressionError)?;
-        let (_, bytes_out) = self
-            .decoder
-            .decode_from_to(input, output)
+
+        let mut decoder = StreamingDecoder::new_with_decoder(input, &mut self.decoder)
+            .map_err(|_| Error::CodecError)?;
+
+        let bytes_out = decoder
+            .read(output)
             .map_err(|_| Error::DecompressionError)?;
 
         // If each chunk doesn't output to exactly the same then it's an error
