@@ -29,15 +29,8 @@ pub struct ZstdCodec {
 /// when decompressed.
 #[cfg(feature = "fast_zstd")]
 pub struct ZstdCodec {
-    zstd_context: SafeZstdContext,
+    zstd_context: zstd_safe::DCtx<'static>,
 }
-
-// zstd_safe::DCtx<'static> should be safe to mark `Sync`.
-#[cfg(feature = "fast_zstd")]
-struct SafeZstdContext(zstd_safe::DCtx<'static>);
-
-#[cfg(feature = "fast_zstd")]
-unsafe impl Sync for SafeZstdContext {}
 
 #[cfg(not(feature = "fast_zstd"))]
 impl CodecImplementation for ZstdCodec {
@@ -85,22 +78,18 @@ impl CodecImplementation for ZstdCodec {
         Self: Sized,
     {
         Ok(Self {
-            zstd_context: SafeZstdContext(
-                zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
-            ),
+            zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
         })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
         self.zstd_context
-            .0
             .reset(zstd_safe::ResetDirective::SessionAndParameters)
             .map_err(|_| Error::DecompressionError)?;
 
         // If each chunk doesn't output to exactly the same then it's an error
         let bytes_out = self
             .zstd_context
-            .0
             .decompress(output, input)
             .map_err(|_| Error::DecompressionError)?;
 
