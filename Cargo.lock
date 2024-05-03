@@ -158,6 +158,25 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chd"
 version = "0.3.0"
+source = "git+https://github.com/SnowflakePowered/chd-rs#516b0c3c59d943c6f092902548fcdbb0a3c1030b"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc",
+ "flate2",
+ "lzma-rs-perf-exp",
+ "num-derive",
+ "num-traits",
+ "ruzstd",
+ "take_mut",
+ "text_io",
+]
+
+[[package]]
+name = "chd"
+version = "0.3.1"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -178,31 +197,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "chd"
-version = "0.3.0"
-source = "git+https://github.com/SnowflakePowered/chd-rs#516b0c3c59d943c6f092902548fcdbb0a3c1030b"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc",
- "flate2",
- "lzma-rs-perf-exp",
- "num-derive",
- "num-traits",
- "ruzstd",
- "take_mut",
- "text_io",
-]
-
-[[package]]
 name = "chd-capi"
-version = "0.3.1"
+version = "0.3.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.3.0 (git+https://github.com/SnowflakePowered/chd-rs)",
+ "chd 0.3.0",
  "cmake",
 ]
 
@@ -755,7 +755,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.3.0",
+ "chd 0.3.1",
  "clap",
  "hex",
  "num-traits",
@@ -1169,18 +1169,18 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 
 [[package]]
 name = "zstd-safe"
-version = "7.0.0"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
+checksum = "1cd99b45c6bc03a018c8b8a86025678c87e55526064e38f9df301989dce7ec0a"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.9+zstd.1.5.5"
+version = "2.0.10+zstd.1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e16efa8a874a0481a574084d34cc26fdb3b99627480f785888deb6386506656"
+checksum = "c253a4914af5bafc8fa8c86ee400827e83cf6ec01195ec1f1ed8441bf00d65aa"
 dependencies = [
  "cc",
  "pkg-config",
