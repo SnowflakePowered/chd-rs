@@ -39,6 +39,8 @@ mod tests {
     use crate::chdcorefile_sys::core_fopen;
     use std::fs::File;
     use std::io::{Read, Write};
+    use std::mem::MaybeUninit;
+    use crate::chd_read_header_core_file;
 
     #[test]
     fn chdcorefile_read() {
@@ -61,6 +63,14 @@ mod tests {
                 b"../chd-rs/.testimages/cliffhgr.chd\0".as_ptr() as *const std::os::raw::c_char
             )
         };
+
+        unsafe {
+            let mut header = MaybeUninit::zeroed();
+            chd_read_header_core_file(file, &mut header);
+            let header = header.assume_init();
+            eprintln!("{:?}", header);
+
+        }
 
         // let mut buf = [0u8; 10];
         // file.read_exact(&mut buf).unwrap();
