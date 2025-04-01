@@ -20,10 +20,10 @@ impl Read for CoreFile {
             core_fread(
                 self.file,
                 buf.as_mut_ptr() as *mut c_void,
-                buf.len() as size_t,
+                buf.len(),
             )
         };
-        Ok(res as usize)
+        Ok(res)
     }
 }
 
@@ -34,7 +34,7 @@ impl Seek for CoreFile {
             SeekFrom::End(off) => (off, 2),          // SEEK_END
             SeekFrom::Current(off) => (off, 1),      // SEEK_CUR
         };
-        let res = unsafe { core_fseek(self.file, off as size_t, set) };
+        let res = unsafe { core_fseek(self.file, off as usize, set) };
         Ok(res as u64)
     }
 }
@@ -54,7 +54,7 @@ mod tests {
         drop(f);
 
         let file = unsafe { core_fopen(b"test.txt\0".as_ptr() as *const std::os::raw::c_char) };
-        let mut file = CoreFile(file);
+        let mut file = CoreFile { file };
         let mut buf = [0u8; 10];
         file.read_exact(&mut buf).unwrap();
         assert_eq!(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], &buf);

@@ -461,7 +461,7 @@ pub unsafe extern "C" fn chd_open_core_file(
     parent: *mut chd_file,
     out: *mut *mut chd_file,
 ) -> chd_error {
-    chd_open_file(file, mode, parent, out)
+    unsafe { chd_open_file(file, mode, parent, out) }
 }
 
 #[no_mangle]
@@ -591,5 +591,5 @@ pub unsafe extern "C" fn chd_precache_progress(
 /// # Safety
 /// * `chd` is either `NULL` or a valid pointer to a `chd_file` obtained from [`chd_open`](crate::chd_open), [`chd_open_file`](crate::chd_open_file), or [`chd_open_core_file`](crate::chd_open_core_file).
 pub unsafe extern "C" fn chd_precache(chd: *mut chd_file) -> chd_error {
-    chd_precache_progress(chd, None, std::ptr::null_mut())
+    unsafe { chd_precache_progress(chd, None, std::ptr::null_mut()) }
 }

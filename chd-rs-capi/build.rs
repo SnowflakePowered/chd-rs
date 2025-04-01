@@ -37,7 +37,7 @@ fn build_chdcorefile() {
 
     let bindings = bindgen::Builder::default()
         .header("libchdcorefile/chdcorefile.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 
