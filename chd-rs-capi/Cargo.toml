@@ -1,6 +1,6 @@
 [package]
 name = "chd-capi"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 description = "libchdr-compatible C API for a Rust implementation of the CHD File Format"
@@ -19,7 +19,6 @@ chd_core_file = ["bindgen", "cmake"]
 chd_virtio = ["chd_core_file"]
 chd_precache = []
 verify_block_crc = ["chd/verify_block_crc"]
-huff_write = []
 
 [dependencies]
 chd = { version = "0.3", git = "https://github.com/SnowflakePowered/chd-rs" }
