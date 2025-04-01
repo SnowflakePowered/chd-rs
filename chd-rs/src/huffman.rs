@@ -55,11 +55,11 @@ impl From<BitReaderError> for HuffmanError {
 #[derive(Default, Clone, Copy)]
 struct HuffmanNode<'a> {
     // Parent and count are needed for write but not for read only.
-    #[cfg(feature = "write")]
+    #[cfg(feature = "huff_write")]
     parent: usize,
-    #[cfg(feature = "write")]
+    #[cfg(feature = "huff_write")]
     count: u32,
-    #[cfg(feature = "write")]
+    #[cfg(feature = "huff_write")]
     histogram: Vec<u8>,
     weight: u32,
     bits: u32,

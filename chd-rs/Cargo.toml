@@ -40,7 +40,6 @@ num-derive = "0.4"
 crc = "3"
 arrayvec = "0.7"
 text_io = "0.1"
-take_mut = "0.2.2"
 
 # codecs
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
