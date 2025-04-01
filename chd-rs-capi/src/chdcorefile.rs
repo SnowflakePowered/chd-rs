@@ -16,13 +16,7 @@ impl SeekRead for CoreFile {
 
 impl Read for CoreFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let res = unsafe {
-            core_fread(
-                self.file,
-                buf.as_mut_ptr() as *mut c_void,
-                buf.len(),
-            )
-        };
+        let res = unsafe { core_fread(self.file, buf.as_mut_ptr() as *mut c_void, buf.len()) };
         Ok(res)
     }
 }
@@ -45,6 +39,8 @@ mod tests {
     use crate::chdcorefile_sys::core_fopen;
     use std::fs::File;
     use std::io::{Read, Write};
+    use std::mem::MaybeUninit;
+    use crate::chd_read_header_core_file;
 
     #[test]
     fn chdcorefile_read() {
@@ -58,6 +54,27 @@ mod tests {
         let mut buf = [0u8; 10];
         file.read_exact(&mut buf).unwrap();
         assert_eq!(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], &buf);
+    }
+
+    #[test]
+    fn chdcorefile_read_header() {
+        let file = unsafe {
+            core_fopen(
+                b"../chd-rs/.testimages/cliffhgr.chd\0".as_ptr() as *const std::os::raw::c_char
+            )
+        };
+
+        unsafe {
+            let mut header = MaybeUninit::zeroed();
+            chd_read_header_core_file(file, &mut header);
+            let header = header.assume_init();
+            eprintln!("{:?}", header);
+
+        }
+
+        // let mut buf = [0u8; 10];
+        // file.read_exact(&mut buf).unwrap();
+        // assert_eq!(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], &buf);
     }
 }
 

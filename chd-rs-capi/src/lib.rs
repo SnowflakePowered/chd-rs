@@ -361,6 +361,65 @@ pub unsafe extern "C" fn chd_read_header(
 #[no_mangle]
 #[cfg(feature = "chd_core_file")]
 #[cfg_attr(docsrs, doc(cfg(chd_core_file)))]
+/// Read CHD header data from the file into the pointed struct.
+///
+/// Ownership of the core_file is retained by the caller when calling this function.
+///
+/// # Safety
+/// * `filename` is a valid, null-terminated **UTF-8** string.
+/// * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
+/// * If `header` is `NULL`, returns `CHDERR_INVALID_PARAMETER`
+pub unsafe extern "C" fn chd_read_header_file(
+    file: *mut chdcorefile_sys::core_file,
+    header: *mut MaybeUninit<chd_header>,
+) -> chd_error {
+    let core_file = Box::new(crate::chdcorefile::CoreFile { file }) as Box<dyn SeekRead>;
+    let chd = match Chd::open(core_file, None) {
+        Ok(chd) => chd,
+        Err(e) => return e,
+    };
+
+    let chd_header = ffi_chd_get_header(&chd);
+    let result = match unsafe { header.as_mut() } {
+        None => Error::InvalidParameter,
+        Some(header) => {
+            header.write(chd_header);
+            Error::None
+        }
+    };
+
+    let (file, _) = chd.into_inner();
+    let file = file as Box<dyn Any>;
+    let Ok(file) = file.downcast::<CoreFile>() else {
+        return Error::Unknown;
+    };
+
+    let file = *file;
+    std::mem::forget(file);
+
+    result
+}
+
+#[no_mangle]
+#[cfg(feature = "chd_virtio")]
+#[cfg_attr(docsrs, doc(cfg(chd_virtio)))]
+/// Read CHD header data from the file into the pointed struct.
+///
+/// Ownership is retained by the caller when calling this function.
+///
+/// # Safety
+/// * `file` is a valid pointer to a `core_file` with respect to the implementation of libchdcorefile that was linked.
+/// * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
+pub unsafe extern "C" fn chd_read_header_core_file(
+    file: *mut chdcorefile_sys::core_file,
+    header: *mut MaybeUninit<chd_header>,
+) -> chd_error {
+    unsafe { chd_read_header_file(file, header) }
+}
+
+#[no_mangle]
+#[cfg(feature = "chd_core_file")]
+#[cfg_attr(docsrs, doc(cfg(chd_core_file)))]
 /// Returns the associated `core_file*`.
 ///
 /// This method has different semantics than `chd_core_file` in libchdr.
@@ -431,7 +490,7 @@ pub unsafe extern "C" fn chd_open_file(
         Some(ffi_takeown_chd(parent))
     };
 
-    let core_file = Box::new(crate::chdcorefile::CoreFile { file: file }) as Box<dyn SeekRead>;
+    let core_file = Box::new(crate::chdcorefile::CoreFile { file }) as Box<dyn SeekRead>;
     let chd = match Chd::open(core_file, parent) {
         Ok(chd) => chd,
         Err(e) => return e,
@@ -472,6 +531,7 @@ pub extern "C" fn chd_get_codec_name(_codec: u32) -> *const c_char {
     b"Unknown\0".as_ptr() as *const c_char
 }
 
+use crate::chdcorefile::CoreFile;
 #[cfg(feature = "chd_precache")]
 use std::io::SeekFrom;
 
