@@ -381,7 +381,6 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
     /// [`Error::RequiresParent`](crate::Error::RequiresParent).
     ///
     /// If the provided output buffer is the wrong length, this will return
-    /// If the hunk refers to a parent CHD that was not provided, this will return
     /// [`Error::OutOfMemory`](crate::Error::OutOfMemory).
     pub fn read_hunk_in(
         &mut self,
