@@ -156,6 +156,25 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chd"
 version = "0.3.2"
+source = "git+https://github.com/SnowflakePowered/chd-rs#46a8cbe6e981111987e92cd7d565d764c41d2262"
+dependencies = [
+ "arrayvec",
+ "bitreader",
+ "byteorder",
+ "claxon",
+ "crc",
+ "flate2",
+ "lzma-rs-perf-exp",
+ "num-derive",
+ "num-traits",
+ "ruzstd 0.6.0",
+ "take_mut",
+ "text_io",
+]
+
+[[package]]
+name = "chd"
+version = "0.3.3"
 dependencies = [
  "arrayvec",
  "bencher",
@@ -169,28 +188,9 @@ dependencies = [
  "nougat",
  "num-derive",
  "num-traits",
- "ruzstd",
+ "ruzstd 0.8.0",
  "text_io",
  "zstd-safe",
-]
-
-[[package]]
-name = "chd"
-version = "0.3.2"
-source = "git+https://github.com/SnowflakePowered/chd-rs#46a8cbe6e981111987e92cd7d565d764c41d2262"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc",
- "flate2",
- "lzma-rs-perf-exp",
- "num-derive",
- "num-traits",
- "ruzstd",
- "take_mut",
- "text_io",
 ]
 
 [[package]]
@@ -199,7 +199,7 @@ version = "0.3.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "chd 0.3.2 (git+https://github.com/SnowflakePowered/chd-rs)",
+ "chd 0.3.2",
  "cmake",
 ]
 
@@ -391,6 +391,7 @@ checksum = "11faaf5a5236997af9848be0bef4db95824b1d534ebc64d0f0c6cf3e67bd38dc"
 dependencies = [
  "crc32fast",
  "libz-ng-sys",
+ "libz-rs-sys",
  "miniz_oxide",
 ]
 
@@ -533,6 +534,15 @@ checksum = "a7118c2c2a3c7b6edc279a8b19507672b9c4d716f95e671172dfa4e23f9fd824"
 dependencies = [
  "cmake",
  "libc",
+]
+
+[[package]]
+name = "libz-rs-sys"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "902bc563b5d65ad9bba616b490842ef0651066a1a1dc3ce1087113ffcb873c8d"
+dependencies = [
+ "zlib-rs",
 ]
 
 [[package]]
@@ -744,7 +754,7 @@ name = "rchdman"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chd 0.3.2",
+ "chd 0.3.3",
  "clap",
  "hex",
  "num-traits",
@@ -808,7 +818,16 @@ checksum = "5174a470eeb535a721ae9fdd6e291c2411a906b96592182d05217591d5c5cf7b"
 dependencies = [
  "byteorder",
  "derive_more",
- "twox-hash",
+ "twox-hash 1.6.3",
+]
+
+[[package]]
+name = "ruzstd"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c581601827da5c717bfae77d7b187e54293d23d8fb6b700b4b5e9b5828a13cc3"
+dependencies = [
+ "twox-hash 2.1.0",
 ]
 
 [[package]]
@@ -966,6 +985,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "twox-hash"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7b17f197b3050ba473acf9181f7b1d3b66d1cf7356c6cc57886662276e65908"
+
+[[package]]
 name = "typenum"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1104,6 +1129,12 @@ checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags 2.9.0",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b20717f0917c908dc63de2e44e97f1e6b126ca58d0e391cee86d504eb8fbd05"
 
 [[package]]
 name = "zstd-safe"
