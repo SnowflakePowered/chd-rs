@@ -3,6 +3,7 @@ use crate::compression::{
 };
 use crate::header::CodecType;
 use crate::Error;
+use std::io::Read;
 
 /// Zstandard (zstd) decompression codec.
 ///
@@ -15,7 +16,7 @@ use crate::Error;
 /// when decompressed.
 #[cfg(not(feature = "fast_zstd"))]
 pub struct ZstdCodec {
-    decoder: ruzstd::FrameDecoder,
+    decoder: ruzstd::decoding::FrameDecoder,
 }
 
 /// Zstandard (zstd) decompression codec.
@@ -39,7 +40,7 @@ impl CodecImplementation for ZstdCodec {
         Self: Sized,
     {
         Ok(Self {
-            decoder: ruzstd::FrameDecoder::new(),
+            decoder: ruzstd::decoding::FrameDecoder::new(),
         })
     }
 
@@ -48,19 +49,14 @@ impl CodecImplementation for ZstdCodec {
         mut input: &[u8],
         output: &mut [u8],
     ) -> crate::Result<DecompressResult> {
-        use ruzstd::StreamingDecoder;
-        use std::io::Read;
-
         self.decoder
             .reset(&mut input)
             .map_err(|_| Error::DecompressionError)?;
 
-        let mut decoder = StreamingDecoder::new_with_decoder(input, &mut self.decoder)
-            .map_err(|_| Error::CodecError)?;
-
-        let bytes_out = decoder
-            .read(output)
-            .map_err(|_| Error::DecompressionError)?;
+        let bytes_out = self
+            .decoder
+            .decode_all(&mut input, output)
+            .map_err(|e| Error::DecompressionError)?;
 
         // If each chunk doesn't output to exactly the same then it's an error
         if bytes_out != output.len() {
