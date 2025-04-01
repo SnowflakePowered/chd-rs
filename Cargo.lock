@@ -177,7 +177,7 @@ dependencies = [
 [[package]]
 name = "chd"
 version = "0.3.3"
-source = "git+https://github.com/SnowflakePowered/chd-rs#5e3e186a8e4fc319c5f09fc405d52af1ad0cdb36"
+source = "git+https://github.com/SnowflakePowered/chd-rs#61a846b57f70c79141524e01b7410d83aaaf07c5"
 dependencies = [
  "arrayvec",
  "bitreader",

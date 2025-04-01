@@ -37,6 +37,7 @@ fast_zlib = ["std"] # this does nothing now, since zlib-rs is already enabled.
 c_zlib = ["std", "flate2/zlib-ng"]
 
 huff_write = []
+nonstandard_channel_count = []
 
 [dependencies]
 byteorder = "1"

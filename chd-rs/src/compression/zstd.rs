@@ -3,7 +3,6 @@ use crate::compression::{
 };
 use crate::header::CodecType;
 use crate::Error;
-use std::io::Read;
 
 /// Zstandard (zstd) decompression codec.
 ///
