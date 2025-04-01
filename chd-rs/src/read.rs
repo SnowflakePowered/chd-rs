@@ -150,7 +150,6 @@ impl<F: Read + Seek> Read for ChdReader<F> {
 }
 
 impl<F: Read + Seek> Seek for ChdReader<F> {
-    // todo: !#[feature(mixed_integer_ops)], otherwise this is subtly broken in certain cases...
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         // length of the uncompressed stream
         let len = self.chd.header().logical_bytes();
@@ -187,17 +186,16 @@ impl<F: Read + Seek> Seek for ChdReader<F> {
             }
         };
 
-        // todo: !#[feature(mixed_integer_ops)]
-        match (base_pos as i64).checked_add(offset) {
+        match base_pos.checked_add_signed(offset) {
             Some(n) => {
-                let n = n as u64;
+                let n = n;
                 if n >= len {
                     self.eof = true;
                     return Ok(len);
                 }
                 let hunk_num = n / hunk_size as u64;
                 let hunk_off = n % hunk_size as u64;
-                return if let Ok(mut hunk) = self.chd.hunk(hunk_num as u32) {
+                if let Ok(mut hunk) = self.chd.hunk(hunk_num as u32) {
                     self.eof = false;
                     self.current_hunk = hunk_num as u32;
                     let mut buf_read =
@@ -208,7 +206,7 @@ impl<F: Read + Seek> Seek for ChdReader<F> {
                 } else {
                     self.eof = true;
                     Ok(n)
-                };
+                }
             }
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
