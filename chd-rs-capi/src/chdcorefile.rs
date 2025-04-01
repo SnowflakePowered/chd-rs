@@ -63,6 +63,6 @@ mod tests {
 
 impl Drop for CoreFile {
     fn drop(&mut self) {
-        unsafe { core_fclose(self.0) }
+        unsafe { core_fclose(self.file) }
     }
 }

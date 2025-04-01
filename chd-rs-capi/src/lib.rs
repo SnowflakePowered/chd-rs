@@ -394,7 +394,7 @@ pub unsafe extern "C" fn chd_core_file(chd: *mut chd_file) -> *mut chdcorefile_s
 
     let pointer = match file_ref.downcast_ref::<crate::chdcorefile::CoreFile>() {
         None => std::ptr::null_mut(),
-        Some(file) => file.0,
+        Some(file) => file.file,
     };
     std::mem::forget(file);
     pointer
@@ -431,7 +431,7 @@ pub unsafe extern "C" fn chd_open_file(
         Some(ffi_takeown_chd(parent))
     };
 
-    let core_file = Box::new(crate::chdcorefile::CoreFile(file)) as Box<dyn SeekRead>;
+    let core_file = Box::new(crate::chdcorefile::CoreFile { file: file }) as Box<dyn SeekRead>;
     let chd = match Chd::open(core_file, parent) {
         Ok(chd) => chd,
         Err(e) => return e,
