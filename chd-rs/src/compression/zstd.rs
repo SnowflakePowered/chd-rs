@@ -48,10 +48,6 @@ impl CodecImplementation for ZstdCodec {
         mut input: &[u8],
         output: &mut [u8],
     ) -> crate::Result<DecompressResult> {
-        self.decoder
-            .reset(&mut input)
-            .map_err(|_| Error::DecompressionError)?;
-
         let bytes_out = self
             .decoder
             .decode_all(&mut input, output)
