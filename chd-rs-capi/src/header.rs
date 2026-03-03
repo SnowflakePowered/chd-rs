@@ -10,6 +10,7 @@ pub const CHD_SHA1_BYTES: usize = 20;
 #[allow(non_camel_case_types)]
 /// libchdr-compatible CHD header struct.
 /// This struct is ABI-compatible with [chd.h](https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/include/libchdr/chd.h#L302)
+#[derive(Debug)]
 pub struct chd_header {
     length: u32,
     version: u32,
