@@ -167,6 +167,31 @@ chd_error chd_read_header(const char *filename,
                           struct chd_header *header);
 
 /**
+ * Read CHD header data from the file into the pointed struct.
+ *
+ * Ownership of the core_file is retained by the caller when calling this function.
+ *
+ * # Safety
+ * * `filename` is a valid, null-terminated **UTF-8** string.
+ * * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
+ * * If `header` is `NULL`, returns `CHDERR_INVALID_PARAMETER`
+ */
+chd_error chd_read_header_file(core_file *file,
+                               struct chd_header *header);
+
+/**
+ * Read CHD header data from the file into the pointed struct.
+ *
+ * Ownership is retained by the caller when calling this function.
+ *
+ * # Safety
+ * * `file` is a valid pointer to a `core_file` with respect to the implementation of libchdcorefile that was linked.
+ * * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
+ */
+chd_error chd_read_header_core_file(core_file *file,
+                                    struct chd_header *header);
+
+/**
  * Returns the associated `core_file*`.
  *
  * This method has different semantics than `chd_core_file` in libchdr.
