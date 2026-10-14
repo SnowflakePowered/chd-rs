@@ -87,7 +87,7 @@ impl CodecType {
                 CdFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::LzmaV5 => {
-                LzmaCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+                <LzmaCodec>::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
             CodecType::FlacV5 => {
                 RawFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
