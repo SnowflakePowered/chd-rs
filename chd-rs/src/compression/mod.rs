@@ -12,6 +12,9 @@ mod none;
 mod zlib;
 mod zstd;
 
+#[cfg(all(test, feature = "encode"))]
+mod tests;
+
 pub mod codecs {
     pub use crate::compression::avhuff::AVHuffCodec;
     pub use crate::compression::cdrom::CdLzmaCodec;
@@ -53,6 +56,18 @@ pub trait CodecImplementation {
     /// length as `hunk_size`, but this may be dependent on the codec
     /// implementation.
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult>;
+
+    /// Compress bytes from the input buffer into the output buffer, returning the
+    /// number of compressed bytes written.
+    ///
+    /// Returns [`CompressionError`](crate::Error::CompressionError) if the compressed data
+    /// is not smaller than the input, or does not fit in the output buffer. In that case
+    /// the data should be stored uncompressed instead.
+    ///
+    /// The compressed data must decompress with [`decompress`](CodecImplementation::decompress)
+    /// to an output buffer of the same length as the input buffer.
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize>;
 }
 
 /// The result of a chunk decompression operation.
