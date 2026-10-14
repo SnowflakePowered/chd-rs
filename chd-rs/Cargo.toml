@@ -11,7 +11,7 @@ categories = ["emulators", "compression", "encoding"]
 keywords = ["mame", "chd", "decompression"]
 
 [features]
-default = ["std", "cd_full", "fast_lzma"]
+default = ["std", "cd_full", "fast_lzma", "fast_zstd"]
 cd_full = ["want_subcode", "want_raw_data_sector"]
 std = []
 
@@ -29,13 +29,15 @@ want_raw_data_sector = []
 
 # performance tweaks
 max_perf = ["fast_lzma", "fast_zstd"]
-fast_lzma = ["std"]
-fast_zstd = ["std", "zstd-safe"]
+fast_lzma = ["std"] # this does nothing now, since lzma-rust2 is used for LZMA.
+fast_zstd = ["std", "dep:zstd-safe"]
 fast_zlib = ["std"] # this does nothing now, since zlib-rs is already enabled.
 
 # Revert to zlib-ng, since zlib-rs is faster now.
 c_zlib = ["std", "flate2/zlib-ng"]
 
+# compression support for codecs
+encode = ["std", "huff_write", "lzma-rust2/encoder", "dep:flacenc"]
 huff_write = ["dep:bitstream-io"]
 nonstandard_channel_count = []
 
@@ -50,7 +52,7 @@ text_io = "0.1"
 # codecs
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] } # zlib-rs is faster than zlib-ng.
 
-lzma-rs = { package = "lzma-rs-perf-exp", version = "0.2", features = ["raw_decoder"] }
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "optimization"] }
 claxon = "0.4"
 bitreader = "0.3.6"
 bitstream-io = { version = "4.10", optional = true }
@@ -71,5 +73,5 @@ name = "bench"
 harness = false
 
 [package.metadata.docs.rs]
-features = ["default", "codec_api", "huffman_api", "huff_write", "unstable_lending_iterators"]
+features = ["default", "codec_api", "huffman_api", "encode", "unstable_lending_iterators"]
 rustdoc-args = ["--cfg", "docsrs"]
