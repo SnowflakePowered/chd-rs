@@ -13,16 +13,59 @@ use crate::compression::{
 use crate::error::{Error, Result};
 use crate::header::CodecType;
 
-/// Generic block decoder for FLAC.
+/// Generic block codec for FLAC.
 ///
 /// Defaults assume 2 channel interleaved FLAC.
 /// The byte order determines the endianness of the output data.
-struct FlacCodec<T: ByteOrder, const CHANNELS: usize = 2> {
+struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize = 2> {
     buffer: Vec<i32>,
+    #[cfg_attr(not(feature = "encode"), allow(dead_code))]
+    block_size: usize,
     _byteorder: PhantomData<T>,
 }
 
-impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, CHANNELS> {
+/// Raw FLAC has 2048 samples per block.
+type RawFlacEngine<T> = FlacCodec<T, 2048>;
+
+/// CD-ROM FLAC has one sector worth of samples per block.
+type CdFlacEngine = FlacCodec<BigEndian, CD_MAX_SECTOR_DATA>;
+
+#[cfg(feature = "encode")]
+impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+    FlacCodec<T, MAX_BLOCK_SIZE, CHANNELS>
+{
+    /// Encode 16-bit PCM samples with byte order `T` as raw FLAC frames, without a stream header.
+    fn encode(&self, input: &[u8]) -> Result<Vec<u8>> {
+        use flacenc::component::BitRepr;
+        use flacenc::error::Verify;
+
+        let samples: Vec<i32> = input
+            .chunks_exact(mem::size_of::<i16>())
+            .map(|sample| T::read_i16(sample) as i32)
+            .collect();
+        let source = flacenc::source::MemSource::from_samples(&samples, CHANNELS, 16, 44100);
+
+        let mut config = flacenc::config::Encoder::default();
+        config.block_size = self.block_size;
+        let config = config
+            .into_verified()
+            .map_err(|_| Error::CompressionError)?;
+        let stream = flacenc::encode_with_fixed_block_size(&config, source, self.block_size)
+            .map_err(|_| Error::CompressionError)?;
+
+        let mut sink = flacenc::bitsink::ByteSink::new();
+        for frame in (0..stream.frame_count()).filter_map(|n| stream.frame(n)) {
+            frame
+                .write(&mut sink)
+                .map_err(|_| Error::CompressionError)?;
+        }
+        Ok(sink.into_inner())
+    }
+}
+
+impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplementation
+    for FlacCodec<T, MAX_BLOCK_SIZE, CHANNELS>
+{
     fn new(hunk_bytes: u32) -> Result<Self>
     where
         Self: Sized,
@@ -31,8 +74,14 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
             return Err(Error::CodecError);
         }
 
+        let mut block_size = hunk_bytes / 4;
+        while block_size > MAX_BLOCK_SIZE {
+            block_size /= 2;
+        }
+
         Ok(FlacCodec {
             buffer: Vec::new(),
+            block_size: block_size as usize,
             _byteorder: PhantomData::default(),
         })
     }
@@ -97,6 +146,19 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
             bytes_in as usize,
         ))
     }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let compressed = self.encode(input)?;
+        if compressed.len() >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        output
+            .get_mut(..compressed.len())
+            .ok_or(Error::CompressionError)?
+            .copy_from_slice(&compressed);
+        Ok(compressed.len())
+    }
 }
 
 /// Raw FLAC (flac) decompression codec.
@@ -113,8 +175,8 @@ impl<T: ByteOrder, const CHANNELS: usize> CodecImplementation for FlacCodec<T, C
 /// Each compressed FLAC hunk decompresses to a hunk-sized chunk.
 /// The input buffer must contain enough samples to fill the hunk-sized output buffer.
 pub struct RawFlacCodec {
-    be: FlacCodec<BigEndian>,
-    le: FlacCodec<LittleEndian>,
+    be: RawFlacEngine<BigEndian>,
+    le: RawFlacEngine<LittleEndian>,
 }
 
 impl CompressionCodec for RawFlacCodec {}
@@ -142,6 +204,30 @@ impl CodecImplementation for RawFlacCodec {
             b'B' => self.be.decompress(&input[1..], output),
             _ => Err(Error::DecompressionError),
         }
+    }
+
+    /// Compresses the input in both byte orders, keeping the smaller result like MAME.
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let le = self.le.encode(input)?;
+        let be = self.be.encode(input)?;
+        let (marker, compressed) = if be.len() < le.len() {
+            (b'B', be)
+        } else {
+            (b'L', le)
+        };
+
+        // The marker byte counts towards the compressed length.
+        let compressed_len = compressed.len() + 1;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        let output = output
+            .get_mut(..compressed_len)
+            .ok_or(Error::CompressionError)?;
+        output[0] = marker;
+        output[1..].copy_from_slice(&compressed);
+        Ok(compressed_len)
     }
 }
 
@@ -180,7 +266,7 @@ impl CodecImplementation for RawFlacCodec {
 /// the number of CD sectors that can fit into the output buffer.
 pub struct CdFlacCodec {
     // cdfl always writes in big endian.
-    engine: FlacCodec<BigEndian>,
+    engine: CdFlacEngine,
     sub_engine: ZlibCodec,
     buffer: Vec<u8>,
 }
@@ -257,5 +343,44 @@ impl CodecImplementation for CdFlacCodec {
         }
 
         Ok(frame_res + sub_res)
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let total_frames = input.len() / CD_FRAME_SIZE as usize;
+        let sector_len = total_frames * CD_MAX_SECTOR_DATA as usize;
+        let subcode_len = total_frames * CD_MAX_SUBCODE_DATA as usize;
+
+        // Split the hunk into
+        // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+        let (sectors, subcodes) = self.buffer[..sector_len + subcode_len].split_at_mut(sector_len);
+        for ((frame, sector), subcode) in input
+            .chunks_exact(CD_FRAME_SIZE as usize)
+            .zip(sectors.chunks_exact_mut(CD_MAX_SECTOR_DATA as usize))
+            .zip(subcodes.chunks_exact_mut(CD_MAX_SUBCODE_DATA as usize))
+        {
+            let (frame_sector, frame_subcode) = frame.split_at(CD_MAX_SECTOR_DATA as usize);
+            sector.copy_from_slice(frame_sector);
+            subcode.copy_from_slice(frame_subcode);
+        }
+
+        // Only the total has to be smaller than the input.
+        let output_len = output.len().min(input.len());
+        let output = &mut output[..output_len];
+
+        let flac = self.engine.encode(sectors)?;
+        output
+            .get_mut(..flac.len())
+            .ok_or(Error::CompressionError)?
+            .copy_from_slice(&flac);
+        let subcode_compressed_len = self
+            .sub_engine
+            .deflate(subcodes, &mut output[flac.len()..])?;
+
+        let compressed_len = flac.len() + subcode_compressed_len;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
     }
 }
