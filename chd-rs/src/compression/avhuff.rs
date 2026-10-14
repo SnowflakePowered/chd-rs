@@ -2,10 +2,14 @@ use crate::compression::{
     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
 };
 use crate::header::CodecType;
+#[cfg(feature = "encode")]
+use crate::huffman::HuffmanEncoder;
 use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder};
 use crate::{huffman, Error, Result};
 use bitreader::BitReader;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+#[cfg(feature = "encode")]
+use bitstream_io::{BitWrite, BitWriter};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use claxon::frame::FrameReader;
 
 use arrayvec::ArrayVec;
@@ -31,7 +35,120 @@ const fn code_to_rle_count(code: u32) -> u32 {
     }
 }
 
+/// The largest RLE code whose count is less than or equal to the provided count.
+#[cfg(feature = "encode")]
+const fn rle_count_to_code(rle_count: u32) -> u32 {
+    match rle_count {
+        2048.. => 0x10f,
+        1024.. => 0x10e,
+        512.. => 0x10d,
+        256.. => 0x10c,
+        128.. => 0x10b,
+        64.. => 0x10a,
+        32.. => 0x109,
+        16.. => 0x108,
+        // Codes up to 0x107 have an RLE count of 8 + (code - 0x100)
+        8.. => 0x100 + (rle_count - 8),
+        // A zero delta that is not part of a run is encoded as itself.
+        _ => 0,
+    }
+}
+
 type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_len::<16>() }>;
+
+#[cfg(feature = "encode")]
+type DeltaRleHuffmanEncoder = HuffmanEncoder<'static, { 256 + 16 }, 16>;
+
+/// Delta-RLE encoder for one component of the video data.
+///
+/// See [avhuff.cpp](https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/avhuff.cpp#L614).
+#[cfg(feature = "encode")]
+struct DeltaRleEncoder {
+    huffman: DeltaRleHuffmanEncoder,
+    // The code for each item of the component, or `None` if the item is part of a run.
+    codes: Vec<Option<u16>>,
+}
+
+#[cfg(feature = "encode")]
+impl DeltaRleEncoder {
+    fn new() -> Self {
+        Self {
+            huffman: DeltaRleHuffmanEncoder::new(),
+            codes: Vec::new(),
+        }
+    }
+
+    /// Delta-RLE encode a component of the video data, and compute the Huffman tree for it.
+    ///
+    /// Each row has `items_per_row` items, `item_advance` bytes apart, starting
+    /// at `offset` bytes from the start of the row.
+    fn rle_and_histogram(
+        &mut self,
+        video: &[u8],
+        offset: usize,
+        items_per_row: usize,
+        item_advance: usize,
+        stride: usize,
+    ) -> Result<()> {
+        self.codes.clear();
+
+        // The previous value carries over between rows.
+        let mut prev = 0u8;
+        for row in video.chunks_exact(stride) {
+            let item = |index: usize| row[offset + index * item_advance];
+            let mut index = 0;
+            while index < items_per_row {
+                let current = item(index);
+                let delta = current.wrapping_sub(prev);
+                prev = current;
+
+                if delta != 0 {
+                    self.codes.push(Some(delta as u16));
+                    index += 1;
+                    continue;
+                }
+
+                // Zero deltas scan forward for a count.
+                let mut run = 1
+                    + (index + 1..items_per_row)
+                        .take_while(|&next| item(next) == prev)
+                        .count();
+
+                // If we hit the end of a row, maximize the count, since runs end
+                // with the row anyways.
+                if index + run >= items_per_row && run >= 8 {
+                    run = 100000;
+                }
+
+                let code = rle_count_to_code(run as u32);
+                let covered = (code_to_rle_count(code) as usize).min(items_per_row - index);
+                self.codes.push(Some(code as u16));
+                self.codes.extend(std::iter::repeat_n(None, covered - 1));
+                index += covered;
+            }
+        }
+
+        self.huffman
+            .try_compute_tree(self.codes.iter().flatten().map(|&code| code as u32))
+            .map_err(|_| Error::CompressionError)
+    }
+
+    /// Write the Huffman tree as an RLE encoded tree, padded to a byte boundary.
+    fn export_tree<W: BitWrite>(&self, writer: &mut W) -> Result<()> {
+        self.huffman
+            .export_tree_rle(writer)
+            .map_err(|_| Error::CompressionError)?;
+        writer.byte_align().map_err(|_| Error::CompressionError)
+    }
+
+    /// Write the code for an item, if it is not part of a run.
+    fn encode<W: BitWrite>(&self, writer: &mut W, code: Option<u16>) -> Result<()> {
+        let Some(code) = code else { return Ok(()) };
+        self.huffman
+            .encode_one(writer, code as u32)
+            .map_err(|_| Error::CompressionError)
+    }
+}
 
 struct DeltaRleDecoder<'a> {
     // We need three of these and they're too big to store on the stack.
@@ -102,6 +219,12 @@ impl<'a> DeltaRleDecoder<'a> {
 /// enough data, the remainder of the output buffer will be zero-filled.
 pub struct AVHuffCodec {
     buffer: Vec<i32>,
+    #[cfg(feature = "encode")]
+    y_context: DeltaRleEncoder,
+    #[cfg(feature = "encode")]
+    cb_context: DeltaRleEncoder,
+    #[cfg(feature = "encode")]
+    cr_context: DeltaRleEncoder,
 }
 
 impl CompressionCodec for AVHuffCodec {}
@@ -135,7 +258,15 @@ fn avhuff_write_header(
 
 impl CodecImplementation for AVHuffCodec {
     fn new(_hunk_bytes: u32) -> Result<Self> {
-        Ok(AVHuffCodec { buffer: Vec::new() })
+        Ok(AVHuffCodec {
+            buffer: Vec::new(),
+            #[cfg(feature = "encode")]
+            y_context: DeltaRleEncoder::new(),
+            #[cfg(feature = "encode")]
+            cb_context: DeltaRleEncoder::new(),
+            #[cfg(feature = "encode")]
+            cr_context: DeltaRleEncoder::new(),
+        })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
@@ -208,9 +339,11 @@ impl CodecImplementation for AVHuffCodec {
         // Should be a no-op if meta_size == 0
         input_cursor.read_exact(out_meta)?;
 
-        // So far we have written HEADER_LEN
-        let mut result =
-            DecompressResult::new(header_result.total_out(), input_cursor.position() as usize);
+        // So far we have written HEADER_LEN and the metadata.
+        let mut result = DecompressResult::new(
+            header_result.total_out() + meta_size as usize,
+            input_cursor.position() as usize,
+        );
         if channels > 0 {
             // decode_audio returns the number of bytes read from the input buffer,
             // and the number of bytes written into the output buffer (channel_slices).
@@ -252,6 +385,182 @@ impl CodecImplementation for AVHuffCodec {
         }
 
         Ok(result)
+    }
+
+    /// Compresses a raw A/V frame.
+    ///
+    /// Returns [`InvalidData`](Error::InvalidData) if the input is not a raw A/V frame
+    /// padded with zeroes.
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let header = input.get(..AVHU_HEADER_LEN).ok_or(Error::InvalidData)?;
+        if &header[..4] != b"chav" {
+            return Err(Error::InvalidData);
+        }
+        let meta_size = header[4] as usize;
+        let channels = header[5] as usize;
+        let samples = BigEndian::read_u16(&header[6..8]) as usize;
+        let width = BigEndian::read_u16(&header[8..10]) as usize;
+        let height = BigEndian::read_u16(&header[10..12]) as usize;
+        if channels > 16 {
+            return Err(Error::InvalidData);
+        }
+
+        // Short frames must be padded with zeroes.
+        let audio_len = 2 * channels * samples;
+        let raw_len = AVHU_HEADER_LEN + meta_size + audio_len + 2 * width * height;
+        let (raw, padding) = input.split_at_checked(raw_len).ok_or(Error::InvalidData)?;
+        if padding.iter().any(|&byte| byte != 0) {
+            return Err(Error::InvalidData);
+        }
+        let (metadata, rest) = raw[AVHU_HEADER_LEN..].split_at(meta_size);
+        let (audio, video) = rest.split_at(audio_len);
+
+        // Anything not smaller than the input is a failure, so don't bother writing more.
+        let output_len = output.len().min(input.len());
+        let header_len = AVHU_COMP_HEADER_LEN + 2 * channels;
+        let (header, data) = output[..output_len]
+            .split_at_mut_checked(header_len)
+            .ok_or(Error::CompressionError)?;
+        header[0] = meta_size as u8;
+        header[1] = channels as u8;
+        header[2..8].copy_from_slice(&raw[6..12]);
+        let (tree_size, channel_sizes) = header[8..].split_at_mut(2);
+
+        let (metadata_out, mut remaining) = data
+            .split_at_mut_checked(meta_size)
+            .ok_or(Error::CompressionError)?;
+        metadata_out.copy_from_slice(metadata);
+
+        if channels > 0 {
+            // A tree size of 0xffff indicates FLAC compressed audio.
+            tree_size.copy_from_slice(&AVHU_FLAC_TREESIZE.to_be_bytes());
+            let audio_len = Self::encode_audio(audio, samples, channel_sizes, remaining)?;
+            remaining = &mut remaining[audio_len..];
+        } else {
+            tree_size.fill(0);
+        }
+
+        if width > 0 && height > 0 {
+            let video_len = self.encode_video(width, video, remaining)?;
+            remaining = &mut remaining[video_len..];
+        }
+
+        let compressed_len = output_len - remaining.len();
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
+    }
+}
+
+#[cfg(feature = "encode")]
+impl AVHuffCodec {
+    /// Compress each audio channel as a separate mono FLAC stream with a single block.
+    ///
+    /// Returns the total length of the compressed audio.
+    fn encode_audio(
+        audio: &[u8],
+        samples: usize,
+        channel_sizes: &mut [u8],
+        output: &mut [u8],
+    ) -> Result<usize> {
+        use flacenc::component::BitRepr;
+        use flacenc::error::Verify;
+
+        let mut config = flacenc::config::Encoder::default();
+        config.block_size = samples;
+        let config = config
+            .into_verified()
+            .map_err(|_| Error::CompressionError)?;
+
+        let output_len = output.len();
+        let mut remaining = output;
+        for (channel, size) in audio
+            .chunks_exact(2 * samples)
+            .zip(channel_sizes.chunks_exact_mut(2))
+        {
+            // Audio samples are stored big endian.
+            let channel_samples: Vec<i32> = channel
+                .chunks_exact(2)
+                .map(|sample| BigEndian::read_i16(sample) as i32)
+                .collect();
+            let source = flacenc::source::MemSource::from_samples(&channel_samples, 1, 16, 48000);
+            let stream = flacenc::encode_with_fixed_block_size(&config, source, samples)
+                .map_err(|_| Error::CompressionError)?;
+
+            let mut sink = flacenc::bitsink::ByteSink::new();
+            for frame in (0..stream.frame_count()).filter_map(|n| stream.frame(n)) {
+                frame
+                    .write(&mut sink)
+                    .map_err(|_| Error::CompressionError)?;
+            }
+            let compressed = sink.as_slice();
+
+            // MAME limits each stream to the size of the uncompressed samples.
+            let compressed_len = u16::try_from(compressed.len())
+                .ok()
+                .filter(|&len| len as usize <= 2 * samples)
+                .ok_or(Error::CompressionError)?;
+            size.copy_from_slice(&compressed_len.to_be_bytes());
+
+            let (stream_out, rest) = mem::take(&mut remaining)
+                .split_at_mut_checked(compressed.len())
+                .ok_or(Error::CompressionError)?;
+            stream_out.copy_from_slice(compressed);
+            remaining = rest;
+        }
+        Ok(output_len - remaining.len())
+    }
+
+    /// Losslessly compress the YUY2 video data with delta-RLE Huffman encoding.
+    /// The video data is `width * 2` bytes for each row.
+    ///
+    /// Returns the length of the compressed video.
+    fn encode_video(&mut self, width: usize, video: &[u8], output: &mut [u8]) -> Result<usize> {
+        // Each pair of pixels is Y Cb Y Cr, so the video must have an even width.
+        if !width.is_multiple_of(2) {
+            return Err(Error::CompressionError);
+        }
+        let stride = 2 * width;
+
+        self.y_context
+            .rle_and_histogram(video, 0, width, 2, stride)?;
+        self.cb_context
+            .rle_and_histogram(video, 1, width / 2, 4, stride)?;
+        self.cr_context
+            .rle_and_histogram(video, 3, width / 2, 4, stride)?;
+
+        let output_len = output.len();
+        let mut remaining = output;
+        let mut writer = BitWriter::endian(&mut remaining, bitstream_io::BigEndian);
+
+        // The first byte is 0x80 to indicate lossless encoding.
+        writer
+            .write::<8, u8>(0x80)
+            .map_err(|_| Error::CompressionError)?;
+        self.y_context.export_tree(&mut writer)?;
+        self.cb_context.export_tree(&mut writer)?;
+        self.cr_context.export_tree(&mut writer)?;
+
+        // Each pair of pixels is Y Cb Y Cr.
+        let rows = self
+            .y_context
+            .codes
+            .chunks_exact(width)
+            .zip(self.cb_context.codes.chunks_exact(width / 2))
+            .zip(self.cr_context.codes.chunks_exact(width / 2));
+        for ((y_row, cb_row), cr_row) in rows {
+            for ((y, &cb), &cr) in y_row.chunks_exact(2).zip(cb_row).zip(cr_row) {
+                self.y_context.encode(&mut writer, y[0])?;
+                self.cb_context.encode(&mut writer, cb)?;
+                self.y_context.encode(&mut writer, y[1])?;
+                self.cr_context.encode(&mut writer, cr)?;
+            }
+        }
+        writer.byte_align().map_err(|_| Error::CompressionError)?;
+
+        Ok(output_len - remaining.len())
     }
 }
 
