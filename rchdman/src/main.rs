@@ -527,13 +527,17 @@ fn verify(input: impl AsRef<Path>, inputparent: Option<impl AsRef<Path>>) -> any
         _ => return Err(anyhow!("No verification to be done; CHD has no checksum")),
     };
 
+    // The raw SHA1 only covers the logical size, not the padding of the last hunk.
+    let mut remaining = header.logical_bytes();
     let mut hasher = Sha1::new();
     let mut out_buf = chd.get_hunksized_buffer();
     let mut hunk_iter = chd.hunks();
     let mut comp_buffer = Vec::new();
     while let Some(mut hunk) = hunk_iter.next() {
         hunk.read_hunk_in(&mut comp_buffer, &mut out_buf)?;
-        hasher.update(&out_buf);
+        let len = remaining.min(out_buf.len() as u64) as usize;
+        hasher.update(&out_buf[..len]);
+        remaining -= len as u64;
     }
     let raw_result = hasher.finalize();
 
