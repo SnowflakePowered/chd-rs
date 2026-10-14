@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, feature(doc_cfg, doc_cfg_hide))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(unsafe_op_in_unsafe_fn)]
 //! A (mostly) [libchdr](https://github.com/rtissera/libchdr) compatible C-API for [chd-rs](https://crates.io/crates/chd).
 //!
