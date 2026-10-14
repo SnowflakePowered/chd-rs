@@ -6,7 +6,7 @@ use crate::header::CodecType;
 use crate::huffman::Huffman8BitDecoder;
 use bitreader::BitReader;
 
-/// MAME 8-bit Huffman (huff) decompression codec.
+/// MAME 8-bit Huffman (huff) codec.
 ///
 /// ## Format Details
 /// The Huffman codec uses a Huffman-encoded Huffman tree with the
@@ -22,10 +22,17 @@ use bitreader::BitReader;
 /// Each compressed Huffman hunk decompresses to a hunk-sized chunk.
 /// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
-pub struct HuffmanCodec;
+pub struct HuffmanCodec {
+    #[cfg(feature = "encode")]
+    encoder: crate::huffman::Huffman8BitEncoder<'static>,
+}
+
 impl CodecImplementation for HuffmanCodec {
     fn new(_: u32) -> Result<Self> {
-        Ok(HuffmanCodec)
+        Ok(HuffmanCodec {
+            #[cfg(feature = "encode")]
+            encoder: crate::huffman::Huffman8BitEncoder::new(),
+        })
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
@@ -40,6 +47,21 @@ impl CodecImplementation for HuffmanCodec {
             output.len(),
             ((input.len() * 8) - bit_reader.remaining() as usize) / 8,
         ))
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let output_len = output.len().min(input.len());
+        let mut remaining = &mut output[..output_len];
+        self.encoder
+            .encode(input, &mut remaining)
+            .map_err(|_| crate::Error::CompressionError)?;
+
+        let compressed_len = output_len - remaining.len();
+        if compressed_len >= input.len() {
+            return Err(crate::Error::CompressionError);
+        }
+        Ok(compressed_len)
     }
 }
 

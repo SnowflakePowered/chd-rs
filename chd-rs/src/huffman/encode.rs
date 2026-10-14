@@ -292,7 +292,11 @@ impl<'a> HuffmanEncoder<'a, 256, 16> {
     /// Encode a buffer of bytes with the CHD Huffman codec.
     ///
     /// The resulting buffer can be decoded with [`Huffman8BitDecoder::from_huffman_tree`](crate::huffman::Huffman8BitDecoder).
-    pub fn encode(&mut self, input: &[u8], output: &mut Vec<u8>) -> Result<(), HuffmanError> {
+    pub fn encode<W: std::io::Write>(
+        &mut self,
+        input: &[u8],
+        output: W,
+    ) -> Result<(), HuffmanError> {
         self.try_compute_tree(input.iter().map(|&byte| byte as u32))?;
 
         let mut writer = BitWriter::endian(output, BigEndian);
