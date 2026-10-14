@@ -317,6 +317,20 @@ impl<'a> Iterator for MapEntries<'a> {
 }
 
 impl Map {
+    /// Create the map of an uncompressed V5 CHD from the offset of each hunk, in units of hunks.
+    /// An offset of 0 indicates a hunk of zeroes that is not stored in the file.
+    #[cfg(feature = "encode")]
+    pub(crate) fn new_uncompressed_v5(offsets: &[u32], hunk_bytes: u32) -> Map {
+        let entries = offsets
+            .iter()
+            .map(|&offset| RawMapEntryV5Uncompressed(offset.into()))
+            .collect();
+        Map::V5(RawMapV5(V5Map::Uncompressed {
+            entries,
+            hunk_bytes,
+        }))
+    }
+
     /// Gets the number of entries in the CHD Map.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {

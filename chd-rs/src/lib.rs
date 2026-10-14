@@ -99,7 +99,7 @@ pub mod huffman;
 mod huffman;
 
 #[cfg(feature = "codec_api")]
-/// Implementations of decompression codecs used in MAME CHD.
+/// Implementations of codecs used in MAME CHD.
 ///
 /// Each codec may have restrictions on the hunk size, lengths and contents
 /// of the buffer. If [`decompress`](crate::codecs::CodecImplementation::decompress) is called
@@ -143,6 +143,10 @@ pub mod header;
 pub mod map;
 pub mod metadata;
 pub mod read;
+
+#[cfg(feature = "encode")]
+#[cfg_attr(docsrs, doc(cfg(encode)))]
+pub mod write;
 
 #[cfg(feature = "unstable_lending_iterators")]
 #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
