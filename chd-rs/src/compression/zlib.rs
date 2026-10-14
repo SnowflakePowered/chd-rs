@@ -3,7 +3,7 @@ use crate::compression::{
 };
 use crate::error::{Error, Result};
 use crate::header::CodecType;
-use flate2::{Decompress, FlushDecompress};
+use flate2::{Compress, Decompress, FlushDecompress};
 
 /// Deflate (zlib) decompression codec.
 ///
@@ -16,12 +16,41 @@ use flate2::{Decompress, FlushDecompress};
 /// when decompressed.
 pub struct ZlibCodec {
     engine: Decompress,
+    #[cfg(feature = "encode")]
+    compressor: Compress,
+}
+
+impl ZlibCodec {
+    /// Deflate the input into the output buffer, returning the number of compressed bytes.
+    ///
+    /// Unlike [`compress`](CodecImplementation::compress), the compressed data is allowed
+    /// to be larger than the input as long as it fits into the output buffer.
+    ///
+    /// This is pulled out so cdfl can reuse the same deflate logic.
+    #[cfg(feature = "encode")]
+    pub(crate) fn deflate(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        self.compressor.reset();
+        let status = self
+            .compressor
+            .compress(input, output, flate2::FlushCompress::Finish);
+
+        // Anything but the end of the stream means the output buffer was too small.
+        if !matches!(status, Ok(flate2::Status::StreamEnd)) {
+            // zlib-rs can panic on the next stream if a stream that ran out of output space
+            // is reset, so start over with a new compressor instead.
+            self.compressor = Compress::new(flate2::Compression::best(), false);
+            return Err(Error::CompressionError);
+        }
+        Ok(self.compressor.total_out() as usize)
+    }
 }
 
 impl CodecImplementation for ZlibCodec {
     fn new(_: u32) -> Result<Self> {
         Ok(ZlibCodec {
             engine: Decompress::new(false),
+            #[cfg(feature = "encode")]
+            compressor: Compress::new(flate2::Compression::best(), false),
         })
     }
 
@@ -45,6 +74,17 @@ impl CodecImplementation for ZlibCodec {
             total_out as usize,
             self.engine.total_in() as usize,
         ))
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        // Anything not smaller than the input is a failure, so don't bother writing more.
+        let output_len = output.len().min(input.len());
+        let compressed_len = self.deflate(input, &mut output[..output_len])?;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
     }
 }
 
