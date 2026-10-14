@@ -169,10 +169,10 @@ chd_error chd_read_header(const char *filename,
 /**
  * Read CHD header data from the file into the pointed struct.
  *
- * Ownership of the core_file is retained by the caller when calling this function.
+ * Ownership of the `core_file*` is retained by the caller when calling this function.
  *
  * # Safety
- * * `filename` is a valid, null-terminated **UTF-8** string.
+ * * `file` is a valid pointer to a `core_file` with respect to the implementation of libchdcorefile that was linked.
  * * `header` is either `NULL`, or an aligned pointer to a possibly uninitialized `chd_header` struct.
  * * If `header` is `NULL`, returns `CHDERR_INVALID_PARAMETER`
  */
