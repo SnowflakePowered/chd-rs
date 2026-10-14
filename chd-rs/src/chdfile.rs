@@ -267,8 +267,8 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
 
         match map_entry {
             MapEntry::V5Compressed(entry) => {
-                let block_off = entry.block_offset()?;
-                let block_crc = Some(entry.hunk_crc()?);
+                let block_off = entry.block_offset();
+                let block_crc = Some(entry.hunk_crc());
                 match entry.hunk_type()? {
                     comptype @ CompressionTypeV5::CompressionType0
                     | comptype @ CompressionTypeV5::CompressionType1
@@ -344,7 +344,7 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
                 }
             }
             MapEntry::V5Uncompressed(entry) => {
-                match (entry.block_offset()?, has_parent) {
+                match (entry.block_offset(), has_parent) {
                     (0, false) => {
                         dest.fill(0);
                         Ok(dest.len())
@@ -408,11 +408,9 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
             .ok_or(Error::HunkOutOfRange)?;
 
         let (offset, size) = match map_entry {
-            MapEntry::V5Compressed(map_entry) => {
-                (map_entry.block_offset()?, map_entry.block_size()?)
-            }
+            MapEntry::V5Compressed(map_entry) => (map_entry.block_offset(), map_entry.block_size()),
             MapEntry::V5Uncompressed(map_entry) => {
-                (map_entry.block_offset()?, map_entry.block_size())
+                (map_entry.block_offset(), map_entry.block_size())
             }
             MapEntry::LegacyEntry(map_entry) => (map_entry.block_offset(), map_entry.block_size()),
         };
