@@ -531,6 +531,7 @@ pub extern "C" fn chd_get_codec_name(_codec: u32) -> *const c_char {
     b"Unknown\0".as_ptr() as *const c_char
 }
 
+#[cfg(feature = "chd_core_file")]
 use crate::chdcorefile::CoreFile;
 #[cfg(feature = "chd_precache")]
 use std::io::SeekFrom;
