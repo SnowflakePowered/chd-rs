@@ -1,6 +1,6 @@
 [package]
 name = "chd"
-version = "0.3.4"
+version = "0.3.5"
 authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
 description = "Rust implementation of the CHD File Format"
