@@ -13,9 +13,16 @@ use crate::Error;
 /// Each compressed Zstandard hunk decompresses to a hunk-sized chunk.
 /// The input buffer must contain exactly enough data to fill the output buffer
 /// when decompressed.
+///
+/// ## Compression
+/// Without `fast_zstd`, hunks are compressed with the pure Rust ruzstd encoder.
+/// ruzstd only encodedes up to around Zstandard level 1. Use `fast_zstd` for chdman-equivalent compression.
 #[cfg(not(feature = "fast_zstd"))]
 pub struct ZstdCodec {
     decoder: ruzstd::decoding::FrameDecoder,
+    // ruzstd panics if it can not write to the output, so compress into a buffer first.
+    #[cfg(feature = "encode")]
+    buffer: Vec<u8>,
 }
 
 /// Zstandard (zstd) decompression codec.
@@ -30,6 +37,8 @@ pub struct ZstdCodec {
 #[cfg(feature = "fast_zstd")]
 pub struct ZstdCodec {
     zstd_context: zstd_safe::DCtx<'static>,
+    #[cfg(feature = "encode")]
+    compressor: zstd_safe::CCtx<'static>,
 }
 
 #[cfg(not(feature = "fast_zstd"))]
@@ -40,7 +49,27 @@ impl CodecImplementation for ZstdCodec {
     {
         Ok(Self {
             decoder: ruzstd::decoding::FrameDecoder::new(),
+            #[cfg(feature = "encode")]
+            buffer: Vec::new(),
         })
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
+        use ruzstd::encoding::{compress, CompressionLevel};
+
+        self.buffer.clear();
+        compress(input, &mut self.buffer, CompressionLevel::Fastest);
+
+        let compressed_len = self.buffer.len();
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        output
+            .get_mut(..compressed_len)
+            .ok_or(Error::CompressionError)?
+            .copy_from_slice(&self.buffer);
+        Ok(compressed_len)
     }
 
     fn decompress(
@@ -76,7 +105,23 @@ impl CodecImplementation for ZstdCodec {
     {
         Ok(Self {
             zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
+            #[cfg(feature = "encode")]
+            compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
         })
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
+        // Anything not smaller than the input is a failure, so don't bother writing more.
+        let output_len = output.len().min(input.len());
+        let compressed_len = self
+            .compressor
+            .compress(&mut output[..output_len], input, zstd_safe::max_c_level())
+            .map_err(|_| Error::CompressionError)?;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
