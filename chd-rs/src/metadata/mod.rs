@@ -2,12 +2,15 @@
 
 use crate::error::{Error, Result};
 use crate::make_tag;
-use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Cursor, Read, Seek, SeekFrom};
-
-const METADATA_HEADER_SIZE: usize = 16;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+pub(crate) use raw::RawMetadataHeader;
+use std::io::{Read, Seek, SeekFrom};
+use zerocopy::{FromZeros, IntoBytes};
+
+mod raw;
+
+pub(crate) const METADATA_HEADER_SIZE: usize = 16;
 
 /// A list of well-known metadata tags.
 #[derive(FromPrimitive, Copy, Clone)]
@@ -65,6 +68,34 @@ pub trait MetadataTag {
 impl MetadataTag for KnownMetadata {
     fn metatag(&self) -> u32 {
         *self as u32
+    }
+}
+
+impl MetadataTag for u32 {
+    fn metatag(&self) -> u32 {
+        *self
+    }
+}
+
+/// Data that can be stored in a metadata entry.
+#[cfg(feature = "encode")]
+pub trait MetadataData {
+    /// The bytes stored in the metadata entry.
+    fn metadata_bytes(&self) -> &[u8];
+}
+
+#[cfg(feature = "encode")]
+impl MetadataData for &[u8] {
+    fn metadata_bytes(&self) -> &[u8] {
+        self
+    }
+}
+
+/// Text metadata is stored with its NUL terminator, like MAME.
+#[cfg(feature = "encode")]
+impl MetadataData for &std::ffi::CStr {
+    fn metadata_bytes(&self) -> &[u8] {
+        self.to_bytes_with_nul()
     }
 }
 
@@ -179,23 +210,18 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
         }
 
         fn next_inner<'a, F: Read + Seek + 'a>(s: &mut MetadataRefs<'a, F>) -> Result<MetadataRef> {
-            let mut raw_header: [u8; METADATA_HEADER_SIZE] = [0; METADATA_HEADER_SIZE];
+            let mut header = RawMetadataHeader::new_zeroed();
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
-            let count = s.file.read(&mut raw_header)?;
+            let count = s.file.read(header.as_mut_bytes())?;
             if count != METADATA_HEADER_SIZE {
                 return Err(Error::MetadataNotFound);
             }
-            let mut cursor = Cursor::new(raw_header);
-            cursor.seek(SeekFrom::Start(0))?;
 
             // extract data
-            let metatag = cursor.read_u32::<BigEndian>()?;
-            let length = cursor.read_u32::<BigEndian>()?;
-            let next = cursor.read_u64::<BigEndian>()?;
-
-            let flags = length >> 24;
-            // mask off flags
-            let length = length & 0x00ffffff;
+            let metatag = header.tag.get();
+            let flags = header.flags;
+            let length = header.length();
+            let next = header.next.get();
 
             let mut index = 0;
 
@@ -216,7 +242,7 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
                 offset: s.curr_offset,
                 length,
                 metatag,
-                flags: flags as u8,
+                flags,
                 index,
             };
 
