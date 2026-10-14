@@ -36,7 +36,7 @@ fast_zlib = ["std"] # this does nothing now, since zlib-rs is already enabled.
 # Revert to zlib-ng, since zlib-rs is faster now.
 c_zlib = ["std", "flate2/zlib-ng"]
 
-huff_write = []
+huff_write = ["dep:bitstream-io"]
 nonstandard_channel_count = []
 
 [dependencies]
@@ -53,6 +53,7 @@ flate2 = { version = "1", default-features = false, features = ["zlib-rs"] } # z
 lzma-rs = { package = "lzma-rs-perf-exp", version = "0.2", features = ["raw_decoder"] }
 claxon = "0.4"
 bitreader = "0.3.6"
+bitstream-io = { version = "4.10", optional = true }
 ruzstd = "0.9.1"
 
 zstd-safe = { version = "7.2.0", optional = true }
@@ -62,11 +63,12 @@ nougat = { version = "0.2", optional = true }
 
 [dev-dependencies]
 bencher = "0.1.5"
+rand = "0.10"
 
 [[bench]]
 name = "bench"
 harness = false
 
 [package.metadata.docs.rs]
-features = ["default", "codec_api", "huffman_api", "unstable_lending_iterators"]
+features = ["default", "codec_api", "huffman_api", "huff_write", "unstable_lending_iterators"]
 rustdoc-args = ["--cfg", "docsrs"]

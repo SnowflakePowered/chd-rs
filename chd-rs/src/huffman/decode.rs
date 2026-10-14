@@ -1,94 +1,9 @@
-#![cfg_attr(docsrs, doc(cfg(huffman_api)))]
-//! Implementation of the MAME CHD Huffman Decoder.
-//!
-//! For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
+use super::{assign_canonical_codes, rle_full_bits, rle_num_bits, HuffmanError, HuffmanNode};
 use crate::const_assert;
 use bitreader::{BitReader, BitReaderError};
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 
 type LookupValue = u16;
-
-/// Error type for Huffman decoding.
-#[derive(Debug)]
-pub enum HuffmanError {
-    /// Too many bits used to initialize the decoder or read a value.
-    TooManyBits,
-    /// The provided bitstream does not contain a valid MAME static Huffman tree.
-    InvalidData,
-    /// The input buffer is too small to read another Huffman code from.
-    InputBufferTooSmall,
-    /// The output buffer is too small to write to.
-    OutputBufferTooSmall,
-    /// There is an internal inconsistency within the Huffman tree.
-    InternalInconsistency,
-    /// The tree has too many contexts.
-    TooManyContexts,
-}
-
-impl Error for HuffmanError {}
-
-impl Display for HuffmanError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HuffmanError::TooManyBits => f.write_str("Too many bits"),
-            HuffmanError::InvalidData => f.write_str("Invalid data"),
-            HuffmanError::InputBufferTooSmall => f.write_str("Input buffer too small"),
-            HuffmanError::OutputBufferTooSmall => f.write_str("Output buffer too small"),
-            HuffmanError::InternalInconsistency => f.write_str("Internal inconsistency"),
-            HuffmanError::TooManyContexts => f.write_str("Too many contexts"),
-        }
-    }
-}
-
-impl From<BitReaderError> for HuffmanError {
-    fn from(err: BitReaderError) -> Self {
-        match err {
-            BitReaderError::NotEnoughData { .. } => HuffmanError::InputBufferTooSmall,
-            BitReaderError::TooManyBitsForType { .. } => HuffmanError::TooManyBits,
-        }
-    }
-}
-
-#[derive(Default, Clone, Copy)]
-struct HuffmanNode<'a> {
-    // Parent and count are needed for write but not for read only.
-    #[cfg(feature = "huff_write")]
-    parent: usize,
-    #[cfg(feature = "huff_write")]
-    count: u32,
-    #[cfg(feature = "huff_write")]
-    histogram: Vec<u8>,
-    weight: u32,
-    bits: u32,
-    num_bits: u8,
-    // Huffman nodes are parameterized over a lifetime to allow comparisons only for
-    // nodes belonging to the same decoder.
-    _phantom: PhantomData<&'a HuffmanNode<'a>>,
-}
-
-impl<'a> PartialEq for HuffmanNode<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bits == other.bits
-    }
-}
-
-impl<'a> PartialOrd for HuffmanNode<'a> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // todo: check impl with MAME
-        if self.weight != other.weight {
-            //  node2->weight - node1->weight;
-            return Some(other.weight.cmp(&self.weight));
-        }
-        if self.bits == other.bits {
-            return None;
-        }
-        // (int)node1->bits - (int)node2->bits;
-        Some(self.bits.cmp(&other.bits))
-    }
-}
 
 // The 'default' encoding settings are NUM_BITS = 256, MAX_BITS = 16.
 // I prefer to make explicit the parameters at type instantiation for
@@ -122,26 +37,10 @@ pub const fn lookup_len<const MAX_BITS: u8>() -> usize {
     1 << MAX_BITS
 }
 
-/// Get the number of bits used to decode a Huffman tree
-/// from a Huffman-encoded bitstream.
-const fn rle_full_bits<const NUM_CODES: usize>() -> u8 {
-    let mut temp = NUM_CODES - 9;
-    let mut full_bits = 0;
-    while temp != 0 {
-        temp >>= 1;
-        full_bits += 1;
-    }
-    full_bits
-}
-
 impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usize>
     HuffmanDecoder<'a, NUM_CODES, MAX_BITS, LOOKUP_ARRAY_LEN>
 {
-    const RLE_NUM_BITS: u8 = match MAX_BITS {
-        0..=7 => 3,  // < 8
-        8..=15 => 4, // >= 8
-        _ => 5,      // >= 16
-    };
+    const RLE_NUM_BITS: u8 = rle_num_bits(MAX_BITS);
 
     const RLE_FULL_BITS: u8 = rle_full_bits::<NUM_CODES>();
 
@@ -190,7 +89,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         }
 
         let mut decoder = HuffmanDecoder::new();
-        Self::assign_canonical_codes(&mut huffnode_array)?;
+        assign_canonical_codes(&mut huffnode_array, MAX_BITS)?;
         decoder.build_lookup_table(&huffnode_array);
 
         Ok(decoder)
@@ -214,9 +113,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             }
         }
 
-        HuffmanDecoder::<24, 6, { lookup_len::<6>() }>::assign_canonical_codes(
-            &mut huffnode_array,
-        )?;
+        assign_canonical_codes(&mut huffnode_array, 6)?;
         small_huf.build_lookup_table(&huffnode_array);
 
         // Process the rest of the data referring to the small tree.
@@ -250,7 +147,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
             return Err(HuffmanError::InvalidData);
         }
 
-        Self::assign_canonical_codes(&mut huffnode_array)?;
+        assign_canonical_codes(&mut huffnode_array, MAX_BITS)?;
         new_huffman.build_lookup_table(&huffnode_array);
 
         Ok(new_huffman)
@@ -272,45 +169,6 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
         let lookup = self.lookup_array[bits as usize];
         reader.skip((lookup & 0x1f) as u64)?;
         Ok(lookup as u32 >> 5)
-    }
-
-    fn assign_canonical_codes(
-        huffnode_array: &mut [HuffmanNode<'a>; NUM_CODES],
-    ) -> Result<(), HuffmanError> {
-        let mut curr_start = 0;
-
-        // Since we're read-only we don't need to keep the histogram around
-        // once we're done here.
-        let mut histogram = [0u32; 33];
-
-        // Fill in histogram of bit lengths.
-        for node in huffnode_array.iter().take(NUM_CODES) {
-            if node.num_bits > MAX_BITS {
-                return Err(HuffmanError::InternalInconsistency);
-            }
-            if node.num_bits <= 32 {
-                histogram[node.num_bits as usize] += 1;
-            }
-        }
-
-        // Determine starting code number of code lengths.
-        for code_len in (1..33).rev() {
-            let next_start = (curr_start + histogram[code_len]) >> 1;
-            if code_len != 1 && next_start * 2 != (curr_start + histogram[code_len]) {
-                return Err(HuffmanError::InternalInconsistency);
-            }
-            histogram[code_len] = curr_start;
-            curr_start = next_start
-        }
-
-        // Assign codes.
-        for node in huffnode_array.iter_mut().take(NUM_CODES) {
-            if node.num_bits > 0 {
-                node.bits = histogram[node.num_bits as usize];
-                histogram[node.num_bits as usize] += 1;
-            }
-        }
-        Ok(())
     }
 
     const fn make_lookup(code: u16, bits: u8) -> LookupValue {
