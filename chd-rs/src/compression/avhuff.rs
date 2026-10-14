@@ -9,7 +9,9 @@ use crate::{huffman, Error, Result};
 use bitreader::BitReader;
 #[cfg(feature = "encode")]
 use bitstream_io::{BitWrite, BitWriter};
-use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
+#[cfg(feature = "encode")]
+use byteorder::ByteOrder;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use claxon::frame::FrameReader;
 
 use arrayvec::ArrayVec;
