@@ -12,9 +12,14 @@ a Rust compiler, without the need for a full C/C++ toolchain.
 
 Performance is competitive but a little slower than libchdr in benchmarks from using more immature (but fully correct) 
 pure Rust implementations of compression codecs. Deflate (zlib) compression is backed by [flate2](https://crates.io/crates/flate2), 
-LZMA is backed by [lzma-rs](https://crates.io/crates/lzma-rs), and FLAC decompression is backed by
+LZMA is backed by [lzma-rust2](https://crates.io/crates/lzma-rust2), and FLAC decompression is backed by
 [claxon](https://crates.io/crates/claxon). While performance is not ignored, the focus
 is on readability and correctness.
+
+Compression is available with the `encode` feature. FLAC compression is backed by
+[flacenc](https://crates.io/crates/flacenc), and Zstandard compression is backed by the
+[ruzstd](https://crates.io/crates/ruzstd) encoder in pure-Rust mode. With `fast_zstd` (enabled by default),
+Zstandard compression goes through [zstd-safe](https://crates.io/crates/zstd-safe) with the maximum compression level.
 
 ## Usage
 Open a `Chd` with `Chd::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
@@ -52,7 +57,7 @@ and the `LendingIterator` trait is stabilized.
 
 ```toml
 [dependencies]
-chd = { version = "0.2", features = ["unstable_lending_iterators"] }
+chd = { version = "0.4", features = ["unstable_lending_iterators"] }
 ```
 
 Then hunks can be iterated like so.
@@ -83,7 +88,7 @@ to verify hunk checksums.
 
 ```toml
 [dependencies]
-chd = { version = "0.2", features = ["verify_block_crc"] }
+chd = { version = "0.4", features = ["verify_block_crc"] }
 ```
 
 ### Supported Codecs
@@ -128,12 +133,6 @@ As a proof of concept, chd-rs implements an *extremely* basic reimplementation o
 The results from rchdman should be identical from chdman. rchdman is intended to be basic and does not implement multithreading or other functions, so in general it is slower than chdman. There are
 no plans to implement write-operations into rchdman.
 
-## Performance
-By default, chd-rs uses pure Rust codecs but if maximum performance is needed, `max_perf` can be enabled. This enables the zlib-ng backend of [flate2](https://crates.io/crates/flate2)
-as well as using experimental APIs in a custom [lzma-rs fork](https://github.com/SnowflakePowered/lzma-rs/tree/feature-perf-experiments) for some improvements in
-performance at the expense of higher memory usage. Combined with `codegen-units=1` and [Profile Guided Optimization](https://github.com/vadimcn/cargo-pgo), chd-rs is within 1% of libchdr performance.
-
-Without `max_perf`, chd-rs is already within 15% of libchdr without needing to link with C libraries like zlib-ng.
 
 ## `libchdr` API
 ⚠️*The C API has not been heavily tested. Use at your own risk.* ⚠️
