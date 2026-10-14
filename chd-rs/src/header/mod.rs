@@ -17,12 +17,14 @@ use crate::error::{Error, Result};
 use crate::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
 use crate::{make_tag, map};
 use arrayvec::ArrayVec;
-use byteorder::{BigEndian, ReadBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::ffi::CStr;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use raw::{RawHeaderPrefix, RawHeaderV1, RawHeaderV2, RawHeaderV3, RawHeaderV4, RawHeaderV5};
+use std::io::{Read, Seek, SeekFrom};
 use text_io::try_scan;
+use zerocopy::{FromBytes, Immutable, KnownLayout};
+
+mod raw;
 
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
@@ -329,6 +331,21 @@ impl Header {
         Ok(header)
     }
 
+    /// Serialize the header into it's on-disk representation.
+    ///
+    /// The length of the serialized header depends on the header version.
+    #[cfg(feature = "encode")]
+    pub fn to_bytes(&self) -> ArrayVec<u8, CHD_MAX_HEADER_SIZE> {
+        let mut bytes = ArrayVec::new();
+        match self {
+            Header::V1Header(c) | Header::V2Header(c) => bytes.extend(c.to_bytes()),
+            Header::V3Header(c) => bytes.extend(c.to_bytes()),
+            Header::V4Header(c) => bytes.extend(c.to_bytes()),
+            Header::V5Header(c) => bytes.extend(c.to_bytes()),
+        }
+        bytes
+    }
+
     /// Returns whether or not the CHD file is compressed.
     pub fn is_compressed(&self) -> bool {
         match self {
@@ -622,6 +639,121 @@ impl Header {
     }
 }
 
+#[cfg(feature = "encode")]
+impl RawHeaderPrefix {
+    fn new(version: Version, length: u32) -> Self {
+        let mut magic = [0u8; 8];
+        magic.copy_from_slice(CHD_MAGIC.as_bytes());
+        RawHeaderPrefix {
+            magic,
+            length: length.into(),
+            version: (version as u32).into(),
+        }
+    }
+}
+
+#[cfg(feature = "encode")]
+impl HeaderV1 {
+    /// Serialize the header into it's on-disk representation.
+    ///
+    /// V2 headers are 4 bytes longer than V1 headers to store the sector length.
+    pub fn to_bytes(&self) -> ArrayVec<u8, { CHD_V2_HEADER_SIZE as usize }> {
+        use zerocopy::IntoBytes;
+
+        let length = match self.version {
+            Version::ChdV1 => CHD_V1_HEADER_SIZE,
+            // `HeaderV1` is only used for V1 and V2 headers.
+            _ => CHD_V2_HEADER_SIZE,
+        };
+        let v1 = RawHeaderV1 {
+            prefix: RawHeaderPrefix::new(self.version, length),
+            flags: self.flags.into(),
+            compression: self.compression.into(),
+            hunk_size: self.hunk_size.into(),
+            total_hunks: self.total_hunks.into(),
+            cylinders: self.cylinders.into(),
+            heads: self.heads.into(),
+            sectors: self.sectors.into(),
+            md5: self.md5,
+            parent_md5: self.parent_md5,
+        };
+
+        let mut bytes = ArrayVec::new();
+        match self.version {
+            Version::ChdV1 => bytes.extend(v1.as_bytes().iter().copied()),
+            _ => {
+                let v2 = RawHeaderV2 {
+                    v1,
+                    sector_length: self.sector_length.into(),
+                };
+                bytes.extend(v2.as_bytes().iter().copied())
+            }
+        }
+        bytes
+    }
+}
+
+#[cfg(feature = "encode")]
+impl HeaderV3 {
+    /// Serialize the header into it's on-disk representation.
+    pub fn to_bytes(&self) -> [u8; CHD_V3_HEADER_SIZE as usize] {
+        let header = RawHeaderV3 {
+            prefix: RawHeaderPrefix::new(Version::ChdV3, CHD_V3_HEADER_SIZE),
+            flags: self.flags.into(),
+            compression: self.compression.into(),
+            total_hunks: self.total_hunks.into(),
+            logical_bytes: self.logical_bytes.into(),
+            meta_offset: self.meta_offset.into(),
+            md5: self.md5,
+            parent_md5: self.parent_md5,
+            hunk_bytes: self.hunk_bytes.into(),
+            sha1: self.sha1,
+            parent_sha1: self.parent_sha1,
+        };
+        zerocopy::transmute!(header)
+    }
+}
+
+#[cfg(feature = "encode")]
+impl HeaderV4 {
+    /// Serialize the header into it's on-disk representation.
+    pub fn to_bytes(&self) -> [u8; CHD_V4_HEADER_SIZE as usize] {
+        let header = RawHeaderV4 {
+            prefix: RawHeaderPrefix::new(Version::ChdV4, CHD_V4_HEADER_SIZE),
+            flags: self.flags.into(),
+            compression: self.compression.into(),
+            total_hunks: self.total_hunks.into(),
+            logical_bytes: self.logical_bytes.into(),
+            meta_offset: self.meta_offset.into(),
+            hunk_bytes: self.hunk_bytes.into(),
+            sha1: self.sha1,
+            parent_sha1: self.parent_sha1,
+            raw_sha1: self.raw_sha1,
+        };
+        zerocopy::transmute!(header)
+    }
+}
+
+#[cfg(feature = "encode")]
+impl HeaderV5 {
+    /// Serialize the header into it's on-disk representation.
+    pub fn to_bytes(&self) -> [u8; CHD_V5_HEADER_SIZE as usize] {
+        let header = RawHeaderV5 {
+            prefix: RawHeaderPrefix::new(Version::ChdV5, CHD_V5_HEADER_SIZE),
+            compression: self.compression.map(Into::into),
+            logical_bytes: self.logical_bytes.into(),
+            map_offset: self.map_offset.into(),
+            meta_offset: self.meta_offset.into(),
+            hunk_bytes: self.hunk_bytes.into(),
+            unit_bytes: self.unit_bytes.into(),
+            raw_sha1: self.raw_sha1,
+            sha1: self.sha1,
+            parent_sha1: self.parent_sha1,
+        };
+        zerocopy::transmute!(header)
+    }
+}
+
 /// CHD flags for legacy V1-4 headers.
 #[repr(u32)]
 pub enum Flags {
@@ -635,62 +767,59 @@ pub enum Flags {
     Undefined = 0xfffffffc,
 }
 
+/// View the start of the raw header as the layout of a header version.
+fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
+    T::ref_from_prefix(raw_header)
+        .map(|(raw, _)| raw)
+        .map_err(|_| Error::InvalidData)
+}
+
 fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
     let mut raw_header: [u8; CHD_MAX_HEADER_SIZE] = [0; CHD_MAX_HEADER_SIZE];
 
     chd.seek(SeekFrom::Start(0))?;
     chd.read_exact(&mut raw_header)?;
 
-    let magic = CStr::from_bytes_with_nul(&raw_header[0..9])?.to_str()?;
-    if CHD_MAGIC != magic {
+    let prefix: &RawHeaderPrefix = raw(&raw_header)?;
+    if prefix.magic != CHD_MAGIC.as_bytes() {
         return Err(Error::InvalidData);
     }
-    let mut reader = Cursor::new(&raw_header);
-    reader.seek(SeekFrom::Start(8))?;
-    let length = reader.read_u32::<BigEndian>()?;
-    let version = reader.read_u32::<BigEndian>()?;
 
     // ensure version is known and header size match up
-    match (version, length) {
-        (1, CHD_V1_HEADER_SIZE) => Ok(Header::V1Header(read_v1_header(
-            &mut reader,
-            version,
-            length,
-        )?)),
-        (2, CHD_V2_HEADER_SIZE) => Ok(Header::V2Header(read_v1_header(
-            &mut reader,
-            version,
-            length,
-        )?)),
-        (3, CHD_V3_HEADER_SIZE) => Ok(Header::V3Header(read_v3_header(&mut reader, length, chd)?)),
-        (4, CHD_V4_HEADER_SIZE) => Ok(Header::V4Header(read_v4_header(&mut reader, length, chd)?)),
-        (5, CHD_V5_HEADER_SIZE) => Ok(Header::V5Header(read_v5_header(&mut reader, length)?)),
+    match (prefix.version.get(), prefix.length.get()) {
+        (1, CHD_V1_HEADER_SIZE) => Ok(Header::V1Header(read_v1_header(raw(&raw_header)?, None)?)),
+        (2, CHD_V2_HEADER_SIZE) => {
+            let v2: &RawHeaderV2 = raw(&raw_header)?;
+            Ok(Header::V2Header(read_v1_header(
+                &v2.v1,
+                Some(v2.sector_length.get()),
+            )?))
+        }
+        (3, CHD_V3_HEADER_SIZE) => Ok(Header::V3Header(read_v3_header(raw(&raw_header)?, chd)?)),
+        (4, CHD_V4_HEADER_SIZE) => Ok(Header::V4Header(read_v4_header(raw(&raw_header)?, chd)?)),
+        (5, CHD_V5_HEADER_SIZE) => Ok(Header::V5Header(read_v5_header(raw(&raw_header)?)?)),
         (1 | 2 | 3 | 4 | 5, _) => Err(Error::InvalidData),
         _ => Err(Error::UnsupportedVersion),
     }
 }
 
-fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> Result<HeaderV1> {
-    // get sector size
+/// Read a V1 header, or a V2 header with its sector length.
+fn read_v1_header(header: &RawHeaderV1, sector_length: Option<u32>) -> Result<HeaderV1> {
+    // V1 headers have a fixed sector size.
     const CHD_V1_SECTOR_SIZE: u32 = 512;
-    header.seek(SeekFrom::Start(76))?;
-    let sector_length = match version {
-        1 => CHD_V1_SECTOR_SIZE,
-        _ => header.read_u32::<BigEndian>()?,
-    };
-    let mut md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
-    let mut parent_md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
+    let sector_length = sector_length.unwrap_or(CHD_V1_SECTOR_SIZE);
 
-    header.seek(SeekFrom::Start(16))?;
-    let flags = header.read_u32::<BigEndian>()?;
-    let compression = header.read_u32::<BigEndian>()?;
-    let hunk_size = header.read_u32::<BigEndian>()?;
-    let total_hunks = header.read_u32::<BigEndian>()?;
-    let cylinders = header.read_u32::<BigEndian>()?;
-    let heads = header.read_u32::<BigEndian>()?;
-    let sectors = header.read_u32::<BigEndian>()?;
-    header.read_exact(&mut md5)?;
-    header.read_exact(&mut parent_md5)?;
+    let version = header.prefix.version.get();
+    let length = header.prefix.length.get();
+    let flags = header.flags.get();
+    let compression = header.compression.get();
+    let hunk_size = header.hunk_size.get();
+    let total_hunks = header.total_hunks.get();
+    let cylinders = header.cylinders.get();
+    let heads = header.heads.get();
+    let sectors = header.sectors.get();
+    let md5 = header.md5;
+    let parent_md5 = header.parent_md5;
 
     let logical_bytes =
         (cylinders as u64) * (heads as u64) * (sectors as u64) * (sector_length as u64);
@@ -728,28 +857,18 @@ fn read_v1_header<T: Read + Seek>(header: &mut T, version: u32, length: u32) -> 
     })
 }
 
-fn read_v3_header<T: Read + Seek, F: Read + Seek>(
-    header: &mut T,
-    length: u32,
-    chd: &mut F,
-) -> Result<HeaderV3> {
-    header.seek(SeekFrom::Start(16))?;
-    let mut md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
-    let mut parent_md5: [u8; MD5_BYTES] = [0; MD5_BYTES];
-    let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-
-    let flags = header.read_u32::<BigEndian>()?;
-    let compression = header.read_u32::<BigEndian>()?;
-    let total_hunks = header.read_u32::<BigEndian>()?;
-    let logical_bytes = header.read_u64::<BigEndian>()?;
-    let meta_offset = header.read_u64::<BigEndian>()?;
-    header.read_exact(&mut md5)?;
-    header.read_exact(&mut parent_md5)?;
-    let hunk_bytes = header.read_u32::<BigEndian>()?;
-    header.seek(SeekFrom::Start(80))?;
-    header.read_exact(&mut sha1)?;
-    header.read_exact(&mut parent_sha1)?;
+fn read_v3_header<F: Read + Seek>(header: &RawHeaderV3, chd: &mut F) -> Result<HeaderV3> {
+    let length = header.prefix.length.get();
+    let flags = header.flags.get();
+    let compression = header.compression.get();
+    let total_hunks = header.total_hunks.get();
+    let logical_bytes = header.logical_bytes.get();
+    let meta_offset = header.meta_offset.get();
+    let md5 = header.md5;
+    let parent_md5 = header.parent_md5;
+    let hunk_bytes = header.hunk_bytes.get();
+    let sha1 = header.sha1;
+    let parent_sha1 = header.parent_sha1;
     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
     let unit_count = (logical_bytes + (unit_bytes as u64) - 1) / unit_bytes as u64;
     Ok(HeaderV3 {
@@ -770,27 +889,17 @@ fn read_v3_header<T: Read + Seek, F: Read + Seek>(
     })
 }
 
-fn read_v4_header<T: Read + Seek, F: Read + Seek>(
-    header: &mut T,
-    length: u32,
-    chd: &mut F,
-) -> Result<HeaderV4> {
-    header.seek(SeekFrom::Start(16))?;
-    let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut raw_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-
-    let flags = header.read_u32::<BigEndian>()?;
-    let compression = header.read_u32::<BigEndian>()?;
-    let total_hunks = header.read_u32::<BigEndian>()?;
-    let logical_bytes = header.read_u64::<BigEndian>()?;
-    let meta_offset = header.read_u64::<BigEndian>()?;
-    let hunk_bytes = header.read_u32::<BigEndian>()?;
-
-    header.seek(SeekFrom::Start(48))?;
-    header.read_exact(&mut sha1)?;
-    header.read_exact(&mut parent_sha1)?;
-    header.read_exact(&mut raw_sha1)?;
+fn read_v4_header<F: Read + Seek>(header: &RawHeaderV4, chd: &mut F) -> Result<HeaderV4> {
+    let length = header.prefix.length.get();
+    let flags = header.flags.get();
+    let compression = header.compression.get();
+    let total_hunks = header.total_hunks.get();
+    let logical_bytes = header.logical_bytes.get();
+    let meta_offset = header.meta_offset.get();
+    let hunk_bytes = header.hunk_bytes.get();
+    let sha1 = header.sha1;
+    let parent_sha1 = header.parent_sha1;
+    let raw_sha1 = header.raw_sha1;
 
     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
@@ -844,18 +953,17 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
     None
 }
 
-fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV5> {
-    header.seek(SeekFrom::Start(16))?;
-    let mut sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut parent_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut raw_sha1: [u8; SHA1_BYTES] = [0; SHA1_BYTES];
-    let mut compression: [u32; 4] = [0; 4];
-    header.read_u32_into::<BigEndian>(&mut compression)?;
-    let logical_bytes = header.read_u64::<BigEndian>()?;
-    let map_offset = header.read_u64::<BigEndian>()?;
-    let meta_offset = header.read_u64::<BigEndian>()?;
-    let hunk_bytes = header.read_u32::<BigEndian>()?;
-    let unit_bytes = header.read_u32::<BigEndian>()?;
+fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
+    let length = header.prefix.length.get();
+    let compression = header.compression.map(|codec| codec.get());
+    let logical_bytes = header.logical_bytes.get();
+    let map_offset = header.map_offset.get();
+    let meta_offset = header.meta_offset.get();
+    let hunk_bytes = header.hunk_bytes.get();
+    let unit_bytes = header.unit_bytes.get();
+    let sha1 = header.sha1;
+    let parent_sha1 = header.parent_sha1;
+    let raw_sha1 = header.raw_sha1;
 
     // guard divide by zero
     if hunk_bytes == 0 || unit_bytes == 0 {
@@ -864,11 +972,6 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
 
     let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
     let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
-    header.seek(SeekFrom::Start(84))?;
-    header.read_exact(&mut sha1)?;
-    header.read_exact(&mut parent_sha1)?;
-    header.seek(SeekFrom::Start(64))?;
-    header.read_exact(&mut raw_sha1)?;
     let map_entry_bytes = match CodecType::from_u32(compression[0]) {
         // uncompressed map entries are 4 bytes long
         Some(CodecType::None) => map::V5_UNCOMPRESSED_MAP_ENTRY_SIZE as u32,
@@ -897,6 +1000,107 @@ fn read_v5_header<T: Read + Seek>(header: &mut T, length: u32) -> Result<HeaderV
 #[cfg(test)]
 mod test {
     use crate::header::extract_bps_value;
+
+    #[test]
+    #[cfg(feature = "encode")]
+    fn v5_to_bytes_roundtrip() {
+        use crate::header::Header;
+        use std::io::Cursor;
+
+        let mut raw = Vec::new();
+        raw.extend_from_slice(b"MComprHD");
+        raw.extend_from_slice(&124u32.to_be_bytes());
+        raw.extend_from_slice(&5u32.to_be_bytes());
+        for codec in [b"cdlz", b"cdzl", b"cdfl", &[0u8; 4]] {
+            raw.extend_from_slice(codec);
+        }
+        raw.extend_from_slice(&657885312u64.to_be_bytes()); // logical bytes
+        raw.extend_from_slice(&464000000u64.to_be_bytes()); // map offset
+        raw.extend_from_slice(&124u64.to_be_bytes()); // metadata offset
+        raw.extend_from_slice(&19584u32.to_be_bytes()); // hunk bytes
+        raw.extend_from_slice(&2448u32.to_be_bytes()); // unit bytes
+        for seed in [0x10u8, 0x20, 0x30] {
+            // raw SHA1, SHA1, parent SHA1
+            raw.extend((0..20).map(|i| seed + i));
+        }
+        assert_eq!(raw.len(), 124);
+
+        let Header::V5Header(header) = Header::try_read_header(&mut Cursor::new(&raw)).unwrap()
+        else {
+            panic!("not a V5 header");
+        };
+        assert_eq!(header.to_bytes()[..], raw[..]);
+    }
+
+    #[test]
+    #[cfg(feature = "encode")]
+    fn legacy_to_bytes_roundtrip() {
+        use crate::header::Header;
+        use std::io::Cursor;
+
+        fn bytes(seed: u8, len: usize) -> impl Iterator<Item = u8> {
+            (0..len as u8).map(move |i| seed.wrapping_add(i.wrapping_mul(7)))
+        }
+
+        let start = |raw: &mut Vec<u8>, length: u32, version: u32| {
+            raw.extend_from_slice(b"MComprHD");
+            raw.extend_from_slice(&length.to_be_bytes());
+            raw.extend_from_slice(&version.to_be_bytes());
+        };
+
+        let mut headers = Vec::new();
+        for version in [1u32, 2] {
+            let mut raw = Vec::new();
+            start(&mut raw, if version == 1 { 76 } else { 80 }, version);
+            // flags (has parent), zlib, hunk size in sectors, total hunks, cylinders, heads, sectors
+            for value in [1u32, 1, 8, 100, 10, 4, 20] {
+                raw.extend_from_slice(&value.to_be_bytes());
+            }
+            raw.extend(bytes(0x11, 16)); // MD5
+            raw.extend(bytes(0x22, 16)); // parent MD5
+            if version == 2 {
+                raw.extend_from_slice(&256u32.to_be_bytes()); // sector length
+            }
+            headers.push(raw);
+        }
+
+        let mut v3 = Vec::new();
+        start(&mut v3, 120, 3);
+        for value in [1u32, 2, 50] {
+            // flags (has parent), zlib+, total hunks
+            v3.extend_from_slice(&value.to_be_bytes());
+        }
+        v3.extend_from_slice(&(50u64 * 4096 - 100).to_be_bytes()); // logical bytes
+        v3.extend_from_slice(&0u64.to_be_bytes()); // metadata offset
+        v3.extend(bytes(0x33, 16)); // MD5
+        v3.extend(bytes(0x44, 16)); // parent MD5
+        v3.extend_from_slice(&4096u32.to_be_bytes()); // hunk bytes
+        v3.extend(bytes(0x55, 20)); // SHA1
+        v3.extend(bytes(0x66, 20)); // parent SHA1
+        headers.push(v3);
+
+        let mut v4 = Vec::new();
+        start(&mut v4, 108, 4);
+        for value in [1u32, 3, 60] {
+            // flags (has parent), A/V, total hunks
+            v4.extend_from_slice(&value.to_be_bytes());
+        }
+        v4.extend_from_slice(&(60u64 * 8192).to_be_bytes()); // logical bytes
+        v4.extend_from_slice(&0u64.to_be_bytes()); // metadata offset
+        v4.extend_from_slice(&8192u32.to_be_bytes()); // hunk bytes
+        v4.extend(bytes(0x77, 20)); // SHA1
+        v4.extend(bytes(0x88, 20)); // parent SHA1
+        v4.extend(bytes(0x99, 20)); // raw SHA1
+        headers.push(v4);
+
+        for raw in headers {
+            // The reader always reads the size of a V5 header.
+            let mut padded = raw.clone();
+            padded.resize(124, 0);
+            let header = Header::try_read_header(&mut Cursor::new(&padded)).unwrap();
+            assert_eq!(header.to_bytes()[..], raw[..], "version {}", raw[15]);
+        }
+    }
 
     #[test]
     fn extract_hard_drive_unit_bytes_test() {
