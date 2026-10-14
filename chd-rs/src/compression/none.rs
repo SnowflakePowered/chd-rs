@@ -19,6 +19,15 @@ impl CodecImplementation for NoneCodec {
     fn decompress(&mut self, input: &[u8], mut output: &mut [u8]) -> Result<DecompressResult> {
         Ok(DecompressResult::new(output.write(input)?, input.len()))
     }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        output
+            .get_mut(..input.len())
+            .ok_or(crate::Error::CompressionError)?
+            .copy_from_slice(input);
+        Ok(input.len())
+    }
 }
 
 impl CompressionCodecType for NoneCodec {
