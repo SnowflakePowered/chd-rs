@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 use crate::header::CodecType;
 use std::convert::TryFrom;
 
-/// CD-ROM wrapper decompression codec (cdlz) that uses the [LZMA codec](crate::codecs::LzmaCodec)
+/// CD-ROM wrapper codec (cdlz) that uses the [LZMA codec](crate::codecs::LzmaCodec)
 /// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
 /// decompression of subcode data.
 ///
@@ -252,5 +252,63 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         }
 
         Ok(frame_res + sub_res)
+    }
+
+    #[cfg(feature = "encode")]
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        // https://github.com/mamedev/mame/blob/master/src/lib/util/chdcodec.cpp chd_cd_compressor::compress
+        let frames = input.len() / CD_FRAME_SIZE as usize;
+        let complen_bytes = if input.len() < 65536 { 2 } else { 3 };
+        let ecc_bytes = frames.div_ceil(8);
+        let header_bytes = ecc_bytes + complen_bytes;
+        let sector_len = frames * CD_MAX_SECTOR_DATA as usize;
+        let subcode_len = frames * CD_MAX_SUBCODE_DATA as usize;
+
+        // Anything not smaller than the input is a failure, so don't bother writing more.
+        let output_len = output.len().min(input.len());
+        let output = &mut output[..output_len];
+        let (header, data) = output
+            .split_at_mut_checked(header_bytes)
+            .ok_or(Error::CompressionError)?;
+        header.fill(0);
+
+        // Split the hunk into
+        // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+        let (sectors, subcodes) = self.buffer[..sector_len + subcode_len].split_at_mut(sector_len);
+        for (frame_num, ((frame, sector), subcode)) in input
+            .chunks_exact(CD_FRAME_SIZE as usize)
+            .zip(sectors.chunks_exact_mut(CD_MAX_SECTOR_DATA as usize))
+            .zip(subcodes.chunks_exact_mut(CD_MAX_SUBCODE_DATA as usize))
+            .enumerate()
+        {
+            let (frame_sector, frame_subcode) = frame.split_at(CD_MAX_SECTOR_DATA as usize);
+            sector.copy_from_slice(frame_sector);
+            subcode.copy_from_slice(frame_subcode);
+
+            // Strip the sync header and ECC if they can be regenerated.
+            let mut sector = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(sector)?;
+            if sector[0..12] == CD_SYNC_HEADER && sector.verify_ecc() {
+                header[frame_num / 8] |= 1 << (frame_num % 8);
+                sector[0..12].fill(0);
+                sector.clear_ecc();
+            }
+        }
+
+        let sector_compressed_len = self.engine.compress(sectors, data)?;
+        if sector_compressed_len >= 1 << (complen_bytes * 8) {
+            return Err(Error::CompressionError);
+        }
+        let complen = (sector_compressed_len as u32).to_be_bytes();
+        header[ecc_bytes..].copy_from_slice(&complen[4 - complen_bytes..]);
+
+        let subcode_compressed_len = self
+            .sub_engine
+            .compress(subcodes, &mut data[sector_compressed_len..])?;
+
+        let compressed_len = header_bytes + sector_compressed_len + subcode_compressed_len;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
     }
 }
