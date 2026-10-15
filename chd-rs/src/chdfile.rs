@@ -332,11 +332,8 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
                                     &buf[..remainder_in_hunk
                                         * self.inner.header().unit_bytes() as usize],
                                 );
-                                Crc::<u16>::verify_block_checksum(
-                                    block_crc,
-                                    dest,
-                                    hunk_split + remainder_in_hunk * unit_bytes as usize,
-                                )
+                                // Parent references have no CRC.
+                                Ok(hunk_split + remainder_in_hunk * unit_bytes as usize)
                             }
                         }
                     }

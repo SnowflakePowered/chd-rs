@@ -3,10 +3,12 @@ use crate::compression::CompressionCodec;
 use crate::error::{Error, Result};
 use crate::header::CodecType;
 use crate::write::ChdWriteCodecChoice;
+use crate::Chd;
 use arrayvec::ArrayVec;
 use parking_lot::RwLock;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
+use std::io::{Read, Seek};
 use std::sync::Arc;
 
 /// Hash key for an uncompressed hunk.
@@ -33,16 +35,67 @@ impl HunkHash {
 /// Opaque compression state for a CHD writer.
 ///
 /// Internally, this stores an index of previously compressed hunks
-/// to handle self-compression.
+/// to handle self-compression, and an index of the parent CHD.
 #[derive(Clone, Default)]
 pub(crate) struct CompressionState {
     hunks: Arc<RwLock<HashMap<HunkHash, u32>>>,
+    /// The first unit of the parent CHD that starts each hunk-sized run of units.
+    parent: Arc<HashMap<HunkHash, u64>>,
 }
 
 impl CompressionState {
+    /// The state for a CHD with a parent CHD.
+    ///
+    /// Every run of units in the parent the size of a hunk is hashed, like chdman, so a
+    /// hunk can refer to data in the parent that is not aligned to the hunks of the parent.
+    /// The parent must have the given hunk size.
+    pub fn with_parent<F: Read + Seek>(parent: &mut Chd<F>, unit_bytes: u32) -> Result<Self> {
+        let hunk_bytes = parent.header().hunk_size() as usize;
+        let hunk_count = parent.header().hunk_count();
+        let units_per_hunk = hunk_bytes / unit_bytes as usize;
+
+        // Two hunks at a time, for the runs of units that start in the first hunk and end
+        // in the second.
+        let mut units = HashMap::new();
+        let mut buffer = vec![0u8; 2 * hunk_bytes];
+        let mut compressed = Vec::new();
+        if hunk_count > 0 {
+            parent
+                .hunk(0)?
+                .read_hunk_in(&mut compressed, &mut buffer[..hunk_bytes])?;
+        }
+        for hunk_num in 0..hunk_count {
+            let runs = if hunk_num + 1 < hunk_count {
+                parent
+                    .hunk(hunk_num + 1)?
+                    .read_hunk_in(&mut compressed, &mut buffer[hunk_bytes..])?;
+                units_per_hunk
+            } else {
+                1
+            };
+            for run in 0..runs {
+                let start = run * unit_bytes as usize;
+                let hash = HunkHash::new(&buffer[start..start + hunk_bytes], true);
+                let unit = hunk_num as u64 * units_per_hunk as u64 + run as u64;
+                units.entry(hash).or_insert(unit);
+            }
+            buffer.copy_within(hunk_bytes.., 0);
+        }
+
+        Ok(CompressionState {
+            hunks: Default::default(),
+            parent: Arc::new(units),
+        })
+    }
+
     /// Find the index of the previously compressed hunk with the given hash
     pub fn find(&self, hash: &HunkHash) -> Option<u32> {
         self.hunks.read().get(hash).copied()
+    }
+
+    /// Find the unit of the parent CHD that starts a run of units with the given hash.
+    pub fn find_parent(&self, hash: &HunkHash) -> Option<u64> {
+        self.parent.get(hash).copied()
     }
 
     /// Mark a compressed hunk as previously written.
@@ -63,7 +116,7 @@ pub(crate) enum HunkKind {
     Compressed(u8),
     /// The hunk is uncompressed.
     Uncompressed,
-    /// The hunk is identical to one previously written to the CHD.
+    /// The hunk is identical to one previously written to the CHD, or to data in the parent CHD.
     Duplicate,
 }
 
@@ -144,7 +197,9 @@ impl HunkCompressor {
         }
 
         let hash = HunkHash::new(hunk, self.find_duplicates);
-        if self.find_duplicates && self.state.find(&hash).is_some() {
+        if self.find_duplicates
+            && (self.state.find(&hash).is_some() || self.state.find_parent(&hash).is_some())
+        {
             return Ok(CompressedHunk {
                 hunk,
                 kind: HunkKind::Duplicate,
