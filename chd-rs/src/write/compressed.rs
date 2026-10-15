@@ -2,7 +2,7 @@
 use crate::compression::CompressionCodec;
 use crate::error::{Error, Result};
 use crate::header::CodecType;
-use crate::write::ChdWriteCodecChoice;
+use crate::write::ChdWriteCodecs;
 use crate::Chd;
 use arrayvec::ArrayVec;
 use parking_lot::RwLock;
@@ -163,7 +163,7 @@ impl HunkCompressor {
     /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec,
     /// or [`CodecError`](Error::CodecError) if a codec does not support the hunk size.
     pub(crate) fn new(
-        codecs: impl ChdWriteCodecChoice,
+        codecs: impl ChdWriteCodecs,
         hunk_bytes: u32,
         state: CompressionState,
     ) -> Result<Self> {

@@ -24,7 +24,6 @@ use crate::Chd;
 use arrayvec::ArrayVec;
 use compressed::{CompressionState, HunkKind};
 use metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
-use sealed::ChdWriteCodecChoice;
 use sha1::{Digest, Sha1};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -56,31 +55,36 @@ pub struct ChdWriteOptions {
 }
 
 mod sealed {
-    use crate::header::CodecType;
-    use arrayvec::ArrayVec;
+    pub trait Sealed {}
+}
 
-    /// Codecs to use when writing a CHD file.
-    pub trait ChdWriteCodecChoice {
-        #[doc(hidden)]
-        fn into_array_vec(self) -> ArrayVec<CodecType, 4>;
-    }
+/// The codecs to use when writing a CHD file.
+/// 
+/// Accepts up to four codecs. An empty slice (i.e. no codecs) indicates an uncompressed CHD.
+pub trait ChdWriteCodecs: sealed::Sealed {
+    #[doc(hidden)]
+    fn into_array_vec(self) -> ArrayVec<CodecType, 4>;
+}
 
-    macro_rules! impl_codec_choice {
-        ($($len:literal),*) => {$(
-            impl ChdWriteCodecChoice for &[CodecType; $len] {
-                fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
-                    self.iter().copied().collect()
-                }
+macro_rules! impl_codecs {
+    ($($len:literal),*) => {$(
+        impl sealed::Sealed for &[CodecType; $len] {}
+
+        impl ChdWriteCodecs for &[CodecType; $len] {
+            fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
+                self.iter().copied().collect()
             }
-        )*};
-    }
-
-    impl_codec_choice!(0, 1, 2, 3, 4);
-
-    impl ChdWriteCodecChoice for &ArrayVec<CodecType, 4> {
-        fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
-            self.clone()
         }
+    )*};
+}
+
+impl_codecs!(0, 1, 2, 3, 4);
+
+impl sealed::Sealed for &ArrayVec<CodecType, 4> {}
+
+impl ChdWriteCodecs for &ArrayVec<CodecType, 4> {
+    fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
+        self.clone()
     }
 }
 
@@ -177,7 +181,7 @@ impl ChdWriteOptions {
     ///
     /// To disable compression, pass in the empty slice. This function
     /// accepts up to 4 compression codecs in a slice.
-    pub fn compression(mut self, compression: impl ChdWriteCodecChoice) -> Self {
+    pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
         self.compression_codecs = compression.into_array_vec();
         self
     }

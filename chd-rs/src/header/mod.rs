@@ -357,6 +357,19 @@ impl Header {
         }
     }
 
+    /// Returns the codecs of the CHD file.
+    ///
+    /// If a codec is unknown, `None` is returned in place of it.
+    pub fn codecs(&self) -> [Option<CodecType>; 4] {
+        let codecs = match self {
+            Header::V1Header(c) | Header::V2Header(c) => [c.compression, 0, 0, 0],
+            Header::V3Header(c) => [c.compression, 0, 0, 0],
+            Header::V4Header(c) => [c.compression, 0, 0, 0],
+            Header::V5Header(c) => c.compression,
+        };
+        codecs.map(|codec| CodecType::from_u32(codec).filter(|&codec| codec != CodecType::None))
+    }
+
     /// Returns the offset of the CHD metadata, if available.
     pub fn meta_offset(&self) -> Option<u64> {
         match self {
