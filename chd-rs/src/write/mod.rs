@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 use crate::header::{CodecType, Header, HeaderV5, Version};
 use crate::map::{CompressionTypeV5, Map, RawMapEntryV5};
 use crate::metadata::{MetadataData, MetadataTag};
+use crate::Chd;
 use arrayvec::ArrayVec;
 use compressed::{CompressionState, HunkKind};
 use metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
@@ -150,6 +151,8 @@ pub struct ChdWriter<W: Write + Seek> {
     raw_sha1: Option<Sha1>,
     /// The number of logical bytes hashed so far.
     hashed: u64,
+    /// The SHA1 of the parent CHD, or zeroes if there is no parent.
+    parent_sha1: [u8; 20],
     /// The number of bytes of hunk data stored in the file so far.
     stored: u64,
     /// Whether writing failed part way through, leaving the file inconsistent.
@@ -159,8 +162,6 @@ pub struct ChdWriter<W: Write + Seek> {
 impl<W: Write + Seek> ChdWriter<W> {
     /// Creates a writer for a CHD V5 file.
     ///
-    /// Returns the following errors
-    ///
     /// Returns [`InvalidParameter`](Error::InvalidParameter) on the following conditions:
     /// - If the hunk size is not a non-zero multiple of the unit size.
     /// - If there would be too many hunks.
@@ -168,6 +169,45 @@ impl<W: Write + Seek> ChdWriter<W> {
     ///
     /// If a codec does not support the hunk size, returns [`CodecError`](Error::CodecError).
     pub fn new(inner: W, options: ChdWriteOptions) -> Result<Self> {
+        Self::create(inner, options, CompressionState::default(), [0; 20])
+    }
+
+    /// Creates a writer for a CHD V5 file that refers to data in a parent CHD.
+    ///
+    /// The parent will be read in full before writing the new CHD.
+    ///
+    /// Returns [`InvalidParameter`](Error::InvalidParameter) under the same conditions as
+    /// [`new`](ChdWriter::new), as well as the following conditions:
+    /// - If the CHD is uncompressed.
+    /// - If the hunk or unit sizes are not those of the parent.
+    /// - If the parent is older than CHD V3, which has no SHA1.
+    pub fn with_parent<F: Read + Seek>(
+        inner: W,
+        options: ChdWriteOptions,
+        parent: &mut Chd<F>,
+    ) -> Result<Self> {
+        let header = parent.header();
+        let Some(parent_sha1) = header.sha1() else {
+            return Err(Error::InvalidParameter);
+        };
+        if options.compression_codecs.is_empty()
+            || options.hunk_bytes != header.hunk_size()
+            || options.unit_bytes != header.unit_bytes()
+            || options.unit_bytes == 0
+            || !options.hunk_bytes.is_multiple_of(options.unit_bytes)
+        {
+            return Err(Error::InvalidParameter);
+        }
+        let state = CompressionState::with_parent(parent, options.unit_bytes)?;
+        Self::create(inner, options, state, parent_sha1)
+    }
+
+    fn create(
+        inner: W,
+        options: ChdWriteOptions,
+        state: CompressionState,
+        parent_sha1: [u8; 20],
+    ) -> Result<Self> {
         if options.unit_bytes == 0
             || options.hunk_bytes == 0
             || !options.hunk_bytes.is_multiple_of(options.unit_bytes)
@@ -183,7 +223,6 @@ impl<W: Write + Seek> ChdWriter<W> {
             })
             .transpose()?;
 
-        let state = CompressionState::default();
         let compressor = HunkCompressor::new(
             &options.compression_codecs,
             options.hunk_bytes,
@@ -205,6 +244,7 @@ impl<W: Write + Seek> ChdWriter<W> {
             compressor,
             raw_sha1,
             hashed: 0,
+            parent_sha1,
             stored: 0,
             failed: false,
         };
@@ -242,9 +282,9 @@ impl<W: Write + Seek> ChdWriter<W> {
 
     /// Compresses and writes the next hunk, which must be exactly the hunk size.
     ///
-    /// If only part of a hunk was written previously with [`Write`] or otherwise failed partway through, 
+    /// If only part of a hunk was written previously with [`Write`] or otherwise failed partway through,
     /// returns [`InvalidState`](Error::InvalidState).
-    /// 
+    ///
     /// If the hunk is not exactly the hunk size, returns [`InvalidParameter`](Error::InvalidParameter).
     /// If the CHD is already as large as its logical size, returns [`HunkOutOfRange`](Error::HunkOutOfRange).
     pub fn write_hunk(&mut self, hunk: &[u8]) -> Result<()> {
@@ -325,9 +365,9 @@ impl<W: Write + Seek> ChdWriter<W> {
     /// The number of bytes of hunk data stored in the stream, after compression.
     ///
     /// Duplicate hunks in compressed CHDs, and hunks of zeroes in uncompressed CHDs, are
-    /// not stored. 
-    /// 
-    /// The current compression ratio can be calculated as 
+    /// not stored.
+    ///
+    /// The current compression ratio can be calculated as
     /// [`bytes_stored`](ChdWriter::bytes_stored) divided by [`bytes_written`](ChdWriter::bytes_written).
     pub fn bytes_stored(&self) -> u64 {
         self.stored
@@ -482,12 +522,21 @@ impl<W: Write + Seek> ChdWriter<W> {
         compressed: CompressedHunk<'_>,
     ) -> Result<RawMapEntryV5> {
         // The writer decides whether a hunk is a duplicate, since the compressor may not
-        // have seen a hunk stored after it started compressing.
+        // have seen a hunk stored after it started compressing. Like chdman, hunks in the
+        // CHD itself are preferred over the parent.
         if let Some(other) = self.state.find(&compressed.hash) {
             return Ok(RawMapEntryV5::new(
                 CompressionTypeV5::CompressionSelf as u8,
                 0,
                 other as u64,
+                0,
+            ));
+        }
+        if let Some(unit) = self.state.find_parent(&compressed.hash) {
+            return Ok(RawMapEntryV5::new(
+                CompressionTypeV5::CompressionParent as u8,
+                0,
+                unit,
                 0,
             ));
         }
@@ -564,7 +613,7 @@ impl<W: Write + Seek> ChdWriter<W> {
             hunk_bytes,
             unit_bytes,
             sha1,
-            parent_sha1: [0; 20],
+            parent_sha1: self.parent_sha1,
             raw_sha1,
             unit_count: logical_bytes.div_ceil(unit_bytes as u64),
             hunk_count: logical_bytes.div_ceil(hunk_bytes as u64) as u32,
@@ -1182,5 +1231,112 @@ mod failure_tests {
         assert_eq!(writer.bytes_written(), 3 * HUNK_BYTES as u64);
         assert_eq!(writer.bytes_stored(), stored);
         assert!(stored > 0 && stored < 2 * HUNK_BYTES as u64);
+    }
+}
+
+#[cfg(test)]
+mod parent_tests {
+    use super::{ChdWriteOptions, ChdWriter};
+    use crate::header::{CodecType, Header};
+    use crate::map::{CompressionTypeV5, MapEntry};
+    use crate::read::ChdReader;
+    use crate::{Chd, Error};
+    use rand::rngs::StdRng;
+    use rand::{RngExt, SeedableRng};
+    use std::io::{Cursor, Write};
+
+    const HUNK_BYTES: u32 = 4096;
+    const UNIT_BYTES: u32 = 512;
+
+    fn options() -> ChdWriteOptions {
+        ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES).compression(&[CodecType::ZLibV5])
+    }
+
+    fn random(len: usize, seed: u64) -> Vec<u8> {
+        let mut data = vec![0u8; len];
+        StdRng::seed_from_u64(seed).fill(&mut data[..]);
+        data
+    }
+
+    fn parent(data: &[u8]) -> Chd<Cursor<Vec<u8>>> {
+        let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options()).unwrap();
+        writer.write_all(data).unwrap();
+        Chd::open(writer.finish().unwrap(), None).unwrap()
+    }
+
+    /// The compression type and offset of each map entry.
+    fn entries(chd: &Chd<Cursor<Vec<u8>>>) -> Vec<(u8, u64)> {
+        chd.map()
+            .iter()
+            .map(|entry| match entry {
+                MapEntry::V5Compressed(entry) => (
+                    num_traits::ToPrimitive::to_u8(&entry.hunk_type().unwrap()).unwrap(),
+                    entry.block_offset(),
+                ),
+                _ => panic!("not a compressed V5 map"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hunks_refer_to_the_parent() {
+        let hunk = HUNK_BYTES as usize;
+        let parent_data = random(6 * hunk, 1);
+        let mut parent = parent(&parent_data);
+        let parent_sha1 = parent.header().sha1().unwrap();
+
+        // Aligned and unaligned runs of the parent, new data, and a repeat of the new data.
+        let unit = UNIT_BYTES as usize;
+        let new = random(hunk, 2);
+        let mut data = Vec::new();
+        data.extend_from_slice(&parent_data[..hunk]);
+        data.extend_from_slice(&new);
+        data.extend_from_slice(&parent_data[3 * hunk..4 * hunk]);
+        data.extend_from_slice(&parent_data[unit..unit + hunk]);
+        data.extend_from_slice(&parent_data[4 * hunk + 3 * unit..5 * hunk + 3 * unit]);
+        data.extend_from_slice(&new);
+        data.extend_from_slice(&parent_data[5 * hunk..]);
+
+        let mut writer =
+            ChdWriter::with_parent(Cursor::new(Vec::new()), options(), &mut parent).unwrap();
+        writer.write_all(&data).unwrap();
+        let child = Chd::open(writer.finish().unwrap(), Some(Box::new(parent))).unwrap();
+
+        let units_per_hunk = (HUNK_BYTES / UNIT_BYTES) as u64;
+        let parent_ref = CompressionTypeV5::CompressionParent as u8;
+        let self_ref = CompressionTypeV5::CompressionSelf as u8;
+        let entries = entries(&child);
+        assert_eq!(entries[0], (parent_ref, 0));
+        assert!(entries[1].0 != parent_ref && entries[1].0 != self_ref);
+        assert_eq!(entries[2], (parent_ref, 3 * units_per_hunk));
+        assert_eq!(entries[3], (parent_ref, 1));
+        assert_eq!(entries[4], (parent_ref, 4 * units_per_hunk + 3));
+        assert_eq!(entries[5], (self_ref, 1));
+        assert_eq!(entries[6], (parent_ref, 5 * units_per_hunk));
+
+        let Header::V5Header(header) = child.header().clone() else {
+            panic!("not a V5 header");
+        };
+        assert_eq!(header.parent_sha1, parent_sha1);
+        assert_ne!(parent_sha1, [0; 20]);
+
+        let mut read = Vec::new();
+        std::io::Read::read_to_end(&mut ChdReader::new(child), &mut read).unwrap();
+        assert!(read == data);
+    }
+
+    #[test]
+    fn parent_must_match() {
+        let mut parent = parent(&random(2 * HUNK_BYTES as usize, 1));
+        for options in [
+            ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES),
+            ChdWriteOptions::new(2 * HUNK_BYTES, UNIT_BYTES).compression(&[CodecType::ZLibV5]),
+            ChdWriteOptions::new(HUNK_BYTES, 2 * UNIT_BYTES).compression(&[CodecType::ZLibV5]),
+        ] {
+            assert!(matches!(
+                ChdWriter::with_parent(Cursor::new(Vec::new()), options, &mut parent),
+                Err(Error::InvalidParameter)
+            ));
+        }
     }
 }
