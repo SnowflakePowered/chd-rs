@@ -7,13 +7,15 @@
 //!
 //! # fn main() -> chd::Result<()> {
 //! let mut input = File::open("image.bin")?;
-//! let options = ChdWriteOptions::new(4096, 512);
+//! // Compressed like `chdman createraw -us 512`.
+//! let options = ChdWriteOptions::raw(512);
 //! let mut chd = ChdWriter::new(File::create("image.chd")?, options)?;
 //! io::copy(&mut input, &mut chd)?;
 //! chd.finish()?;
 //! # Ok(())
 //! # }
 //! ```
+use crate::cdrom::CD_FRAME_SIZE;
 use crate::error::{Error, Result};
 use crate::header::{CodecType, Header, HeaderV5, Version};
 use crate::map::{CompressionTypeV5, Map, RawMapEntryV5};
@@ -34,6 +36,14 @@ pub use compressed::{CompressedHunk, HunkCompressor};
 
 /// The size of a V5 header.
 const HEADER_BYTES: u64 = 124;
+
+/// The default codecs used for raw, hard disk, and DVD-ROM images.
+const DEFAULT_CODECS: [CodecType; 4] = [
+    CodecType::LzmaV5,
+    CodecType::ZLibV5,
+    CodecType::HuffV5,
+    CodecType::FlacV5,
+];
 
 /// Options for creating a CHD file.
 #[derive(Debug, Clone)]
@@ -86,6 +96,56 @@ impl ChdWriteOptions {
             compression_codecs: ArrayVec::new(),
             hash_uncompressed: false,
         }
+    }
+
+    /// Default write options used for raw images.
+    ///
+    /// The hunk size is the largest multiple of the unit size up to 4096 bytes, or the
+    /// unit size if it is larger. Compressed with LZMA, Deflate, Huffman, and FLAC.
+    pub fn raw(unit_bytes: u32) -> Self {
+        let hunk_bytes = (4096 / unit_bytes.max(1) * unit_bytes).max(unit_bytes);
+        ChdWriteOptions::new(hunk_bytes, unit_bytes).compression(&DEFAULT_CODECS)
+    }
+
+    /// Default write options used for hard disk images with 512 byte sectors.
+    ///
+    /// Hard disk images also need [`HardDisk`](crate::metadata::KnownMetadata::HardDisk) metadata to describe the disk geometry.
+    /// Compressed with LZMA, Deflate, Huffman, and FLAC.
+    pub fn hard_disk() -> Self {
+        Self::raw(512)
+    }
+
+    /// Default write options used for CD-ROM images.
+    ///
+    /// Units are frames of a 2352 byte sector and 96 bytes of subcode, and hunks are 8
+    /// frames. Compressed with the CD codecs for LZMA, Deflate, and FLAC.
+    ///
+    /// CD-ROM images also require track metadata, such as
+    /// [`CdRomTrack2`](crate::metadata::KnownMetadata::CdRomTrack2).
+    pub fn cd() -> Self {
+        const FRAMES_PER_HUNK: u32 = 8;
+        ChdWriteOptions::new(FRAMES_PER_HUNK * CD_FRAME_SIZE, CD_FRAME_SIZE).compression(&[
+            CodecType::LzmaCdV5,
+            CodecType::ZLibCdV5,
+            CodecType::FlacCdV5,
+        ])
+    }
+
+    /// Default write options used for DVD-ROM images.
+    ///
+    /// Units are 2048 byte sectors, and hunks are 2 sectors.
+    /// Compressed with LZMA, Deflate, Huffman, and FLAC.
+    pub fn dvd() -> Self {
+        ChdWriteOptions::new(2 * 2048, 2048).compression(&DEFAULT_CODECS)
+    }
+
+    /// Default write options used for LaserDisc images .
+    ///
+    /// Units and hunks are a single frame of A/V Huffman data, which is
+    /// `12 + channels * samples * 2 + width * height * 2` bytes, where `samples` is the most
+    /// audio samples per channel in a frame. Compressed with the A/V Huffman codec.
+    pub fn laserdisc(frame_bytes: u32) -> Self {
+        ChdWriteOptions::new(frame_bytes, frame_bytes).compression(&[CodecType::AVHuffV5])
     }
 
     /// Set the logical size of the CHD in bytes ahead of time.
