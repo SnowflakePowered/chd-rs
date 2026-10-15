@@ -65,7 +65,7 @@ pub(super) struct RawMapEntryV5Uncompressed(pub U32Be);
 /// [`CompressionParent`](super::CompressionTypeV5::CompressionParent).
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy)]
 #[repr(C)]
-pub(super) struct RawMapEntryV5 {
+pub(crate) struct RawMapEntryV5 {
     pub compression: u8,
     length: [u8; 3],
     offset: [u8; 6],
