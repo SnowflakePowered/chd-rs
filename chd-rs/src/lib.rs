@@ -165,7 +165,7 @@ mod tests {
     use std::io::{BufReader, Read, Write};
 
     #[cfg(feature = "unstable_lending_iterators")]
-    use crate::iter::LendingIterator;
+    use crate::iter::{FallibleLender, Lender};
 
     #[test]
     fn read_metas_test() {
@@ -273,8 +273,7 @@ mod tests {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
         let mut chd = Chd::open(&mut f, None).expect("file");
         let mut metas = chd.metadata();
-        while let Some(meta) = metas.next() {
-            let mut meta = meta.expect("metadata entry could not be found");
+        while let Some(mut meta) = metas.next().expect("metadata entry could not be found") {
             let contents = meta.read().expect("metadata entry could not be read");
             println!("{:?}", String::from_utf8(contents.value));
         }
