@@ -35,12 +35,12 @@ impl Seek for CoreFile {
 
 #[cfg(test)]
 mod tests {
+    use crate::chd_read_header_core_file;
     use crate::chdcorefile::CoreFile;
     use crate::chdcorefile_sys::core_fopen;
     use std::fs::File;
     use std::io::{Read, Write};
     use std::mem::MaybeUninit;
-    use crate::chd_read_header_core_file;
 
     #[test]
     fn chdcorefile_read() {
@@ -69,7 +69,6 @@ mod tests {
             chd_read_header_core_file(file, &mut header);
             let header = header.assume_init();
             eprintln!("{:?}", header);
-
         }
 
         // let mut buf = [0u8; 10];

@@ -933,7 +933,10 @@ fn extract_bps_value(bps_meta: &[u8]) -> Option<u32> {
 }
 
 fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
-    let metas: Vec<_> = MetadataRefs::from_stream(chd, off).collect();
+    // Guess from the entries that can be read.
+    let metas: Vec<_> = MetadataRefs::from_stream(chd, off)
+        .map_while(Result::ok)
+        .collect();
     if let Some(hard_disk) = metas
         .iter()
         .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)

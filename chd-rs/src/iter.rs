@@ -35,8 +35,8 @@
 //! let mut f = BufReader::new(File::open("file.chd")?);
 //! let mut chd = Chd::open(&mut f, None)?;
 //! let mut metadata = chd.metadata();
-//! while let Some(mut metadata) = metadata.next() {
-//!    let metadata = metadata.read()?;
+//! while let Some(metadata) = metadata.next() {
+//!    let metadata = metadata?.read()?;
 //! }
 //! ```
 use crate::metadata::{Metadata, MetadataRef, MetadataRefs, MetadataTag};
@@ -126,17 +126,13 @@ impl<'a, F: Read + Seek> LendingIterator for MetadataEntries<'a, F> {
     type Item<'next>
     where
         Self: 'next,
-    = MetadataEntry<'next, F>;
+    = Result<MetadataEntry<'next, F>>;
 
     fn next(&'_ mut self) -> Option<Item<'_, Self>> {
-        let next = self.inner.next();
-        if let Some(next) = next {
-            Some(MetadataEntry {
-                meta_ref: next,
-                file: self.inner.file,
-            })
-        } else {
-            None
-        }
+        let next = self.inner.next()?;
+        Some(next.map(|meta_ref| MetadataEntry {
+            meta_ref,
+            file: self.inner.file,
+        }))
     }
 }

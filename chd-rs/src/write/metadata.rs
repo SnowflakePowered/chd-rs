@@ -1,8 +1,9 @@
 //! Metadata encode handling.
 use crate::error::{Error, Result};
 use crate::metadata::{RawMetadataHeader, METADATA_HEADER_SIZE};
+use crate::Chd;
 use sha1::{Digest, Sha1};
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use zerocopy::IntoBytes;
 
 /// The metadata flag for entries that are included in the SHA1 of a CHD.
@@ -27,6 +28,24 @@ pub(super) struct MetadataList {
 }
 
 impl MetadataList {
+    /// Read the entries of an existing CHD.
+    pub(super) fn read<F: Read + Seek>(chd: &mut Chd<F>) -> Result<Self> {
+        let refs = chd.metadata_refs().collect::<Result<Vec<_>>>()?;
+        let entries = refs
+            .iter()
+            .map(|meta_ref| {
+                let metadata = meta_ref.read(&mut chd.file)?;
+                Ok(MetadataEntry {
+                    tag: metadata.metatag,
+                    flags: metadata.flags,
+                    data: metadata.value,
+                    location: Some((meta_ref.offset, meta_ref.length as usize)),
+                })
+            })
+            .collect::<Result<_>>()?;
+        Ok(MetadataList { entries })
+    }
+
     /// The position of the `index`-th entry with the tag.
     fn find(&self, tag: u32, index: u32) -> Option<usize> {
         self.entries

@@ -58,7 +58,7 @@
 //! let mut chd = Chd::open(&mut f, None)?;
 //! let entries = chd.metadata_refs()?;
 //! for entry in entries {
-//!     let metadata = entry.read(&mut f)?;
+//!     let metadata = entry?.read(&mut f)?;
 //! }
 //!```
 //! `Vec<Metadata>` implements `TryFrom<MetadataRefs>` so all metadata entries
@@ -92,9 +92,11 @@ mod cdrom;
 mod chdfile;
 mod compression;
 
+/// cbindgen:ignore
 #[cfg(feature = "huffman_api")]
 pub mod huffman;
 
+/// cbindgen:ignore
 #[cfg(not(feature = "huffman_api"))]
 mod huffman;
 
@@ -148,6 +150,7 @@ pub mod read;
 #[cfg_attr(docsrs, doc(cfg(encode)))]
 pub mod write;
 
+/// cbindgen:ignore
 #[cfg(feature = "unstable_lending_iterators")]
 #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
 pub mod iter;
@@ -270,7 +273,8 @@ mod tests {
         let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
         let mut chd = Chd::open(&mut f, None).expect("file");
         let mut metas = chd.metadata();
-        while let Some(mut meta) = metas.next() {
+        while let Some(meta) = metas.next() {
+            let mut meta = meta.expect("metadata entry could not be found");
             let contents = meta.read().expect("metadata entry could not be read");
             println!("{:?}", String::from_utf8(contents.value));
         }

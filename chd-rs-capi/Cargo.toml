@@ -21,10 +21,10 @@ chd_precache = []
 verify_block_crc = ["chd/verify_block_crc"]
 
 [dependencies]
-chd = { version = "0.3", git = "https://github.com/SnowflakePowered/chd-rs" }
+chd = { version = "0.3", path = "../chd-rs" }
 
 [build-dependencies]
-cbindgen = "0.26.0"
+cbindgen = "0.29"
 bindgen = { version = "0.71.1", optional = true }
 cmake = { version =  "0.1.48", optional = true }
 

@@ -304,7 +304,7 @@ chd_error chd_precache_progress(struct chd_file *chd,
 chd_error chd_precache(struct chd_file *chd);
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
 
-#endif /* __CHD_H__ */
+#endif  /* __CHD_H__ */
