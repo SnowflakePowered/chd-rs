@@ -5,6 +5,7 @@ use crate::make_tag;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 pub(crate) use raw::RawMetadataHeader;
+use std::collections::HashSet;
 use std::io::{Read, Seek, SeekFrom};
 use zerocopy::{FromZeros, IntoBytes};
 
@@ -123,8 +124,8 @@ impl MetadataTag for Metadata {
 /// A reference to a metadata entry within the CHD file.
 #[derive(Clone)]
 pub struct MetadataRef {
-    offset: u64,
-    length: u32,
+    pub(crate) offset: u64,
+    pub(crate) length: u32,
     flags: u8,
     index: u32,
     metatag: u32,
@@ -162,12 +163,16 @@ impl MetadataTag for MetadataRef {
 /// An iterator over references to the metadata entries of a CHD file.
 /// If `unstable_lending_iterators` is enabled, metadata can be
 /// more ergonomically iterated over with [`MetadataEntries`](crate::iter::MetadataEntries).
+///
+/// If an entry can not be read, the iterator returns the error and then ends. If the entries
+/// link back to an earlier entry, returns [`InvalidData`](Error::InvalidData).
 pub struct MetadataRefs<'a, F: Read + Seek + 'a> {
     pub(crate) file: &'a mut F,
     curr_offset: u64,
     curr: Option<MetadataRef>,
     // Just use a tuple because we rarely have more than 2 or 3 types of tag.
     indices: Vec<(u32, u32)>,
+    visited: HashSet<u64>,
 }
 
 impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
@@ -177,6 +182,7 @@ impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
             curr_offset: initial_offset,
             curr: None,
             indices: Vec::new(),
+            visited: HashSet::new(),
         }
     }
 
@@ -186,6 +192,7 @@ impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
             curr_offset: 0,
             curr: None,
             indices: Vec::new(),
+            visited: HashSet::new(),
         }
     }
 }
@@ -195,14 +202,14 @@ impl<'a, F: Read + Seek + 'a> TryFrom<MetadataRefs<'a, F>> for Vec<Metadata> {
 
     fn try_from(mut value: MetadataRefs<'a, F>) -> std::result::Result<Self, Self::Error> {
         let metas = &mut value;
-        let metas: Vec<_> = metas.collect();
+        let metas = metas.collect::<Result<Vec<_>>>()?;
         metas.iter().map(|e| e.read(&mut value.file)).collect()
     }
 }
 
 impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
     // really need GATs to do this properly...
-    type Item = MetadataRef;
+    type Item = Result<MetadataRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.curr_offset == 0 {
@@ -210,12 +217,12 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
         }
 
         fn next_inner<'a, F: Read + Seek + 'a>(s: &mut MetadataRefs<'a, F>) -> Result<MetadataRef> {
+            if !s.visited.insert(s.curr_offset) {
+                return Err(Error::InvalidData);
+            }
             let mut header = RawMetadataHeader::new_zeroed();
             s.file.seek(SeekFrom::Start(s.curr_offset))?;
-            let count = s.file.read(header.as_mut_bytes())?;
-            if count != METADATA_HEADER_SIZE {
-                return Err(Error::MetadataNotFound);
-            }
+            s.file.read_exact(header.as_mut_bytes())?;
 
             // extract data
             let metatag = header.tag.get();
@@ -250,6 +257,11 @@ impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
             s.curr = Some(new.clone());
             Ok(new)
         }
-        next_inner(self).ok()
+        let next = next_inner(self);
+        if next.is_err() {
+            // Stop after an error.
+            self.curr_offset = 0;
+        }
+        Some(next)
     }
 }

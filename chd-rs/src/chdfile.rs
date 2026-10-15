@@ -19,8 +19,8 @@ use std::panic::AssertUnwindSafe;
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct Chd<F: Read + Seek> {
-    file: F,
-    header: Header,
+    pub(crate) file: F,
+    pub(crate) header: Header,
     parent: Option<Box<Chd<F>>>,
     map: Map,
     // codecs contain Box<dyn CompressionCodec> which are all UnwindSafe.

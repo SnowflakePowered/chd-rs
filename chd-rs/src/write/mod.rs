@@ -28,6 +28,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 
 mod compressed;
 mod metadata;
+mod update;
 
 pub use compressed::{CompressedHunk, HunkCompressor};
 

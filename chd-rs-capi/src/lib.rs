@@ -224,6 +224,7 @@ fn find_metadata(
     mut search_index: u32,
 ) -> Result<Metadata, Error> {
     for entry in chd.metadata_refs() {
+        let entry = entry?;
         if entry.metatag() == search_tag || entry.metatag() == KnownMetadata::Wildcard.metatag() {
             if search_index == 0 {
                 return entry.read(chd.inner());
