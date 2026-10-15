@@ -26,18 +26,18 @@ const HEADER_BYTES: u64 = 124;
 
 /// Options for creating a CHD file.
 #[derive(Debug, Clone)]
-pub struct ChdOptions {
+pub struct ChdWriteOptions {
     hunk_bytes: u32,
     unit_bytes: u32,
     logical_bytes: Option<u64>,
 }
 
-impl ChdOptions {
+impl ChdWriteOptions {
     /// Options for a CHD with the given hunk and unit sizes in bytes.
     ///
     /// The hunk size must be a multiple of the unit size.
     pub fn new(hunk_bytes: u32, unit_bytes: u32) -> Self {
-        ChdOptions {
+        ChdWriteOptions {
             hunk_bytes,
             unit_bytes,
             logical_bytes: None,
@@ -66,7 +66,7 @@ impl ChdOptions {
 /// otherwise the file is left incomplete.
 pub struct ChdWriter<W: Write + Seek> {
     inner: W,
-    options: ChdOptions,
+    options: ChdWriteOptions,
     map: Vec<u32>,
     hunk_count: Option<u32>,
     buffer: Vec<u8>,
@@ -80,7 +80,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     ///
     /// Returns [`InvalidParameter`](Error::InvalidParameter) if the hunk size is not a
     /// non-zero multiple of the unit size, or if there would be too many hunks.
-    pub fn new(inner: W, options: ChdOptions) -> Result<Self> {
+    pub fn new(inner: W, options: ChdWriteOptions) -> Result<Self> {
         if options.unit_bytes == 0
             || options.hunk_bytes == 0
             || !options.hunk_bytes.is_multiple_of(options.unit_bytes)
@@ -254,7 +254,7 @@ impl<W: Write + Seek> ChdWriter<W> {
 
     /// The header for an uncompressed CHD of the given logical size.
     fn header(&self, logical_bytes: u64, map_offset: u64, meta_offset: u64) -> HeaderV5 {
-        let ChdOptions {
+        let ChdWriteOptions {
             hunk_bytes,
             unit_bytes,
             ..
@@ -419,7 +419,7 @@ impl MetadataList {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChdOptions, ChdWriter};
+    use super::{ChdWriteOptions, ChdWriter};
     use crate::map::MapEntry;
     use crate::{Chd, Error};
     use std::io::{Cursor, Write};
@@ -438,7 +438,7 @@ mod tests {
         data
     }
 
-    fn write(options: ChdOptions, data: &[u8]) -> Vec<u8> {
+    fn write(options: ChdWriteOptions, data: &[u8]) -> Vec<u8> {
         let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
         // Write in uneven pieces to exercise buffering.
         for chunk in data.chunks(1500) {
@@ -477,8 +477,8 @@ mod tests {
     fn roundtrip() {
         let data = data();
         for options in [
-            ChdOptions::new(HUNK_BYTES, UNIT_BYTES),
-            ChdOptions::new(HUNK_BYTES, UNIT_BYTES).logical_bytes(data.len() as u64),
+            ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES),
+            ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES).logical_bytes(data.len() as u64),
         ] {
             let preallocated = options.logical_bytes.is_some();
             let (read, logical_bytes, offsets) = read(write(options, &data));
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn unwritten_hunks_are_zero() {
         let data = vec![7u8; HUNK_BYTES as usize];
-        let options = ChdOptions::new(HUNK_BYTES, UNIT_BYTES).logical_bytes(4 * HUNK_BYTES as u64);
+        let options = ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES).logical_bytes(4 * HUNK_BYTES as u64);
         let (read, logical_bytes, offsets) = read(write(options, &data));
         assert_eq!(logical_bytes, 4 * HUNK_BYTES as u64);
         assert_eq!(&read[..data.len()], &data[..]);
@@ -515,7 +515,7 @@ mod tests {
         let data = data();
         let mut writer = ChdWriter::new(
             Cursor::new(Vec::new()),
-            ChdOptions::new(HUNK_BYTES, UNIT_BYTES),
+            ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES),
         )
         .unwrap();
         for hunk in data.chunks_exact(HUNK_BYTES as usize) {
@@ -541,7 +541,7 @@ mod tests {
 
     #[test]
     fn invalid_writes() {
-        let options = ChdOptions::new(HUNK_BYTES, UNIT_BYTES);
+        let options = ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES);
         let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options.clone()).unwrap();
         assert!(matches!(
             writer.write_hunk(&[0; 100]),
@@ -571,7 +571,7 @@ mod tests {
 
 #[cfg(test)]
 mod metadata_tests {
-    use super::{ChdOptions, ChdWriter};
+    use super::{ChdWriteOptions, ChdWriter};
     use crate::metadata::{KnownMetadata, Metadata};
     use crate::{Chd, Error};
     use std::io::Cursor;
@@ -580,7 +580,7 @@ mod metadata_tests {
     const TAG: u32 = crate::make_tag(b"TEST");
 
     fn writer() -> ChdWriter<Cursor<Vec<u8>>> {
-        ChdWriter::new(Cursor::new(Vec::new()), ChdOptions::new(HUNK_BYTES, 512)).unwrap()
+        ChdWriter::new(Cursor::new(Vec::new()), ChdWriteOptions::new(HUNK_BYTES, 512)).unwrap()
     }
 
     /// The metadata entries of a finished CHD, as (tag, flags, value).
