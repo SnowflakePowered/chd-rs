@@ -28,7 +28,7 @@ mod raw;
 
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
-#[derive(FromPrimitive, Debug)]
+#[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CodecType {
     /// No compression.
     None = 0,

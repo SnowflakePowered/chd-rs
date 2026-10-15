@@ -37,7 +37,7 @@ fast_zlib = ["std"] # this does nothing now, since zlib-rs is already enabled.
 c_zlib = ["std", "flate2/zlib-ng"]
 
 # compression support for codecs
-encode = ["std", "huff_write", "lzma-rust2/encoder", "dep:flacenc"]
+encode = ["std", "huff_write", "lzma-rust2/encoder", "dep:flacenc", "dep:sha1", "dep:parking_lot"]
 huff_write = ["dep:bitstream-io"]
 nonstandard_channel_count = []
 
@@ -64,6 +64,8 @@ lending-iterator = { version = "0.1", optional = true }
 nougat = { version = "0.2", optional = true }
 flacenc = { version = "0.5", default-features = false, optional = true }
 zerocopy = { version = "0.8", features = ["derive"] }
+sha1 = { version = "0.10", optional = true }
+parking_lot = { version = "0.12", optional = true }
 
 [dev-dependencies]
 bencher = "0.1.5"

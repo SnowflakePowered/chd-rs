@@ -10,9 +10,8 @@ use zerocopy::{FromBytes, FromZeros, IntoBytes};
 use crate::error::{Error, Result};
 use crate::header::{Header, HeaderV5};
 use crate::huffman::{lookup_len, HuffmanDecoder};
-use raw::{
-    RawCompressedMapHeader, RawMapEntryV1, RawMapEntryV3, RawMapEntryV5, RawMapEntryV5Uncompressed,
-};
+pub(crate) use raw::RawMapEntryV5;
+use raw::{RawCompressedMapHeader, RawMapEntryV1, RawMapEntryV3, RawMapEntryV5Uncompressed};
 
 mod raw;
 
@@ -319,6 +318,12 @@ impl<'a> Iterator for MapEntries<'a> {
 impl Map {
     /// Create the map of an uncompressed V5 CHD from the offset of each hunk, in units of hunks.
     /// An offset of 0 indicates a hunk of zeroes that is not stored in the file.
+    /// Create the map of a compressed V5 CHD from its decoded entries.
+    #[cfg(feature = "encode")]
+    pub(crate) fn new_compressed_v5(entries: Vec<RawMapEntryV5>) -> Map {
+        Map::V5(RawMapV5(V5Map::Compressed(entries)))
+    }
+
     #[cfg(feature = "encode")]
     pub(crate) fn new_uncompressed_v5(offsets: &[u32], hunk_bytes: u32) -> Map {
         let entries = offsets
