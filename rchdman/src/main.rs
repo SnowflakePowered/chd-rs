@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use chd::header::{CodecType, Header};
-use chd::iter::LendingIterator;
+use chd::iter::Lender;
 use chd::map::{CompressionTypeLegacy, CompressionTypeV5, MapEntry};
 use chd::metadata::Metadata;
 use chd::Chd;
