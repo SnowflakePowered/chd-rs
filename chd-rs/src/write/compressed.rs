@@ -79,16 +79,27 @@ pub struct CompressedHunk<'a> {
     pub(crate) state: CompressionState,
 }
 
+impl CompressedHunk<'_> {
+    /// The length of the compressed hunk.
+    ///
+    /// For uncompressed hunks, this is the same as the input data. For duplicate hunks, this is 0.
+    pub fn len(&self) -> usize {
+        match self.kind {
+            HunkKind::Compressed(_) => self.data.len(),
+            HunkKind::Uncompressed => self.hunk.len(),
+            HunkKind::Duplicate => 0,
+        }
+    }
+}
+
 /// Compresses hunks for encoding.
 pub struct HunkCompressor {
     hunk_bytes: u32,
     codecs: ArrayVec<Box<dyn CompressionCodec>, 4>,
     state: CompressionState,
     /// Whether to look for duplicate hunks, which uncompressed CHDs can not store.
+    /// Hunks are only hashed with SHA1 when looking for duplicates.
     find_duplicates: bool,
-    /// Whether to hash hunks with SHA1, which is only needed to find duplicates or for
-    /// strict verification.
-    hash_sha1: bool,
     best: Vec<u8>,
     scratch: Vec<u8>,
 }
@@ -102,7 +113,6 @@ impl HunkCompressor {
         codecs: impl ChdWriteCodecChoice,
         hunk_bytes: u32,
         state: CompressionState,
-        strict_verification: bool,
     ) -> Result<Self> {
         let codecs = codecs
             .into_array_vec()
@@ -120,7 +130,6 @@ impl HunkCompressor {
             codecs,
             state,
             find_duplicates,
-            hash_sha1: find_duplicates || strict_verification,
             best: vec![0; hunk_bytes as usize],
             scratch: vec![0; hunk_bytes as usize],
         })
@@ -134,7 +143,7 @@ impl HunkCompressor {
             return Err(Error::InvalidParameter);
         }
 
-        let hash = HunkHash::new(hunk, self.hash_sha1);
+        let hash = HunkHash::new(hunk, self.find_duplicates);
         if self.find_duplicates && self.state.find(&hash).is_some() {
             return Ok(CompressedHunk {
                 hunk,
@@ -211,7 +220,7 @@ mod tests {
     fn picks_smallest_codec() {
         let codecs = [CodecType::ZLibV5, CodecType::LzmaV5, CodecType::HuffV5];
         let mut compressor =
-            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default(), false).unwrap();
+            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default()).unwrap();
         let input = text();
         let hunk = compressor.compress(&input).unwrap();
 
@@ -243,7 +252,7 @@ mod tests {
     fn incompressible_hunks_are_uncompressed() {
         let codecs = [CodecType::ZLibV5, CodecType::LzmaV5];
         let mut compressor =
-            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default(), false).unwrap();
+            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default()).unwrap();
         let input = random_bytes(HUNK_BYTES as usize, 1);
         let hunk = compressor.compress(&input).unwrap();
         assert_eq!(hunk.kind, HunkKind::Uncompressed);
@@ -258,7 +267,7 @@ mod tests {
             CodecType::FlacCdV5,
         ];
         let mut compressor =
-            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default(), false).unwrap();
+            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default()).unwrap();
         let input = text();
         let hunk = compressor.compress(&input).unwrap();
         let HunkKind::Compressed(index) = hunk.kind else {
@@ -272,7 +281,7 @@ mod tests {
     fn duplicates_are_not_compressed() {
         let state = CompressionState::default();
         let mut compressor =
-            HunkCompressor::new(&[CodecType::ZLibV5], HUNK_BYTES, state.clone(), false).unwrap();
+            HunkCompressor::new(&[CodecType::ZLibV5], HUNK_BYTES, state.clone()).unwrap();
         let input = text();
 
         let first = compressor.compress(&input).unwrap();
@@ -289,7 +298,7 @@ mod tests {
     #[test]
     fn no_codecs() {
         let mut compressor =
-            HunkCompressor::new(&[], HUNK_BYTES, CompressionState::default(), false).unwrap();
+            HunkCompressor::new(&[], HUNK_BYTES, CompressionState::default()).unwrap();
         let input = text();
         assert_eq!(
             compressor.compress(&input).unwrap().kind,
@@ -301,18 +310,13 @@ mod tests {
     fn invalid_codecs() {
         for codec in [CodecType::None, CodecType::Zlib, CodecType::AV] {
             assert!(matches!(
-                HunkCompressor::new(&[codec], HUNK_BYTES, CompressionState::default(), false),
+                HunkCompressor::new(&[codec], HUNK_BYTES, CompressionState::default()),
                 Err(Error::InvalidParameter)
             ));
         }
         // CD codecs need a hunk size that is a multiple of the frame size.
         assert!(matches!(
-            HunkCompressor::new(
-                &[CodecType::LzmaCdV5],
-                4096,
-                CompressionState::default(),
-                false
-            ),
+            HunkCompressor::new(&[CodecType::LzmaCdV5], 4096, CompressionState::default()),
             Err(Error::CodecError)
         ));
     }
@@ -323,7 +327,6 @@ mod tests {
             &[CodecType::ZLibV5],
             HUNK_BYTES,
             CompressionState::default(),
-            false,
         )
         .unwrap();
         assert!(matches!(

@@ -40,7 +40,6 @@ pub struct ChdWriteOptions {
     unit_bytes: u32,
     logical_bytes: Option<u64>,
     compression_codecs: ArrayVec<CodecType, 4>,
-    strict_verification: bool,
     hash_uncompressed: bool,
 }
 
@@ -83,7 +82,6 @@ impl ChdWriteOptions {
             unit_bytes,
             logical_bytes: None,
             compression_codecs: ArrayVec::new(),
-            strict_verification: false,
             hash_uncompressed: false,
         }
     }
@@ -106,13 +104,6 @@ impl ChdWriteOptions {
     /// accepts up to 4 compression codecs in a slice.
     pub fn compression(mut self, compression: impl ChdWriteCodecChoice) -> Self {
         self.compression_codecs = compression.into_array_vec();
-        self
-    }
-
-    /// Enable or disable strict verification of compressed hunks, which will
-    /// recalculate SHA1 per hunk when encoding.
-    pub fn strict_verification(mut self, strict_verification: bool) -> Self {
-        self.strict_verification = strict_verification;
         self
     }
 
@@ -159,6 +150,10 @@ pub struct ChdWriter<W: Write + Seek> {
     raw_sha1: Option<Sha1>,
     /// The number of logical bytes hashed so far.
     hashed: u64,
+    /// The number of bytes of hunk data stored in the file so far.
+    stored: u64,
+    /// Whether writing failed part way through, leaving the file inconsistent.
+    failed: bool,
 }
 
 impl<W: Write + Seek> ChdWriter<W> {
@@ -193,7 +188,6 @@ impl<W: Write + Seek> ChdWriter<W> {
             &options.compression_codecs,
             options.hunk_bytes,
             state.clone(),
-            options.strict_verification,
         )?;
         let compressed = !options.compression_codecs.is_empty();
         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
@@ -211,6 +205,8 @@ impl<W: Write + Seek> ChdWriter<W> {
             compressor,
             raw_sha1,
             hashed: 0,
+            stored: 0,
+            failed: false,
         };
 
         // Write the header first.
@@ -241,16 +237,18 @@ impl<W: Write + Seek> ChdWriter<W> {
             &self.options.compression_codecs,
             self.options.hunk_bytes,
             self.state.clone(),
-            self.options.strict_verification,
         )
     }
 
     /// Compresses and writes the next hunk, which must be exactly the hunk size.
     ///
-    /// If only part of a hunk was written previously with [`Write`], returns [`InvalidState`](Error::InvalidState).
-    /// If the hunk was compressed by a compressor of another writer, returns  [`InvalidParameter`](Error::InvalidParameter).
+    /// If only part of a hunk was written previously with [`Write`] or otherwise failed partway through, 
+    /// returns [`InvalidState`](Error::InvalidState).
+    /// 
+    /// If the hunk is not exactly the hunk size, returns [`InvalidParameter`](Error::InvalidParameter).
     /// If the CHD is already as large as its logical size, returns [`HunkOutOfRange`](Error::HunkOutOfRange).
     pub fn write_hunk(&mut self, hunk: &[u8]) -> Result<()> {
+        self.check_failed()?;
         if !self.buffer.is_empty() {
             return Err(Error::InvalidState);
         }
@@ -260,10 +258,12 @@ impl<W: Write + Seek> ChdWriter<W> {
 
     /// Write the next hunk, precompressed by a compressor from [`compressor`](ChdWriter::compressor).
     ///
-    /// If only part of a hunk was written previously with [`Write`], returns [`InvalidState`](Error::InvalidState).
-    /// If the hunk was compressed by a compressor of another writer, returns  [`InvalidParameter`](Error::InvalidParameter).
+    /// If only part of a hunk was written previously with [`Write`], or writing failed part way
+    /// through before, returns [`InvalidState`](Error::InvalidState).
+    /// If the hunk was compressed by a compressor of another writer, returns [`InvalidParameter`](Error::InvalidParameter).
     /// If the CHD is already as large as its logical size, returns [`HunkOutOfRange`](Error::HunkOutOfRange).
     pub fn write_compressed_hunk(&mut self, compressed: CompressedHunk<'_>) -> Result<()> {
+        self.check_failed()?;
         if !self.buffer.is_empty() {
             return Err(Error::InvalidState);
         }
@@ -317,8 +317,27 @@ impl<W: Write + Seek> ChdWriter<W> {
         self.metadata.remove(tag.metatag(), index)
     }
 
+    /// The number of bytes of data written to the stream.
+    pub fn bytes_written(&self) -> u64 {
+        self.written
+    }
+
+    /// The number of bytes of hunk data stored in the stream, after compression.
+    ///
+    /// Duplicate hunks in compressed CHDs, and hunks of zeroes in uncompressed CHDs, are
+    /// not stored. 
+    /// 
+    /// The current compression ratio can be calculated as 
+    /// [`bytes_stored`](ChdWriter::bytes_stored) divided by [`bytes_written`](ChdWriter::bytes_written).
+    pub fn bytes_stored(&self) -> u64 {
+        self.stored
+    }
+
     /// Finish writing the CHD, returning the inner writer.
+    ///
+    /// Returns [`InvalidState`](Error::InvalidState) if writing failed part way through before.
     pub fn finish(mut self) -> Result<W> {
+        self.check_failed()?;
         let hunk_bytes = self.options.hunk_bytes as u64;
 
         // Pad the last hunk with zeroes. Its data was hashed as it was written.
@@ -420,6 +439,19 @@ impl<W: Write + Seek> ChdWriter<W> {
         }
         let hunk_num = u32::try_from(hunk_num).map_err(|_| Error::HunkOutOfRange)?;
 
+        // A failure from here on can leave the file and map inconsistent.
+        let result = self.store_hunk_unchecked(hunk_num, compressed);
+        if result.is_err() {
+            self.failed = true;
+        }
+        result
+    }
+
+    fn store_hunk_unchecked(
+        &mut self,
+        hunk_num: u32,
+        compressed: CompressedHunk<'_>,
+    ) -> Result<()> {
         // Metadata set before the first hunk is placed before the hunks, like chdman.
         if hunk_num == 0 {
             self.eof = self.metadata.write_unwritten(&mut self.inner, self.eof)?;
@@ -431,6 +463,14 @@ impl<W: Write + Seek> ChdWriter<W> {
             self.store_uncompressed(compressed.hunk, compressed.hash.crc16)?
         };
         self.entries.push(entry);
+        Ok(())
+    }
+
+    /// Returns [`InvalidState`](Error::InvalidState) if writing failed part way through before.
+    fn check_failed(&self) -> Result<()> {
+        if self.failed {
+            return Err(Error::InvalidState);
+        }
         Ok(())
     }
 
@@ -463,6 +503,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         self.inner.seek(SeekFrom::Start(offset))?;
         self.inner.write_all(data)?;
         self.eof += data.len() as u64;
+        self.stored += data.len() as u64;
         self.state.insert(compressed.hash, hunk_num);
         Ok(RawMapEntryV5::new(
             compression,
@@ -489,6 +530,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         io::copy(&mut io::repeat(0).take(offset - self.eof), &mut self.inner)?;
         self.inner.write_all(hunk)?;
         self.eof = offset + hunk_bytes;
+        self.stored += hunk_bytes;
         Ok(RawMapEntryV5::new(none, hunk_bytes as u32, offset, crc16))
     }
 
@@ -534,6 +576,7 @@ impl<W: Write + Seek> ChdWriter<W> {
 impl<W: Write + Seek> Write for ChdWriter<W> {
     /// Writes up to the logical size of the CHD, if it was set.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.check_failed()?;
         let hunk_bytes = self.options.hunk_bytes as usize;
         let remaining = self
             .options
@@ -893,13 +936,10 @@ mod compressed_tests {
     #[test]
     fn write_compressed_hunks_matches_write_hunk() {
         let data = data();
-        for strict_verification in [false, true] {
-            let options = options().strict_verification(strict_verification);
-            assert_eq!(
-                write_compressed_hunks(options.clone(), &data),
-                write_hunks(options, &data)
-            );
-        }
+        assert_eq!(
+            write_compressed_hunks(options(), &data),
+            write_hunks(options(), &data)
+        );
     }
 
     #[test]
@@ -1005,5 +1045,142 @@ mod logical_size_tests {
         assert_eq!(error.kind(), ErrorKind::WriteZero);
         let chd = Chd::open(writer.finish().unwrap(), None).unwrap();
         assert_eq!(chd.header().logical_bytes(), 5000);
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::{ChdWriteOptions, ChdWriter};
+    use crate::header::CodecType;
+    use crate::{Chd, Error};
+    use std::cell::Cell;
+    use std::io::{self, Cursor, Seek, SeekFrom, Write};
+    use std::rc::Rc;
+
+    const HUNK_BYTES: u32 = 4096;
+
+    /// A writer that fails while `fail` is set.
+    struct FailingWriter {
+        inner: Cursor<Vec<u8>>,
+        fail: Rc<Cell<bool>>,
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.fail.get() {
+                return Err(io::Error::other("failed"));
+            }
+            self.inner.write(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    impl Seek for FailingWriter {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    fn failing_writer(codec: Option<CodecType>) -> (ChdWriter<FailingWriter>, Rc<Cell<bool>>) {
+        let fail = Rc::new(Cell::new(false));
+        let inner = FailingWriter {
+            inner: Cursor::new(Vec::new()),
+            fail: fail.clone(),
+        };
+        let mut options = ChdWriteOptions::new(HUNK_BYTES, 512);
+        if let Some(codec) = codec {
+            options = options.compression(&[codec]);
+        }
+        (ChdWriter::new(inner, options).unwrap(), fail)
+    }
+
+    #[test]
+    fn io_errors_poison_the_writer() {
+        for codec in [None, Some(CodecType::ZLibV5)] {
+            let (mut writer, fail) = failing_writer(codec);
+            writer.write_hunk(&[1; HUNK_BYTES as usize]).unwrap();
+
+            fail.set(true);
+            let error = writer.write_hunk(&[2; HUNK_BYTES as usize]).unwrap_err();
+            assert!(!matches!(error, Error::InvalidState));
+
+            // Even once the inner writer works again, the file may be inconsistent.
+            fail.set(false);
+            assert!(matches!(
+                writer.write_hunk(&[3; HUNK_BYTES as usize]),
+                Err(Error::InvalidState)
+            ));
+            let mut compressor = writer.compressor().unwrap();
+            let compressed = compressor.compress(&[3; HUNK_BYTES as usize]).unwrap();
+            assert!(matches!(
+                writer.write_compressed_hunk(compressed),
+                Err(Error::InvalidState)
+            ));
+            assert!(writer.write(&[3; 10]).is_err());
+            assert!(matches!(writer.finish(), Err(Error::InvalidState)));
+        }
+    }
+
+    #[test]
+    fn invalid_hunks_do_not_poison_the_writer() {
+        let (mut writer, _) = failing_writer(Some(CodecType::ZLibV5));
+        let (other, _) = failing_writer(Some(CodecType::ZLibV5));
+
+        assert!(matches!(
+            writer.write_hunk(&[1; 10]),
+            Err(Error::InvalidParameter)
+        ));
+        let compressed = other
+            .compressor()
+            .unwrap()
+            .compress(&[1; HUNK_BYTES as usize])
+            .unwrap();
+        assert!(matches!(
+            writer.write_compressed_hunk(compressed),
+            Err(Error::InvalidParameter)
+        ));
+
+        // A partial hunk written with Write blocks whole hunks until it is completed.
+        writer.write_all(&[1; 10]).unwrap();
+        assert!(matches!(
+            writer.write_hunk(&[1; HUNK_BYTES as usize]),
+            Err(Error::InvalidState)
+        ));
+        writer.write_all(&[1; HUNK_BYTES as usize - 10]).unwrap();
+        writer.write_hunk(&[2; HUNK_BYTES as usize]).unwrap();
+
+        let chd = Chd::open(writer.finish().unwrap().inner, None).unwrap();
+        assert_eq!(chd.header().logical_bytes(), 2 * HUNK_BYTES as u64);
+    }
+
+    #[test]
+    fn progress() {
+        let hunk = |byte| vec![byte; HUNK_BYTES as usize];
+
+        // Uncompressed CHDs store every hunk but zeroes.
+        let (mut writer, _) = failing_writer(None);
+        for byte in [1, 0, 1] {
+            writer.write_hunk(&hunk(byte)).unwrap();
+        }
+        writer.write_all(&[1; 100]).unwrap();
+        assert_eq!(writer.bytes_written(), 3 * HUNK_BYTES as u64 + 100);
+        assert_eq!(writer.bytes_stored(), 2 * HUNK_BYTES as u64);
+
+        // Compressed CHDs store compressed hunks, but not duplicates.
+        let (mut writer, _) = failing_writer(Some(CodecType::ZLibV5));
+        let mut compressor = writer.compressor().unwrap();
+        let mut stored = 0;
+        for byte in [1, 2, 1] {
+            let hunk = hunk(byte);
+            let compressed = compressor.compress(&hunk).unwrap();
+            stored += compressed.len() as u64;
+            writer.write_compressed_hunk(compressed).unwrap();
+        }
+        assert_eq!(writer.bytes_written(), 3 * HUNK_BYTES as u64);
+        assert_eq!(writer.bytes_stored(), stored);
+        assert!(stored > 0 && stored < 2 * HUNK_BYTES as u64);
     }
 }
