@@ -148,6 +148,19 @@ impl ChdWriteOptions {
         ChdWriteOptions::new(frame_bytes, frame_bytes).compression(&[CodecType::AVHuffV5])
     }
 
+    /// Set the hunk size in bytes, such as to change the hunk size of a preset.
+    ///
+    /// The hunk size must be a multiple of the unit size.
+    pub fn hunk_bytes(mut self, hunk_bytes: u32) -> Self {
+        self.hunk_bytes = hunk_bytes;
+        self
+    }
+
+    /// The hunk and unit sizes in bytes.
+    pub fn sizes(&self) -> (u32, u32) {
+        (self.hunk_bytes, self.unit_bytes)
+    }
+
     /// Set the logical size of the CHD in bytes ahead of time.
     ///
     /// For uncompressed CHDs, this places the map directly after the header.
