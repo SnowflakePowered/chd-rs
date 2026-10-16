@@ -1,8 +1,14 @@
 [package]
 name = "rchdman"
 version = "0.4.0"
+authors = ["Ronny Chan <ronny@ronnychan.ca>"]
 edition = "2021"
-
+description = "CHDMAN Utility implementations in Rust"
+license = "BSD-3-Clause"
+repository = "https://github.com/SnowflakePowered/chd-rs"
+readme = "../README.md"
+categories = ["emulators", "compression", "encoding"]
+keywords = ["mame", "chd", "decompression"]
 [lib]
 name = "rchdman"
 path = "src/lib.rs"

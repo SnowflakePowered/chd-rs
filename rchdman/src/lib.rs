@@ -1,10 +1,5 @@
-//! A Rust implementation of MAME's chdman.
-//!
-//! The commands of chdman are in [`chdman`], and the formats of CD-ROM and hard disk images
-//! are in [`cd`] and [`hd`].
-//!
-//! LaserDisc images (`createld` and `extractld`), GD-ROM images, and Nero, cdrdao, or
-//! `WAVE` inputs for CD-ROM images are not supported.
+//! A Rust implementation of the CHDMAN utility commands, including
+//! CD TOC and hard disk parsers.
 pub mod cd;
 pub mod chdman;
 mod common;
