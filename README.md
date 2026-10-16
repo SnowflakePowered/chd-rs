@@ -18,8 +18,7 @@ is on readability and correctness.
 
 Compression is available with the `encode` feature. FLAC compression is backed by
 [flacenc](https://crates.io/crates/flacenc), and Zstandard compression is backed by the
-[ruzstd](https://crates.io/crates/ruzstd) encoder in pure-Rust mode. With `fast_zstd` (enabled by default),
-Zstandard compression goes through [zstd-safe](https://crates.io/crates/zstd-safe) with the maximum compression level.
+[zrip](https://crates.io/crates/zrip) encoder by default. With the `fast_zstd` feature, Zstandard compression goes through [zstd-safe](https://crates.io/crates/zstd-safe) with the maximum compression level.
 
 ## Usage
 Open a `Chd` with `Chd::open`, then iterate hunks from 0 to `chd.header().hunk_count()` to
