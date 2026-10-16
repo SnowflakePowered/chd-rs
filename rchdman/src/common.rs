@@ -3,12 +3,15 @@ use crate::error::{Error, Result};
 use arrayvec::ArrayVec;
 use chd::header::{CodecType, Header};
 use chd::metadata::Metadata;
-use chd::write::{ChdWriteCodecs, ChdWriteOptions, ChdWriter, CompressedHunk, HunkCompressor};
+use chd::write::{ChdWriteCodecs, ChdWriteOptions, ChdWriter, HunkCompressor};
 use chd::Chd;
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::thread;
 
 pub(crate) type ChdFile = Chd<BufReader<File>>;
@@ -246,7 +249,7 @@ impl WriteOptions {
             .collect::<chd::Result<Vec<_>>>()?;
         let hunk_bytes = hunk_bytes as usize;
         Ok(ParallelWriter {
-            batch: Vec::with_capacity(threads * 8 * hunk_bytes),
+            batch: Vec::with_capacity(threads * 32 * hunk_bytes),
             writer,
             compressors,
             hunk_bytes,
@@ -302,28 +305,38 @@ impl<W: Write + Seek> ParallelWriter<W> {
     fn write_batch(&mut self) -> chd::Result<()> {
         let whole = self.batch.len() / self.hunk_bytes * self.hunk_bytes;
         let hunks: Vec<&[u8]> = self.batch[..whole].chunks(self.hunk_bytes).collect();
-        let per_thread = hunks.len().div_ceil(self.compressors.len()).max(1);
-        let compressed: Vec<Vec<CompressedHunk>> = thread::scope(|scope| {
-            let workers: Vec<_> = hunks
-                .chunks(per_thread)
-                .zip(self.compressors.iter_mut())
-                .map(|(hunks, compressor)| {
-                    scope.spawn(move || {
-                        hunks
-                            .iter()
-                            .map(|hunk| compressor.compress(hunk))
-                            .collect::<chd::Result<Vec<_>>>()
-                    })
-                })
-                .collect();
-            workers
-                .into_iter()
-                .map(|worker| worker.join().expect("compression thread panicked"))
-                .collect::<chd::Result<Vec<_>>>()
+        let writer = &mut self.writer;
+        // Each thread takes the next hunk when it is done with one, as hunks take very
+        // different times to compress.
+        let next = AtomicUsize::new(0);
+        thread::scope(|scope| -> chd::Result<()> {
+            let (sender, receiver) = mpsc::channel();
+            for compressor in &mut self.compressors {
+                let (hunks, next, sender) = (&hunks, &next, sender.clone());
+                scope.spawn(move || loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(hunk) = hunks.get(index) else {
+                        return;
+                    };
+                    if sender.send((index, compressor.compress(hunk))).is_err() {
+                        return;
+                    }
+                });
+            }
+            drop(sender);
+
+            // Write the hunks in order while the rest are compressed.
+            let mut compressed = BTreeMap::new();
+            let mut written = 0;
+            for (index, hunk) in receiver {
+                compressed.insert(index, hunk);
+                while let Some(hunk) = compressed.remove(&written) {
+                    writer.write_compressed_hunk(hunk?)?;
+                    written += 1;
+                }
+            }
+            Ok(())
         })?;
-        for hunk in compressed.into_iter().flatten() {
-            self.writer.write_compressed_hunk(hunk)?;
-        }
         self.batch.drain(..whole);
         Ok(())
     }
