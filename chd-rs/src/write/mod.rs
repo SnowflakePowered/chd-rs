@@ -59,7 +59,7 @@ mod sealed {
 }
 
 /// The codecs to use when writing a CHD file.
-/// 
+///
 /// Accepts up to four codecs. An empty slice (i.e. no codecs) indicates an uncompressed CHD.
 pub trait ChdWriteCodecs: sealed::Sealed {
     #[doc(hidden)]
