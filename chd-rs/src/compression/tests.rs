@@ -123,7 +123,11 @@ fn audio_roundtrip() {
     let input = audio(true);
     assert_roundtrip::<ZlibCodec>("zlib", &input);
     assert_roundtrip::<LzmaCodec>("lzma", &input);
+    // zrip does not entropy code literals without matches, so it can not compress the tone.
+    #[cfg(feature = "fast_zstd")]
     assert_roundtrip::<ZstdCodec>("zstd", &input);
+    #[cfg(not(feature = "fast_zstd"))]
+    assert_incompressible::<ZstdCodec>("zstd", &input);
     assert_roundtrip::<HuffmanCodec>("huff", &input);
     assert_roundtrip::<CdFlacCodec>("cdfl", &input);
 
