@@ -15,15 +15,20 @@ use crate::Error;
 /// when decompressed.
 ///
 /// ## Compression
-/// Without `fast_zstd`, hunks are compressed with the pure Rust ruzstd encoder.
-/// ruzstd only encodedes up to around Zstandard level 1. Use `fast_zstd` for chdman-equivalent compression.
+/// Without `fast_zstd`, hunks are compressed with the pure Rust zrip encoder at level 1,
+/// which compresses CD-ROM data better than its higher levels. Use `fast_zstd` for
+/// chdman-equivalent compression.
 #[cfg(not(feature = "fast_zstd"))]
 pub struct ZstdCodec {
-    decoder: ruzstd::decoding::FrameDecoder,
-    // ruzstd panics if it can not write to the output, so compress into a buffer first.
-    #[cfg(feature = "encode")]
+    decoder: zrip::DecompressContext,
     buffer: Vec<u8>,
+    #[cfg(feature = "encode")]
+    encoder: zrip::CompressContext,
 }
+
+/// The compression level of zrip.
+#[cfg(all(not(feature = "fast_zstd"), feature = "encode"))]
+const ZRIP_LEVEL: i32 = 1;
 
 /// Zstandard (zstd) decompression codec.
 ///
@@ -48,51 +53,44 @@ impl CodecImplementation for ZstdCodec {
         Self: Sized,
     {
         Ok(Self {
-            decoder: ruzstd::decoding::FrameDecoder::new(),
-            #[cfg(feature = "encode")]
+            decoder: zrip::DecompressContext::new(),
             buffer: Vec::new(),
+            #[cfg(feature = "encode")]
+            encoder: zrip::CompressContext::new(ZRIP_LEVEL).map_err(|_| Error::CodecError)?,
         })
     }
 
     #[cfg(feature = "encode")]
     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
-        use ruzstd::encoding::{compress, CompressionLevel};
-
-        self.buffer.clear();
-        compress(input, &mut self.buffer, CompressionLevel::Fastest);
-
-        let compressed_len = self.buffer.len();
+        // Anything not smaller than the input is a failure, so don't bother writing more.
+        let output_len = output.len().min(input.len());
+        let compressed_len = self
+            .encoder
+            .compress_into(input, &mut output[..output_len])
+            .map_err(|_| Error::CompressionError)?;
         if compressed_len >= input.len() {
             return Err(Error::CompressionError);
         }
-        output
-            .get_mut(..compressed_len)
-            .ok_or(Error::CompressionError)?
-            .copy_from_slice(&self.buffer);
         Ok(compressed_len)
     }
 
-    fn decompress(
-        &mut self,
-        mut input: &[u8],
-        output: &mut [u8],
-    ) -> crate::Result<DecompressResult> {
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
+        self.buffer.clear();
         let bytes_out = self
             .decoder
-            .decode_all(&mut input, output)
-            .map_err(|e| Error::DecompressionError)?;
+            .decompress_into_with_limit(input, &mut self.buffer, output.len())
+            .map_err(|_| Error::DecompressionError)?;
 
         // If each chunk doesn't output to exactly the same then it's an error
         if bytes_out != output.len() {
             return Err(Error::DecompressionError);
         }
+        output.copy_from_slice(&self.buffer);
 
         Ok(DecompressResult {
             bytes_out,
-            // The "read" value returned by decode_from_to() would be incorrect here,
-            // since reset() modifies the slice length.
-            // bytes_read_from_source() appears to return the whole block length.
-            bytes_read: self.decoder.bytes_read_from_source() as usize,
+            // The input is exactly the compressed hunk.
+            bytes_read: input.len(),
         })
     }
 }
