@@ -45,8 +45,20 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
             .collect();
         let source = flacenc::source::MemSource::from_samples(&samples, CHANNELS, 16, 44100);
 
+        // MAME encodes with libFLAC at compression level 8, which predicts with an LPC order
+        // of up to 12, and picks the precision of the coefficients from the block size.
         let mut config = flacenc::config::Encoder::default();
         config.block_size = self.block_size;
+        config.subframe_coding.qlpc.lpc_order = 12;
+        config.subframe_coding.qlpc.quant_precision = match self.block_size {
+            ..=192 => 7,
+            ..=384 => 8,
+            ..=576 => 9,
+            ..=1152 => 10,
+            ..=2304 => 11,
+            ..=4608 => 12,
+            _ => 13,
+        };
         let config = config
             .into_verified()
             .map_err(|_| Error::CompressionError)?;
