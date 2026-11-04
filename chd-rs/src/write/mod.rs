@@ -311,9 +311,10 @@ impl<W: Write + Seek> ChdWriter<W> {
 
         // With a known number of hunks, the map and the index of stored hunks are sized
         // up front, so they do not grow while hunks are compressed on other threads.
+        // Both reservations are best effort: a refused allocation falls back to growth.
         let mut entries = Vec::new();
         if let Some(hunk_count) = hunk_count {
-            entries.reserve_exact(hunk_count as usize);
+            let _ = entries.try_reserve_exact(hunk_count as usize);
             if compressed {
                 state.reserve(hunk_count as usize);
             }

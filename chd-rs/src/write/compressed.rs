@@ -104,11 +104,15 @@ impl CompressionState {
     }
 
     /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
+    ///
+    /// This is a best-effort hint: if the allocation is refused, the index grows as hunks
+    /// are stored instead of aborting.
     pub fn reserve(&self, additional: usize) {
-        self.hunks
+        let _ = self
+            .hunks
             .write()
             .unwrap_or_else(PoisonError::into_inner)
-            .reserve(additional);
+            .try_reserve(additional);
     }
 
     #[cfg(test)]
