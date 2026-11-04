@@ -182,8 +182,11 @@ impl HunkCompressor {
         hunk_bytes: u32,
         state: CompressionState,
     ) -> Result<Self> {
+        let codecs = codecs.into_array_vec();
+        if levels[codecs.len()..].iter().any(Option::is_some) {
+            return Err(Error::InvalidParameter);
+        }
         let codecs = codecs
-            .into_array_vec()
             .iter()
             .zip(levels)
             .map(|(codec, level)| match codec {
@@ -542,6 +545,8 @@ mod tests {
             (CodecType::ZstdV5, zstd_safe::max_c_level() + 1),
             (CodecType::ZstdCdV5, zstd_safe::min_c_level() - 1),
         ]);
+        #[cfg(not(feature = "fast_zstd"))]
+        invalid.extend([(CodecType::ZstdV5, 5), (CodecType::ZstdCdV5, -9)]);
         for (codec, level) in invalid {
             assert!(
                 matches!(
@@ -573,6 +578,15 @@ mod tests {
         let hunk = compressor.compress(&input).unwrap();
         // Stored Deflate never wins, so LZMA does.
         assert_eq!(hunk.kind, HunkKind::Compressed(1));
+        assert!(matches!(
+            HunkCompressor::with_levels(
+                &codecs,
+                [None, None, Some(1), None],
+                HUNK_BYTES,
+                CompressionState::default()
+            ),
+            Err(Error::InvalidParameter)
+        ));
         assert!(matches!(
             HunkCompressor::with_levels(
                 &codecs,

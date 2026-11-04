@@ -12,7 +12,7 @@ use crate::compression::codecs::{
     AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, CdZstdCodec, HuffmanCodec, LzmaCodec,
     NoneCodec, RawFlacCodec, ZlibCodec, ZstdCodec,
 };
-use crate::compression::{CodecImplementation, CompressionCodec};
+use crate::compression::CompressionCodec;
 use crate::error::{Error, Result};
 use crate::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
 use crate::{make_tag, map};
@@ -72,48 +72,11 @@ impl CodecType {
 
     /// Initializes the codec for the provided hunk size.
     pub(crate) fn init(&self, hunk_size: u32) -> Result<Box<dyn CompressionCodec>> {
-        match self {
-            CodecType::None => {
-                NoneCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
-                ZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::ZLibCdV5 => {
-                CdZlibCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::LzmaCdV5 => {
-                CdLzmaCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::FlacCdV5 => {
-                CdFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::LzmaV5 => {
-                <LzmaCodec>::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::FlacV5 => {
-                RawFlacCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::HuffV5 => {
-                HuffmanCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::AV | CodecType::AVHuffV5 => {
-                AVHuffCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::ZstdV5 => {
-                ZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            CodecType::ZstdCdV5 => {
-                CdZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
-            }
-            #[allow(unreachable_patterns)]
-            _ => Err(Error::UnsupportedFormat),
-        }
+        self.init_with_level(hunk_size, None)
     }
 
     /// Initializes the codec for the provided hunk size, compressing at the given level
     /// if there is one.
-    #[cfg(feature = "encode")]
     pub(crate) fn init_with_level(
         &self,
         hunk_size: u32,
@@ -121,14 +84,16 @@ impl CodecType {
     ) -> Result<Box<dyn CompressionCodec>> {
         fn boxed<C: CompressionCodec + 'static>(
             hunk_size: u32,
-            level: i32,
+            level: Option<i32>,
         ) -> Result<Box<dyn CompressionCodec>> {
-            C::with_level(hunk_size, level).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            let codec = match level {
+                #[cfg(feature = "encode")]
+                Some(level) => C::with_level(hunk_size, level),
+                _ => C::new(hunk_size),
+            };
+            codec.map(|x| Box::new(x) as Box<dyn CompressionCodec>)
         }
 
-        let Some(level) = level else {
-            return self.init(hunk_size);
-        };
         match self {
             CodecType::None => boxed::<NoneCodec>(hunk_size, level),
             CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
