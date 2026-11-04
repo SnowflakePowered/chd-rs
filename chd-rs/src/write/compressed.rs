@@ -158,22 +158,38 @@ pub struct HunkCompressor {
 }
 
 impl HunkCompressor {
-    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
-    ///
-    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec,
-    /// or [`CodecError`](Error::CodecError) if a codec does not support the hunk size.
+    /// A compressor for the given codecs at their default levels.
+    #[cfg(test)]
     pub(crate) fn new(
         codecs: impl ChdWriteCodecs,
+        hunk_bytes: u32,
+        state: CompressionState,
+    ) -> Result<Self> {
+        Self::with_levels(codecs, [None; 4], hunk_bytes, state)
+    }
+
+    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
+    ///
+    /// Each codec compresses at the level in the same position, or its default level if
+    /// that is `None`.
+    ///
+    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec
+    /// or a level is not valid for its codec, or [`CodecError`](Error::CodecError) if a
+    /// codec does not support the hunk size.
+    pub(crate) fn with_levels(
+        codecs: impl ChdWriteCodecs,
+        levels: [Option<i32>; 4],
         hunk_bytes: u32,
         state: CompressionState,
     ) -> Result<Self> {
         let codecs = codecs
             .into_array_vec()
             .iter()
-            .map(|codec| match codec {
+            .zip(levels)
+            .map(|(codec, level)| match codec {
                 CodecType::None => Err(Error::InvalidParameter),
                 codec if codec.is_legacy() => Err(Error::InvalidParameter),
-                codec => codec.init(hunk_bytes),
+                codec => codec.init_with_level(hunk_bytes, level),
             })
             .collect::<Result<ArrayVec<_, 4>>>()?;
 
@@ -386,6 +402,184 @@ mod tests {
         .unwrap();
         assert!(matches!(
             compressor.compress(&[0u8; 16]),
+            Err(Error::InvalidParameter)
+        ));
+    }
+
+    /// Correlated stereo 16-bit PCM, which FLAC compresses better with mid-side coding.
+    fn audio() -> Vec<u8> {
+        (0..HUNK_BYTES as usize / 4)
+            .flat_map(|n| {
+                let left = ((n as f64 / 20.0).sin() * 8000.0) as i16;
+                let right = left / 2 + ((n as f64 / 7.0).sin() * 500.0) as i16;
+                [left.to_be_bytes(), right.to_be_bytes()]
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Text of random words, which compresses to different sizes at different levels.
+    fn words() -> Vec<u8> {
+        const WORDS: [&str; 8] = [
+            "chd ", "hunk ", "frame ", "sector ", "map ", "lzma ", "zlib ", "flac ",
+        ];
+        let mut rng = StdRng::seed_from_u64(2);
+        let mut data = Vec::new();
+        while data.len() < HUNK_BYTES as usize {
+            data.extend_from_slice(WORDS[rng.random_range(0..WORDS.len())].as_bytes());
+        }
+        data.truncate(HUNK_BYTES as usize);
+        data
+    }
+
+    /// Each codec with levels, the level chdman compresses with, and levels to test.
+    fn leveled_codecs() -> Vec<(CodecType, i32, Vec<i32>)> {
+        #[cfg(feature = "fast_zstd")]
+        let (zstd_default, zstd_levels) = (
+            zstd_safe::max_c_level(),
+            vec![
+                zstd_safe::min_c_level(),
+                -1,
+                0,
+                1,
+                3,
+                19,
+                zstd_safe::max_c_level(),
+            ],
+        );
+        #[cfg(not(feature = "fast_zstd"))]
+        let (zstd_default, zstd_levels) = (1, vec![1]);
+        let zlib_levels: Vec<i32> = (0..=9).collect();
+        let lzma_levels: Vec<i32> = (0..=9).collect();
+        let flac_levels: Vec<i32> = (0..=8).collect();
+        vec![
+            (CodecType::ZLibV5, 9, zlib_levels.clone()),
+            (CodecType::ZLibCdV5, 9, zlib_levels),
+            (CodecType::LzmaV5, 6, lzma_levels.clone()),
+            (CodecType::LzmaCdV5, 6, lzma_levels),
+            (CodecType::ZstdV5, zstd_default, zstd_levels.clone()),
+            (CodecType::ZstdCdV5, zstd_default, zstd_levels),
+            (CodecType::FlacV5, 8, flac_levels.clone()),
+            (CodecType::FlacCdV5, 8, flac_levels),
+        ]
+    }
+
+    fn compress_with(codec: CodecType, level: Option<i32>, input: &[u8]) -> Option<Vec<u8>> {
+        let mut output = vec![0u8; HUNK_BYTES as usize];
+        let len = codec
+            .init_with_level(HUNK_BYTES, level)
+            .unwrap()
+            .compress(input, &mut output)
+            .ok()?;
+        output.truncate(len);
+        Some(output)
+    }
+
+    #[test]
+    fn default_levels_are_chdman_levels() {
+        for (codec, chdman_level, _) in leveled_codecs() {
+            for input in [text(), words(), audio()] {
+                assert_eq!(
+                    compress_with(codec, None, &input),
+                    compress_with(codec, Some(chdman_level), &input),
+                    "{:?}",
+                    codec as u32
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn levels_round_trip_and_change_output() {
+        for (codec, _, levels) in leveled_codecs() {
+            let input = match codec {
+                CodecType::FlacV5 | CodecType::FlacCdV5 => audio(),
+                _ => words(),
+            };
+            let mut sizes = Vec::new();
+            for level in levels.iter().copied() {
+                // Stored Deflate is larger than the input.
+                let Some(compressed) = compress_with(codec, Some(level), &input) else {
+                    sizes.push(None);
+                    continue;
+                };
+                let mut output = vec![0u8; HUNK_BYTES as usize];
+                codec
+                    .init(HUNK_BYTES)
+                    .unwrap()
+                    .decompress(&compressed, &mut output)
+                    .unwrap();
+                assert!(output == input, "{:?} level {level}", codec as u32);
+                sizes.push(Some(compressed.len()));
+            }
+            sizes.sort();
+            sizes.dedup();
+            assert!(
+                levels.len() == 1 || sizes.len() > 1,
+                "{:?} compressed every level to {sizes:?}",
+                codec as u32
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_levels() {
+        let mut invalid = vec![
+            (CodecType::ZLibV5, -1),
+            (CodecType::ZLibV5, 10),
+            (CodecType::ZLibCdV5, 10),
+            (CodecType::LzmaV5, -1),
+            (CodecType::LzmaV5, 10),
+            (CodecType::LzmaCdV5, 10),
+            (CodecType::FlacV5, -1),
+            (CodecType::FlacV5, 9),
+            (CodecType::FlacCdV5, 9),
+            (CodecType::HuffV5, 0),
+            (CodecType::AVHuffV5, 0),
+        ];
+        #[cfg(feature = "fast_zstd")]
+        invalid.extend([
+            (CodecType::ZstdV5, zstd_safe::max_c_level() + 1),
+            (CodecType::ZstdCdV5, zstd_safe::min_c_level() - 1),
+        ]);
+        for (codec, level) in invalid {
+            assert!(
+                matches!(
+                    HunkCompressor::with_levels(
+                        &[codec],
+                        [Some(level), None, None, None],
+                        HUNK_BYTES,
+                        CompressionState::default()
+                    ),
+                    Err(Error::InvalidParameter)
+                ),
+                "{:?} level {level}",
+                codec as u32
+            );
+        }
+    }
+
+    #[test]
+    fn levels_apply_to_codecs_in_order() {
+        let codecs = [CodecType::ZLibV5, CodecType::LzmaV5];
+        let input = text();
+        let mut compressor = HunkCompressor::with_levels(
+            &codecs,
+            [Some(0), None, None, None],
+            HUNK_BYTES,
+            CompressionState::default(),
+        )
+        .unwrap();
+        let hunk = compressor.compress(&input).unwrap();
+        // Stored Deflate never wins, so LZMA does.
+        assert_eq!(hunk.kind, HunkKind::Compressed(1));
+        assert!(matches!(
+            HunkCompressor::with_levels(
+                &codecs,
+                [None, Some(10), None, None],
+                HUNK_BYTES,
+                CompressionState::default()
+            ),
             Err(Error::InvalidParameter)
         ));
     }

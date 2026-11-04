@@ -51,6 +51,7 @@ pub struct ChdWriteOptions {
     unit_bytes: u32,
     logical_bytes: Option<u64>,
     compression_codecs: ArrayVec<CodecType, 4>,
+    compression_levels: [Option<i32>; 4],
     hash_uncompressed: bool,
 }
 
@@ -98,6 +99,7 @@ impl ChdWriteOptions {
             unit_bytes,
             logical_bytes: None,
             compression_codecs: ArrayVec::new(),
+            compression_levels: [None; 4],
             hash_uncompressed: false,
         }
     }
@@ -183,6 +185,25 @@ impl ChdWriteOptions {
     /// accepts up to 4 compression codecs in a slice.
     pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
         self.compression_codecs = compression.into_array_vec();
+        self
+    }
+
+    /// Set the compression level of each codec, in the same order as the codecs.
+    ///
+    /// `None` compresses with the level chdman uses for the codec. Levels outside the
+    /// range of their codec, or levels for codecs without levels, make creating the
+    /// writer return [`InvalidParameter`](Error::InvalidParameter).
+    ///
+    /// | Codec | Levels | chdman |
+    /// |-------|--------|--------|
+    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9 |
+    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6 |
+    /// | Zstandard (`zstd`, `cdzs`) | negative to 22, where 0 is 3 | 22 |
+    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8 |
+    ///
+    /// CD-ROM codecs compress subcode data at the chdman level regardless.
+    pub fn compression_levels(mut self, levels: [Option<i32>; 4]) -> Self {
+        self.compression_levels = levels;
         self
     }
 
@@ -301,8 +322,9 @@ impl<W: Write + Seek> ChdWriter<W> {
             })
             .transpose()?;
 
-        let compressor = HunkCompressor::new(
+        let compressor = HunkCompressor::with_levels(
             &options.compression_codecs,
+            options.compression_levels,
             options.hunk_bytes,
             state.clone(),
         )?;
@@ -351,8 +373,9 @@ impl<W: Write + Seek> ChdWriter<W> {
     /// duplicate hunks are not compressed again. If the CHD is uncompressed, the compressor
     /// stores every hunk as is.
     pub fn compressor(&self) -> Result<HunkCompressor> {
-        HunkCompressor::new(
+        HunkCompressor::with_levels(
             &self.options.compression_codecs,
+            self.options.compression_levels,
             self.options.hunk_bytes,
             self.state.clone(),
         )
