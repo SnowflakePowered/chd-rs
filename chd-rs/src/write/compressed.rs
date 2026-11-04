@@ -103,6 +103,22 @@ impl CompressionState {
         self.parent.get(hash).copied()
     }
 
+    /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
+    pub fn reserve(&self, additional: usize) {
+        self.hunks
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .reserve(additional);
+    }
+
+    #[cfg(test)]
+    pub fn capacity(&self) -> usize {
+        self.hunks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .capacity()
+    }
+
     /// Mark a compressed hunk as previously written.
     pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
         self.hunks

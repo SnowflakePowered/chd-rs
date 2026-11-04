@@ -309,10 +309,20 @@ impl<W: Write + Seek> ChdWriter<W> {
         let compressed = !options.compression_codecs.is_empty();
         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
 
+        // With a known number of hunks, the map and the index of stored hunks are sized
+        // up front, so they do not grow while hunks are compressed on other threads.
+        let mut entries = Vec::new();
+        if let Some(hunk_count) = hunk_count {
+            entries.reserve_exact(hunk_count as usize);
+            if compressed {
+                state.reserve(hunk_count as usize);
+            }
+        }
+
         let mut writer = ChdWriter {
             inner,
             options,
-            entries: Vec::new(),
+            entries,
             hunk_count,
             buffer: Vec::new(),
             written: 0,
@@ -1004,6 +1014,14 @@ mod compressed_tests {
             writer.write_compressed_hunk(compressed).unwrap();
         }
         writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn hunk_tables_are_sized_from_the_logical_size() {
+        let options = options().logical_bytes(10 * HUNK_BYTES as u64);
+        let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
+        assert!(writer.entries.capacity() >= 10);
+        assert!(writer.state.capacity() >= 10);
     }
 
     #[test]
