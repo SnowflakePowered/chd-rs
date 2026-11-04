@@ -5,11 +5,10 @@ use crate::header::CodecType;
 use crate::write::ChdWriteCodecs;
 use crate::Chd;
 use arrayvec::ArrayVec;
-use parking_lot::RwLock;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::io::{Read, Seek};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock};
 
 /// Hash key for an uncompressed hunk.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -90,7 +89,13 @@ impl CompressionState {
 
     /// Find the index of the previously compressed hunk with the given hash
     pub fn find(&self, hash: &HunkHash) -> Option<u32> {
-        self.hunks.read().get(hash).copied()
+        // A panic while holding the lock can not leave the map half-updated, so a poisoned
+        // lock is still safe to use.
+        self.hunks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(hash)
+            .copied()
     }
 
     /// Find the unit of the parent CHD that starts a run of units with the given hash.
@@ -100,7 +105,11 @@ impl CompressionState {
 
     /// Mark a compressed hunk as previously written.
     pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
-        self.hunks.write().entry(hash).or_insert(hunk_num);
+        self.hunks
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .entry(hash)
+            .or_insert(hunk_num);
     }
 
     /// Whether this is the same state, shared by the same writer.
