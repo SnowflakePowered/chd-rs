@@ -22,9 +22,10 @@ use crate::map::{CompressionTypeV5, Map, RawMapEntryV5};
 use crate::metadata::{MetadataData, MetadataTag};
 use crate::Chd;
 use arrayvec::ArrayVec;
-use compressed::{CompressionState, HunkKind};
+use compressed::{CompressionState, HunkHash, HunkKind};
 use metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
 use sha1::{Digest, Sha1};
+use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
 mod compressed;
@@ -247,7 +248,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     ///
     /// If a codec does not support the hunk size, returns [`CodecError`](Error::CodecError).
     pub fn new(inner: W, options: ChdWriteOptions) -> Result<Self> {
-        Self::create(inner, options, CompressionState::default(), [0; 20])
+        Self::create(inner, options, HashMap::new(), [0; 20])
     }
 
     /// Creates a writer for a CHD V5 file that refers to data in a parent CHD.
@@ -276,14 +277,14 @@ impl<W: Write + Seek> ChdWriter<W> {
         {
             return Err(Error::InvalidParameter);
         }
-        let state = CompressionState::with_parent(parent, options.unit_bytes)?;
-        Self::create(inner, options, state, parent_sha1)
+        let parent = CompressionState::index_parent(parent, options.unit_bytes)?;
+        Self::create(inner, options, parent, parent_sha1)
     }
 
     fn create(
         inner: W,
         options: ChdWriteOptions,
-        state: CompressionState,
+        parent: HashMap<HunkHash, u64>,
         parent_sha1: [u8; 20],
     ) -> Result<Self> {
         if options.unit_bytes == 0
@@ -301,22 +302,20 @@ impl<W: Write + Seek> ChdWriter<W> {
             })
             .transpose()?;
 
+        let compressed = !options.compression_codecs.is_empty();
+        let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
+
+        // On wasm32, growing the heap while other threads run can trap them.
+        let reserved = hunk_count.unwrap_or(0) as usize;
+        let mut entries = Vec::new();
+        let _ = entries.try_reserve_exact(reserved);
+        let state = CompressionState::new(parent, if compressed { reserved } else { 0 });
+
         let compressor = HunkCompressor::new(
             &options.compression_codecs,
             options.hunk_bytes,
             state.clone(),
         )?;
-        let compressed = !options.compression_codecs.is_empty();
-        let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
-
-        // On wasm32, growing the heap while other threads run can trap them.
-        let mut entries = Vec::new();
-        if let Some(hunk_count) = hunk_count {
-            let _ = entries.try_reserve_exact(hunk_count as usize);
-            if compressed {
-                state.reserve(hunk_count as usize);
-            }
-        }
 
         let mut writer = ChdWriter {
             inner,

@@ -67,12 +67,25 @@ pub(crate) struct CompressionState {
 }
 
 impl CompressionState {
-    /// The state for a CHD with a parent CHD.
+    /// The state for a CHD of up to `hunk_count` hunks, with the index of its parent CHD.
+    pub fn new(parent: HashMap<HunkHash, u64>, hunk_count: usize) -> Self {
+        let state = CompressionState {
+            hunks: Default::default(),
+            parent: Arc::new(parent),
+        };
+        let _ = state.hunks.write().try_reserve(hunk_count);
+        state
+    }
+
+    /// Index a parent CHD for [`new`](CompressionState::new).
     ///
     /// Every run of units in the parent the size of a hunk is hashed, like chdman, so a
     /// hunk can refer to data in the parent that is not aligned to the hunks of the parent.
     /// The parent must have the given hunk size.
-    pub fn with_parent<F: Read + Seek>(parent: &mut Chd<F>, unit_bytes: u32) -> Result<Self> {
+    pub fn index_parent<F: Read + Seek>(
+        parent: &mut Chd<F>,
+        unit_bytes: u32,
+    ) -> Result<HashMap<HunkHash, u64>> {
         let hunk_bytes = parent.header().hunk_size() as usize;
         let hunk_count = parent.header().hunk_count();
         let units_per_hunk = hunk_bytes / unit_bytes as usize;
@@ -105,10 +118,7 @@ impl CompressionState {
             buffer.copy_within(hunk_bytes.., 0);
         }
 
-        Ok(CompressionState {
-            hunks: Default::default(),
-            parent: Arc::new(units),
-        })
+        Ok(units)
     }
 
     /// Find the index of the previously compressed hunk with the given hash
@@ -119,11 +129,6 @@ impl CompressionState {
     /// Find the unit of the parent CHD that starts a run of units with the given hash.
     pub fn find_parent(&self, hash: &HunkHash) -> Option<u64> {
         self.parent.get(hash).copied()
-    }
-
-    /// Reserve room for `additional` hunks, if the allocation succeeds.
-    pub fn reserve(&self, additional: usize) {
-        let _ = self.hunks.write().try_reserve(additional);
     }
 
     #[cfg(test)]
