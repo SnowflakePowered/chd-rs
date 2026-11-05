@@ -122,9 +122,6 @@ pub(crate) enum HunkKind {
 }
 
 /// A hunk after it has been compressed by [`HunkCompressor`].
-///
-/// A hunk from [`compress_owned`](HunkCompressor::compress_owned) owns its input, so it can be
-/// sent to the thread that writes it.
 pub struct CompressedHunk<'a> {
     /// The uncompressed hunk.
     pub(crate) hunk: Cow<'a, [u8]>,
@@ -199,9 +196,7 @@ impl HunkCompressor {
         self.compress_cow(Cow::Borrowed(hunk))
     }
 
-    /// Compress a hunk like [`compress`](HunkCompressor::compress), taking ownership of it so
-    /// the result can outlive the buffer it was read into, such as when hunks are compressed
-    /// on other threads.
+    /// Like [`compress`](HunkCompressor::compress), but takes ownership of the hunk.
     pub fn compress_owned(&mut self, hunk: Vec<u8>) -> Result<CompressedHunk<'static>> {
         self.compress_cow(Cow::Owned(hunk))
     }

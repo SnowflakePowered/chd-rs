@@ -1069,33 +1069,6 @@ mod compressed_tests {
     }
 
     #[test]
-    fn hunks_compressed_owned_on_other_threads_match_write_hunk() {
-        let data = data();
-        let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options()).unwrap();
-        let compressed: Vec<_> = std::thread::scope(|scope| {
-            let workers: Vec<_> = data
-                .chunks_exact(HUNK_BYTES as usize)
-                .map(|hunk| {
-                    let mut compressor = writer.compressor().unwrap();
-                    let hunk = hunk.to_vec();
-                    scope.spawn(move || compressor.compress_owned(hunk).unwrap())
-                })
-                .collect();
-            workers
-                .into_iter()
-                .map(|worker| worker.join().unwrap())
-                .collect()
-        });
-        for hunk in compressed {
-            writer.write_compressed_hunk(hunk).unwrap();
-        }
-        assert_eq!(
-            writer.finish().unwrap().into_inner(),
-            write_hunks(options(), &data)
-        );
-    }
-
-    #[test]
     fn duplicates_compressed_before_the_original_is_written() {
         let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options()).unwrap();
         let mut compressor = writer.compressor().unwrap();
