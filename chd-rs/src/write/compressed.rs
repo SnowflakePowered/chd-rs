@@ -8,7 +8,32 @@ use arrayvec::ArrayVec;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::io::{Read, Seek};
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::Arc;
+
+#[cfg(not(target_arch = "wasm32"))]
+use parking_lot::RwLock;
+#[cfg(target_arch = "wasm32")]
+use std_lock::RwLock;
+
+/// A `std::sync::RwLock` that ignores poisoning, like `parking_lot::RwLock`. A panic while
+/// holding the lock can not leave the hunk index half-updated.
+#[cfg(target_arch = "wasm32")]
+mod std_lock {
+    use std::sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard};
+
+    #[derive(Default)]
+    pub struct RwLock<T>(std::sync::RwLock<T>);
+
+    impl<T> RwLock<T> {
+        pub fn read(&self) -> RwLockReadGuard<'_, T> {
+            self.0.read().unwrap_or_else(PoisonError::into_inner)
+        }
+
+        pub fn write(&self) -> RwLockWriteGuard<'_, T> {
+            self.0.write().unwrap_or_else(PoisonError::into_inner)
+        }
+    }
+}
 
 /// Hash key for an uncompressed hunk.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -89,13 +114,7 @@ impl CompressionState {
 
     /// Find the index of the previously compressed hunk with the given hash
     pub fn find(&self, hash: &HunkHash) -> Option<u32> {
-        // A panic while holding the lock can not leave the map half-updated, so a poisoned
-        // lock is still safe to use.
-        self.hunks
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(hash)
-            .copied()
+        self.hunks.read().get(hash).copied()
     }
 
     /// Find the unit of the parent CHD that starts a run of units with the given hash.
@@ -108,28 +127,17 @@ impl CompressionState {
     /// This is a best-effort hint: if the allocation is refused, the index grows as hunks
     /// are stored instead of aborting.
     pub fn reserve(&self, additional: usize) {
-        let _ = self
-            .hunks
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
-            .try_reserve(additional);
+        let _ = self.hunks.write().try_reserve(additional);
     }
 
     #[cfg(test)]
     pub fn capacity(&self) -> usize {
-        self.hunks
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .capacity()
+        self.hunks.read().capacity()
     }
 
     /// Mark a compressed hunk as previously written.
     pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
-        self.hunks
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
-            .entry(hash)
-            .or_insert(hunk_num);
+        self.hunks.write().entry(hash).or_insert(hunk_num);
     }
 
     /// Whether this is the same state, shared by the same writer.
