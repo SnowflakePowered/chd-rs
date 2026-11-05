@@ -15,8 +15,7 @@ use parking_lot::RwLock;
 #[cfg(target_arch = "wasm32")]
 use std_lock::RwLock;
 
-/// A `std::sync::RwLock` that ignores poisoning, like `parking_lot::RwLock`. A panic while
-/// holding the lock can not leave the hunk index half-updated.
+/// `std::sync::RwLock` without poisoning, since `parking_lot` can not park on wasm32.
 #[cfg(target_arch = "wasm32")]
 mod std_lock {
     use std::sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard};
@@ -122,10 +121,7 @@ impl CompressionState {
         self.parent.get(hash).copied()
     }
 
-    /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
-    ///
-    /// This is a best-effort hint: if the allocation is refused, the index grows as hunks
-    /// are stored instead of aborting.
+    /// Reserve room for `additional` hunks, if the allocation succeeds.
     pub fn reserve(&self, additional: usize) {
         let _ = self.hunks.write().try_reserve(additional);
     }

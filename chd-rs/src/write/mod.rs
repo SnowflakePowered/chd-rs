@@ -309,9 +309,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         let compressed = !options.compression_codecs.is_empty();
         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
 
-        // With a known number of hunks, the map and the index of stored hunks are sized
-        // up front, so they do not grow while hunks are compressed on other threads.
-        // Both reservations are best effort: a refused allocation falls back to growth.
+        // On wasm32, growing the heap while other threads run can trap them.
         let mut entries = Vec::new();
         if let Some(hunk_count) = hunk_count {
             let _ = entries.try_reserve_exact(hunk_count as usize);
