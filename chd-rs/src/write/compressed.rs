@@ -15,7 +15,6 @@ use parking_lot::RwLock;
 #[cfg(target_arch = "wasm32")]
 use std_lock::RwLock;
 
-/// `std::sync::RwLock` without poisoning, since `parking_lot` can not park on wasm32.
 #[cfg(target_arch = "wasm32")]
 mod std_lock {
     use std::sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard};
@@ -61,13 +60,13 @@ impl HunkHash {
 /// to handle self-compression, and an index of the parent CHD.
 #[derive(Clone, Default)]
 pub(crate) struct CompressionState {
-    hunks: Arc<RwLock<HashMap<HunkHash, u32>>>,
+    pub(crate) hunks: Arc<RwLock<HashMap<HunkHash, u32>>>,
     /// The first unit of the parent CHD that starts each hunk-sized run of units.
     parent: Arc<HashMap<HunkHash, u64>>,
 }
 
 impl CompressionState {
-    /// The state for a CHD of up to `hunk_count` hunks, with the index of its parent CHD.
+    /// The state for a CHD with a parent CHD.
     pub fn new(parent: HashMap<HunkHash, u64>, hunk_count: usize) -> Self {
         let state = CompressionState {
             hunks: Default::default(),
@@ -129,11 +128,6 @@ impl CompressionState {
     /// Find the unit of the parent CHD that starts a run of units with the given hash.
     pub fn find_parent(&self, hash: &HunkHash) -> Option<u64> {
         self.parent.get(hash).copied()
-    }
-
-    #[cfg(test)]
-    pub fn capacity(&self) -> usize {
-        self.hunks.read().capacity()
     }
 
     /// Mark a compressed hunk as previously written.

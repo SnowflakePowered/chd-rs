@@ -305,7 +305,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         let compressed = !options.compression_codecs.is_empty();
         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
 
-        // On wasm32, growing the heap while other threads run can trap them.
+        // On wasm32, growing the heap while other threads run can trap the thread.
         let reserved = hunk_count.unwrap_or(0) as usize;
         let mut entries = Vec::new();
         let _ = entries.try_reserve_exact(reserved);
@@ -1019,7 +1019,7 @@ mod compressed_tests {
         let options = options().logical_bytes(10 * HUNK_BYTES as u64);
         let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
         assert!(writer.entries.capacity() >= 10);
-        assert!(writer.state.capacity() >= 10);
+        assert!(writer.state.hunks.read().capacity() >= 10);
     }
 
     #[test]
