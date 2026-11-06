@@ -305,7 +305,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         let compressed = !options.compression_codecs.is_empty();
         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
 
-        // On wasm32, growing the heap while other threads run can trap the thread.
+        // On wasm32, growing the heap can trap other running threads.
         let reserved = hunk_count.unwrap_or(0) as usize;
         let mut entries = Vec::new();
         let _ = entries.try_reserve_exact(reserved);
