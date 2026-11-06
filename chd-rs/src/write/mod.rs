@@ -929,22 +929,6 @@ mod compressed_tests {
             .compression(&[CodecType::ZLibV5, CodecType::LzmaV5])
     }
 
-    #[test]
-    fn compression_levels_reach_the_codecs() {
-        let invalid = options().compression_levels([Some(10), None, None, None]);
-        assert!(matches!(
-            ChdWriter::new(Cursor::new(Vec::new()), invalid),
-            Err(Error::InvalidParameter)
-        ));
-
-        // Stored Deflate never wins, so the leveled writer stores the hunk with LZMA.
-        let hunk = text_hunk(0);
-        let options = options().compression_levels([Some(0), None, None, None]);
-        let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
-        let compressed = writer.compressor().unwrap().compress(&hunk).unwrap();
-        assert_eq!(compressed.kind, super::compressed::HunkKind::Compressed(1));
-    }
-
     fn text_hunk(seed: u8) -> Vec<u8> {
         format!("hunk {seed} says hello. ")
             .into_bytes()
@@ -1107,6 +1091,23 @@ mod compressed_tests {
             write_compressed_hunks(options(), &data),
             write_hunks(options(), &data)
         );
+    }
+
+    #[test]
+    fn compression_levels() {
+        let invalid = options().compression_levels([Some(10), None, None, None]);
+        assert!(matches!(
+            ChdWriter::new(Cursor::new(Vec::new()), invalid),
+            Err(Error::InvalidParameter)
+        ));
+
+        let data = data();
+        let hunks = &data[..data.len() / HUNK_BYTES as usize * HUNK_BYTES as usize];
+        let leveled = options().compression_levels([Some(1), Some(0), None, None]);
+        let chd = write_hunks(leveled.clone(), hunks);
+        assert_ne!(chd, write_hunks(options(), hunks));
+        assert_eq!(chd, write_compressed_hunks(leveled, hunks));
+        assert_eq!(read(chd).data, hunks);
     }
 
     #[test]
