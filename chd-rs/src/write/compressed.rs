@@ -7,6 +7,7 @@ use crate::Chd;
 use arrayvec::ArrayVec;
 use parking_lot::RwLock;
 use sha1::{Digest, Sha1};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Read, Seek};
 use std::sync::Arc;
@@ -123,7 +124,7 @@ pub(crate) enum HunkKind {
 /// A hunk after it has been compressed by [`HunkCompressor`].
 pub struct CompressedHunk<'a> {
     /// The uncompressed hunk.
-    pub(crate) hunk: &'a [u8],
+    pub(crate) hunk: Cow<'a, [u8]>,
     pub(crate) kind: HunkKind,
     /// The compressed hunk, or empty if the hunk is stored as is or is a duplicate.
     pub(crate) data: Vec<u8>,
@@ -192,11 +193,20 @@ impl HunkCompressor {
     ///
     /// The provided buffer must be exactly the hunk size, otherwise returns [`InvalidParameter`](Error::InvalidParameter).
     pub fn compress<'a>(&mut self, hunk: &'a [u8]) -> Result<CompressedHunk<'a>> {
+        self.compress_cow(Cow::Borrowed(hunk))
+    }
+
+    /// Like [`compress`](HunkCompressor::compress), but takes ownership of the hunk.
+    pub fn compress_owned(&mut self, hunk: Vec<u8>) -> Result<CompressedHunk<'static>> {
+        self.compress_cow(Cow::Owned(hunk))
+    }
+
+    fn compress_cow<'a>(&mut self, hunk: Cow<'a, [u8]>) -> Result<CompressedHunk<'a>> {
         if hunk.len() != self.hunk_bytes as usize {
             return Err(Error::InvalidParameter);
         }
 
-        let hash = HunkHash::new(hunk, self.find_duplicates);
+        let hash = HunkHash::new(&hunk, self.find_duplicates);
         if self.find_duplicates
             && (self.state.find(&hash).is_some() || self.state.find_parent(&hash).is_some())
         {
@@ -215,7 +225,7 @@ impl HunkCompressor {
         let mut best_len = hunk.len();
         for (index, codec) in (0u8..).zip(&mut self.codecs) {
             let limit = best_len.saturating_sub(1);
-            if let Ok(len) = codec.compress(hunk, &mut self.scratch[..limit]) {
+            if let Ok(len) = codec.compress(&hunk, &mut self.scratch[..limit]) {
                 best_codec = Some(index);
                 best_len = len;
                 std::mem::swap(&mut self.best, &mut self.scratch);

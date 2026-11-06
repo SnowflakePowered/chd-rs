@@ -389,10 +389,9 @@ impl<W: Write + Seek> ChdWriter<W> {
             return Err(Error::InvalidParameter);
         }
 
-        let hunk = compressed.hunk;
-        self.store_hunk(compressed)?;
-        self.hash_logical(hunk);
-        self.written += hunk.len() as u64;
+        self.store_hunk(&compressed)?;
+        self.hash_logical(&compressed.hunk);
+        self.written += compressed.hunk.len() as u64;
         Ok(())
     }
 
@@ -463,7 +462,7 @@ impl<W: Write + Seek> ChdWriter<W> {
             let mut hunk = std::mem::take(&mut self.buffer);
             hunk.resize(hunk_bytes as usize, 0);
             let compressed = self.compressor.compress(&hunk)?;
-            self.store_hunk(compressed)?;
+            self.store_hunk(&compressed)?;
         }
 
         // Whole hunks may extend past the logical size, since the last hunk is padded.
@@ -476,7 +475,7 @@ impl<W: Write + Seek> ChdWriter<W> {
             let zeroes = vec![0u8; hunk_bytes as usize];
             while self.entries.len() < hunk_count as usize {
                 let compressed = self.compressor.compress(&zeroes)?;
-                self.store_hunk(compressed)?;
+                self.store_hunk(&compressed)?;
                 self.hash_logical(&zeroes);
             }
         }
@@ -547,7 +546,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     }
 
     /// Store a compressed hunk in the file, and add it to the map.
-    fn store_hunk(&mut self, compressed: CompressedHunk<'_>) -> Result<()> {
+    fn store_hunk(&mut self, compressed: &CompressedHunk<'_>) -> Result<()> {
         let hunk_num = self.entries.len();
         if self
             .hunk_count
@@ -568,7 +567,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     fn store_hunk_unchecked(
         &mut self,
         hunk_num: u32,
-        compressed: CompressedHunk<'_>,
+        compressed: &CompressedHunk<'_>,
     ) -> Result<()> {
         // Metadata set before the first hunk is placed before the hunks, like chdman.
         if hunk_num == 0 {
@@ -578,7 +577,7 @@ impl<W: Write + Seek> ChdWriter<W> {
         let entry = if self.is_compressed() {
             self.store_compressed(hunk_num, compressed)?
         } else {
-            self.store_uncompressed(compressed.hunk, compressed.hash.crc16)?
+            self.store_uncompressed(&compressed.hunk, compressed.hash.crc16)?
         };
         self.entries.push(entry);
         Ok(())
@@ -597,7 +596,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     fn store_compressed(
         &mut self,
         hunk_num: u32,
-        compressed: CompressedHunk<'_>,
+        compressed: &CompressedHunk<'_>,
     ) -> Result<RawMapEntryV5> {
         // The writer decides whether a hunk is a duplicate, since the compressor may not
         // have seen a hunk stored after it started compressing. Like chdman, hunks in the
@@ -621,7 +620,7 @@ impl<W: Write + Seek> ChdWriter<W> {
 
         let (compression, data) = match compressed.kind {
             HunkKind::Compressed(index) => (index, compressed.data.as_slice()),
-            HunkKind::Uncompressed => (CompressionTypeV5::CompressionNone as u8, compressed.hunk),
+            HunkKind::Uncompressed => (CompressionTypeV5::CompressionNone as u8, &*compressed.hunk),
             // Every hunk a compressor finds is also found by the writer.
             HunkKind::Duplicate => return Err(Error::InvalidData),
         };
@@ -722,7 +721,7 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
         if self.buffer.len() == hunk_bytes {
             let hunk = std::mem::take(&mut self.buffer);
             let compressed = self.compressor.compress(&hunk)?;
-            self.store_hunk(compressed)?;
+            self.store_hunk(&compressed)?;
             self.buffer = hunk;
             self.buffer.clear();
         }
