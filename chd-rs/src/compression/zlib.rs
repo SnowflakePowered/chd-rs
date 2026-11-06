@@ -18,6 +18,8 @@ pub struct ZlibCodec {
     engine: Decompress,
     #[cfg(feature = "encode")]
     compressor: Compress,
+    #[cfg(feature = "encode")]
+    level: flate2::Compression,
 }
 
 impl ZlibCodec {
@@ -38,7 +40,7 @@ impl ZlibCodec {
         if !matches!(status, Ok(flate2::Status::StreamEnd)) {
             // zlib-rs can panic on the next stream if a stream that ran out of output space
             // is reset, so start over with a new compressor instead.
-            self.compressor = Compress::new(flate2::Compression::best(), false);
+            self.compressor = Compress::new(self.level, false);
             return Err(Error::CompressionError);
         }
         Ok(self.compressor.total_out() as usize)
@@ -51,6 +53,23 @@ impl CodecImplementation for ZlibCodec {
             engine: Decompress::new(false),
             #[cfg(feature = "encode")]
             compressor: Compress::new(flate2::Compression::best(), false),
+            #[cfg(feature = "encode")]
+            level: flate2::Compression::best(),
+        })
+    }
+
+    /// Deflate levels range from 0 (stored) to 9. chdman uses 9.
+    #[cfg(feature = "encode")]
+    fn with_level(_: u32, level: i32) -> Result<Self> {
+        let level = u32::try_from(level)
+            .ok()
+            .filter(|level| *level <= 9)
+            .map(flate2::Compression::new)
+            .ok_or(Error::InvalidParameter)?;
+        Ok(ZlibCodec {
+            engine: Decompress::new(false),
+            compressor: Compress::new(level, false),
+            level,
         })
     }
 

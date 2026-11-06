@@ -159,22 +159,41 @@ pub struct HunkCompressor {
 }
 
 impl HunkCompressor {
-    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
-    ///
-    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec,
-    /// or [`CodecError`](Error::CodecError) if a codec does not support the hunk size.
+    /// A compressor for the given codecs at their default levels.
+    #[cfg(test)]
     pub(crate) fn new(
         codecs: impl ChdWriteCodecs,
         hunk_bytes: u32,
         state: CompressionState,
     ) -> Result<Self> {
+        Self::with_levels(codecs, [None; 4], hunk_bytes, state)
+    }
+
+    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
+    ///
+    /// Each codec compresses at the level in the same position, or its default level if
+    /// that is `None`.
+    ///
+    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec
+    /// or a level is not valid for its codec, or [`CodecError`](Error::CodecError) if a
+    /// codec does not support the hunk size.
+    pub(crate) fn with_levels(
+        codecs: impl ChdWriteCodecs,
+        levels: [Option<i32>; 4],
+        hunk_bytes: u32,
+        state: CompressionState,
+    ) -> Result<Self> {
+        let codecs = codecs.into_array_vec();
+        if levels[codecs.len()..].iter().any(Option::is_some) {
+            return Err(Error::InvalidParameter);
+        }
         let codecs = codecs
-            .into_array_vec()
             .iter()
-            .map(|codec| match codec {
+            .zip(levels)
+            .map(|(codec, level)| match codec {
                 CodecType::None => Err(Error::InvalidParameter),
                 codec if codec.is_legacy() => Err(Error::InvalidParameter),
-                codec => codec.init(hunk_bytes),
+                codec => codec.init_with_level(hunk_bytes, level),
             })
             .collect::<Result<ArrayVec<_, 4>>>()?;
 

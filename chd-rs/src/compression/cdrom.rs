@@ -183,6 +183,15 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         })
     }
 
+    /// The level applies to the sector data. Like chdman, subcode data is always
+    /// compressed at the default level.
+    #[cfg(feature = "encode")]
+    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+        let mut codec = Self::new(hunk_size)?;
+        codec.engine = Engine::with_level((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA, level)?;
+        Ok(codec)
+    }
+
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
         let frames = output.len() / CD_FRAME_SIZE as usize;

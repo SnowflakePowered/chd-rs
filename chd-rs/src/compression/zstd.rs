@@ -44,6 +44,8 @@ pub struct ZstdCodec {
     zstd_context: zstd_safe::DCtx<'static>,
     #[cfg(feature = "encode")]
     compressor: zstd_safe::CCtx<'static>,
+    #[cfg(feature = "encode")]
+    level: i32,
 }
 
 #[cfg(not(feature = "fast_zstd"))]
@@ -57,6 +59,16 @@ impl CodecImplementation for ZstdCodec {
             buffer: Vec::new(),
             #[cfg(feature = "encode")]
             encoder: zrip::CompressContext::new(ZRIP_LEVEL).map_err(|_| Error::CodecError)?,
+        })
+    }
+
+    /// Levels are those supported by zrip.
+    #[cfg(feature = "encode")]
+    fn with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
+        Ok(Self {
+            decoder: zrip::DecompressContext::new(),
+            buffer: Vec::new(),
+            encoder: zrip::CompressContext::new(level).map_err(|_| Error::InvalidParameter)?,
         })
     }
 
@@ -105,6 +117,22 @@ impl CodecImplementation for ZstdCodec {
             zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
             #[cfg(feature = "encode")]
             compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
+            #[cfg(feature = "encode")]
+            level: zstd_safe::max_c_level(),
+        })
+    }
+
+    /// Zstandard levels range from [`min_c_level`](zstd_safe::min_c_level) to
+    /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
+    /// chdman uses the maximum level.
+    #[cfg(feature = "encode")]
+    fn with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
+        if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
+            return Err(Error::InvalidParameter);
+        }
+        Ok(Self {
+            level,
+            ..Self::new(hunk_size)?
         })
     }
 
@@ -114,7 +142,7 @@ impl CodecImplementation for ZstdCodec {
         let output_len = output.len().min(input.len());
         let compressed_len = self
             .compressor
-            .compress(&mut output[..output_len], input, zstd_safe::max_c_level())
+            .compress(&mut output[..output_len], input, self.level)
             .map_err(|_| Error::CompressionError)?;
         if compressed_len >= input.len() {
             return Err(Error::CompressionError);
