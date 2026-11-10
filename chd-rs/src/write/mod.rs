@@ -60,7 +60,7 @@ pub struct ChdWriteOptions {
 pub struct CodecConfig {
     /// The codec.
     pub codec: CodecType,
-    /// The compression level, or `None` for the level chdman uses.
+    /// The compression level, or `None` for the codec's default level.
     ///
     /// | Codec | Levels | Default |
     /// |-------|--------|---------|
@@ -93,49 +93,30 @@ pub trait ChdWriteCodecs: sealed::Sealed {
 }
 
 macro_rules! impl_codecs {
-    ($($len:literal),*) => {$(
-        impl sealed::Sealed for &[CodecType; $len] {}
+    ($item:ty; $($len:literal),*) => {
+        $(
+            impl sealed::Sealed for &[$item; $len] {}
 
-        impl ChdWriteCodecs for &[CodecType; $len] {
+            impl ChdWriteCodecs for &[$item; $len] {
+                fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
+                    self.iter().copied().map(CodecConfig::from).collect()
+                }
+            }
+        )*
+
+        impl sealed::Sealed for &ArrayVec<$item, 4> {}
+
+        impl ChdWriteCodecs for &ArrayVec<$item, 4> {
             fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
                 self.iter().copied().map(CodecConfig::from).collect()
             }
         }
-    )*};
+    };
 }
 
-impl_codecs!(0, 1, 2, 3, 4);
-
+impl_codecs!(CodecType; 0, 1, 2, 3, 4);
 // No empty array, so `&[]` still infers `&[CodecType; 0]`.
-macro_rules! impl_codec_configs {
-    ($($len:literal),*) => {$(
-        impl sealed::Sealed for &[CodecConfig; $len] {}
-
-        impl ChdWriteCodecs for &[CodecConfig; $len] {
-            fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
-                self.iter().copied().collect()
-            }
-        }
-    )*};
-}
-
-impl_codec_configs!(1, 2, 3, 4);
-
-impl sealed::Sealed for &ArrayVec<CodecType, 4> {}
-
-impl ChdWriteCodecs for &ArrayVec<CodecType, 4> {
-    fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
-        self.iter().copied().map(CodecConfig::from).collect()
-    }
-}
-
-impl sealed::Sealed for &ArrayVec<CodecConfig, 4> {}
-
-impl ChdWriteCodecs for &ArrayVec<CodecConfig, 4> {
-    fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
-        self.clone()
-    }
-}
+impl_codecs!(CodecConfig; 1, 2, 3, 4);
 
 impl ChdWriteOptions {
     /// Options for a CHD with the given hunk and unit sizes in bytes.
@@ -229,7 +210,8 @@ impl ChdWriteOptions {
     /// Set the compression codecs to use when writing the output CHD.
     ///
     /// To disable compression, pass in the empty slice. This function
-    /// accepts up to 4 compression codecs in a slice.
+    /// accepts up to 4 compression codecs in a slice. Pass [`CodecConfig`]s
+    /// to set their levels.
     pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
         self.compression_codecs = compression.into_array_vec();
         self
@@ -293,6 +275,7 @@ impl<W: Write + Seek> ChdWriter<W> {
     /// - If the hunk size is not a non-zero multiple of the unit size.
     /// - If there would be too many hunks.
     /// - If a codec is not supported by CHD v5.
+    /// - If a codec does not support its level.
     ///
     /// If a codec does not support the hunk size, returns [`CodecError`](Error::CodecError).
     pub fn new(inner: W, options: ChdWriteOptions) -> Result<Self> {
