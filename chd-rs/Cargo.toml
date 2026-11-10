@@ -64,6 +64,8 @@ lender = { version = "0.8", default-features = false, optional = true }
 flacenc = { version = "0.5", default-features = false, optional = true }
 zerocopy = { version = "0.8", features = ["derive"] }
 sha1 = { version = "0.10", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 parking_lot = { version = "0.12", optional = true }
 
 [dev-dependencies]

@@ -5,11 +5,34 @@ use crate::header::CodecType;
 use crate::write::ChdWriteCodecs;
 use crate::Chd;
 use arrayvec::ArrayVec;
-use parking_lot::RwLock;
 use sha1::{Digest, Sha1};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Read, Seek};
 use std::sync::Arc;
+
+#[cfg(not(target_arch = "wasm32"))]
+use parking_lot::RwLock;
+#[cfg(target_arch = "wasm32")]
+use std_lock::RwLock;
+
+#[cfg(target_arch = "wasm32")]
+mod std_lock {
+    use std::sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard};
+
+    #[derive(Default)]
+    pub struct RwLock<T>(std::sync::RwLock<T>);
+
+    impl<T> RwLock<T> {
+        pub fn read(&self) -> RwLockReadGuard<'_, T> {
+            self.0.read().unwrap_or_else(PoisonError::into_inner)
+        }
+
+        pub fn write(&self) -> RwLockWriteGuard<'_, T> {
+            self.0.write().unwrap_or_else(PoisonError::into_inner)
+        }
+    }
+}
 
 /// Hash key for an uncompressed hunk.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,18 +61,31 @@ impl HunkHash {
 /// to handle self-compression, and an index of the parent CHD.
 #[derive(Clone, Default)]
 pub(crate) struct CompressionState {
-    hunks: Arc<RwLock<HashMap<HunkHash, u32>>>,
+    pub(crate) hunks: Arc<RwLock<HashMap<HunkHash, u32>>>,
     /// The first unit of the parent CHD that starts each hunk-sized run of units.
     parent: Arc<HashMap<HunkHash, u64>>,
 }
 
 impl CompressionState {
     /// The state for a CHD with a parent CHD.
+    pub fn new(parent: HashMap<HunkHash, u64>, hunk_count: usize) -> Self {
+        let state = CompressionState {
+            hunks: Default::default(),
+            parent: Arc::new(parent),
+        };
+        let _ = state.hunks.write().try_reserve(hunk_count);
+        state
+    }
+
+    /// Index a parent CHD for [`new`](CompressionState::new).
     ///
     /// Every run of units in the parent the size of a hunk is hashed, like chdman, so a
     /// hunk can refer to data in the parent that is not aligned to the hunks of the parent.
     /// The parent must have the given hunk size.
-    pub fn with_parent<F: Read + Seek>(parent: &mut Chd<F>, unit_bytes: u32) -> Result<Self> {
+    pub fn index_parent<F: Read + Seek>(
+        parent: &mut Chd<F>,
+        unit_bytes: u32,
+    ) -> Result<HashMap<HunkHash, u64>> {
         let hunk_bytes = parent.header().hunk_size() as usize;
         let hunk_count = parent.header().hunk_count();
         let units_per_hunk = hunk_bytes / unit_bytes as usize;
@@ -82,10 +118,7 @@ impl CompressionState {
             buffer.copy_within(hunk_bytes.., 0);
         }
 
-        Ok(CompressionState {
-            hunks: Default::default(),
-            parent: Arc::new(units),
-        })
+        Ok(units)
     }
 
     /// Find the index of the previously compressed hunk with the given hash
@@ -123,7 +156,7 @@ pub(crate) enum HunkKind {
 /// A hunk after it has been compressed by [`HunkCompressor`].
 pub struct CompressedHunk<'a> {
     /// The uncompressed hunk.
-    pub(crate) hunk: &'a [u8],
+    pub(crate) hunk: Cow<'a, [u8]>,
     pub(crate) kind: HunkKind,
     /// The compressed hunk, or empty if the hunk is stored as is or is a duplicate.
     pub(crate) data: Vec<u8>,
@@ -211,11 +244,20 @@ impl HunkCompressor {
     ///
     /// The provided buffer must be exactly the hunk size, otherwise returns [`InvalidParameter`](Error::InvalidParameter).
     pub fn compress<'a>(&mut self, hunk: &'a [u8]) -> Result<CompressedHunk<'a>> {
+        self.compress_cow(Cow::Borrowed(hunk))
+    }
+
+    /// Like [`compress`](HunkCompressor::compress), but takes ownership of the hunk.
+    pub fn compress_owned(&mut self, hunk: Vec<u8>) -> Result<CompressedHunk<'static>> {
+        self.compress_cow(Cow::Owned(hunk))
+    }
+
+    fn compress_cow<'a>(&mut self, hunk: Cow<'a, [u8]>) -> Result<CompressedHunk<'a>> {
         if hunk.len() != self.hunk_bytes as usize {
             return Err(Error::InvalidParameter);
         }
 
-        let hash = HunkHash::new(hunk, self.find_duplicates);
+        let hash = HunkHash::new(&hunk, self.find_duplicates);
         if self.find_duplicates
             && (self.state.find(&hash).is_some() || self.state.find_parent(&hash).is_some())
         {
@@ -234,7 +276,7 @@ impl HunkCompressor {
         let mut best_len = hunk.len();
         for (index, codec) in (0u8..).zip(&mut self.codecs) {
             let limit = best_len.saturating_sub(1);
-            if let Ok(len) = codec.compress(hunk, &mut self.scratch[..limit]) {
+            if let Ok(len) = codec.compress(&hunk, &mut self.scratch[..limit]) {
                 best_codec = Some(index);
                 best_len = len;
                 std::mem::swap(&mut self.best, &mut self.scratch);
