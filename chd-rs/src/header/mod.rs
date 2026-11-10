@@ -111,8 +111,7 @@ impl CodecType {
         }
     }
 
-    /// Initializes the codec for the provided hunk size, compressing at the given level
-    /// if there is one.
+    /// Like [`init`](CodecType::init), but compresses at the given level.
     #[cfg(feature = "encode")]
     pub(crate) fn init_with_level(
         &self,

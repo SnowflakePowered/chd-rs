@@ -59,6 +59,7 @@ pub struct LzmaCodec<const LC: u32 = 3, const LP: u32 = 0, const PB: u32 = 2> {
     dict_size: u32,
     #[cfg(feature = "encode")]
     level: u32,
+    /// Decoding always uses the level 9 dictionary size, which fits every level.
     #[cfg(feature = "encode")]
     encode_dict_size: u32,
 }
@@ -124,9 +125,6 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         })
     }
 
-    /// LZMA levels range from 0 to 9, like LzmaEncProps. chdman uses 6.
-    ///
-    /// Hunks compressed at any level decompress with the dictionary size of level 9.
     #[cfg(feature = "encode")]
     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
@@ -169,10 +167,8 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         //
         // LzmaEncProps_Normalize
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L74-L78
-        // normalizes the level to the fast algorithm with a HC4 hash chain match finder below
-        // level 5, or the normal (optimum) algorithm with a BT4 binary tree otherwise
-        // (btMode = algo, numHashBytes = 4), fb = 32 below level 7 or 64 otherwise, and
-        // mc = (16 + fb / 2), halved for hash chains. Level 6 is normal, BT4, fb = 32 and mc = 32.
+        // picks these settings from the level. Level 6 is the normal algorithm, BT4, fb = 32,
+        // and mc = 32.
         let (mode, mf) = if self.level < 5 {
             (EncodeMode::Fast, MfType::Hc4)
         } else {

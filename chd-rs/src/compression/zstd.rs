@@ -62,7 +62,6 @@ impl CodecImplementation for ZstdCodec {
         })
     }
 
-    /// Levels are those supported by zrip.
     #[cfg(feature = "encode")]
     fn with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
         Ok(Self {
@@ -122,9 +121,6 @@ impl CodecImplementation for ZstdCodec {
         })
     }
 
-    /// Zstandard levels range from [`min_c_level`](zstd_safe::min_c_level) to
-    /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
-    /// chdman uses the maximum level.
     #[cfg(feature = "encode")]
     fn with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
         if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {

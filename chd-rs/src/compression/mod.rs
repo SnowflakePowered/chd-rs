@@ -49,19 +49,16 @@ pub trait CodecImplementation {
     where
         Self: Sized;
 
-    /// Creates a new instance of this codec for the provided hunk size that compresses
-    /// at the given level, where higher levels compress smaller but slower.
+    /// Creates a new instance of this codec for the provided hunk size that
+    /// compresses at the given level.
     ///
-    /// The range of levels depends on the codec, and [`new`](CodecImplementation::new)
-    /// uses the level that chdman compresses with. Returns
-    /// [`InvalidParameter`](crate::Error::InvalidParameter) if the level is out of range,
-    /// or the codec has no compression levels.
+    /// Returns [`InvalidParameter`](crate::Error::InvalidParameter) if the codec
+    /// does not support the level.
     #[cfg(feature = "encode")]
-    fn with_level(hunk_size: u32, level: i32) -> Result<Self>
+    fn with_level(_hunk_size: u32, _level: i32) -> Result<Self>
     where
         Self: Sized,
     {
-        let _ = (hunk_size, level);
         Err(crate::error::Error::InvalidParameter)
     }
 

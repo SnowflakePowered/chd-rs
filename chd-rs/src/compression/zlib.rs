@@ -58,7 +58,6 @@ impl CodecImplementation for ZlibCodec {
         })
     }
 
-    /// Deflate levels range from 0 (stored) to 9. chdman uses 9.
     #[cfg(feature = "encode")]
     fn with_level(_: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)

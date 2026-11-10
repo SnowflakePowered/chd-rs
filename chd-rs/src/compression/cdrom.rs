@@ -183,8 +183,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         })
     }
 
-    /// The level applies to the sector data. Like chdman, subcode data is always
-    /// compressed at the default level.
     #[cfg(feature = "encode")]
     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let mut codec = Self::new(hunk_size)?;

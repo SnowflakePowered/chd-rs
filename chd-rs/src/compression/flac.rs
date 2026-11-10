@@ -53,8 +53,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
 
         // MAME encodes with libFLAC at compression level 8, which predicts with an LPC order
         // of up to 12, and picks the precision of the coefficients from the block size.
-        // Other levels follow the stereo decorrelation and maximum LPC order of the
-        // libFLAC compression level presets.
+        // Other levels use the stereo coding and LPC order of the libFLAC presets.
         let (mid_side, lpc_order) = match self.level {
             0 => (false, 0),
             1 | 2 => (true, 0),
@@ -119,7 +118,6 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
         })
     }
 
-    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
     #[cfg(feature = "encode")]
     fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
@@ -244,7 +242,6 @@ impl CodecImplementation for RawFlacCodec {
         })
     }
 
-    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
     #[cfg(feature = "encode")]
     fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         Ok(RawFlacCodec {
@@ -355,8 +352,6 @@ impl CodecImplementation for CdFlacCodec {
         })
     }
 
-    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8. Like chdman, subcode
-    /// data is always compressed at the default Deflate level.
     #[cfg(feature = "encode")]
     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let mut codec = Self::new(hunk_size)?;
