@@ -51,9 +51,33 @@ pub struct ChdWriteOptions {
     hunk_bytes: u32,
     unit_bytes: u32,
     logical_bytes: Option<u64>,
-    compression_codecs: ArrayVec<CodecType, 4>,
-    compression_levels: [Option<i32>; 4],
+    compression_codecs: ArrayVec<CodecConfig, 4>,
     hash_uncompressed: bool,
+}
+
+/// A compression codec and the level it compresses at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CodecConfig {
+    /// The codec.
+    pub codec: CodecType,
+    /// The compression level, or `None` for the level chdman uses.
+    ///
+    /// | Codec | Levels | Default |
+    /// |-------|--------|---------|
+    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9 |
+    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6 |
+    /// | Zstandard (`zstd`, `cdzs`) with `fast_zstd` | zstd's negative levels to 22 | 22 |
+    /// | Zstandard (`zstd`, `cdzs`) without `fast_zstd` | -8 to 4 | 1 |
+    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8 |
+    ///
+    /// Other codecs have no levels. CD-ROM codecs compress subcode data at the default level.
+    pub level: Option<i32>,
+}
+
+impl From<CodecType> for CodecConfig {
+    fn from(codec: CodecType) -> Self {
+        CodecConfig { codec, level: None }
+    }
 }
 
 mod sealed {
@@ -65,7 +89,7 @@ mod sealed {
 /// Accepts up to four codecs. An empty slice (i.e. no codecs) indicates an uncompressed CHD.
 pub trait ChdWriteCodecs: sealed::Sealed {
     #[doc(hidden)]
-    fn into_array_vec(self) -> ArrayVec<CodecType, 4>;
+    fn into_array_vec(self) -> ArrayVec<CodecConfig, 4>;
 }
 
 macro_rules! impl_codecs {
@@ -73,8 +97,8 @@ macro_rules! impl_codecs {
         impl sealed::Sealed for &[CodecType; $len] {}
 
         impl ChdWriteCodecs for &[CodecType; $len] {
-            fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
-                self.iter().copied().collect()
+            fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
+                self.iter().copied().map(CodecConfig::from).collect()
             }
         }
     )*};
@@ -82,10 +106,33 @@ macro_rules! impl_codecs {
 
 impl_codecs!(0, 1, 2, 3, 4);
 
+// No empty array, so `&[]` still infers `&[CodecType; 0]`.
+macro_rules! impl_codec_configs {
+    ($($len:literal),*) => {$(
+        impl sealed::Sealed for &[CodecConfig; $len] {}
+
+        impl ChdWriteCodecs for &[CodecConfig; $len] {
+            fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
+                self.iter().copied().collect()
+            }
+        }
+    )*};
+}
+
+impl_codec_configs!(1, 2, 3, 4);
+
 impl sealed::Sealed for &ArrayVec<CodecType, 4> {}
 
 impl ChdWriteCodecs for &ArrayVec<CodecType, 4> {
-    fn into_array_vec(self) -> ArrayVec<CodecType, 4> {
+    fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
+        self.iter().copied().map(CodecConfig::from).collect()
+    }
+}
+
+impl sealed::Sealed for &ArrayVec<CodecConfig, 4> {}
+
+impl ChdWriteCodecs for &ArrayVec<CodecConfig, 4> {
+    fn into_array_vec(self) -> ArrayVec<CodecConfig, 4> {
         self.clone()
     }
 }
@@ -100,7 +147,6 @@ impl ChdWriteOptions {
             unit_bytes,
             logical_bytes: None,
             compression_codecs: ArrayVec::new(),
-            compression_levels: [None; 4],
             hash_uncompressed: false,
         }
     }
@@ -186,26 +232,6 @@ impl ChdWriteOptions {
     /// accepts up to 4 compression codecs in a slice.
     pub fn compression(mut self, compression: impl ChdWriteCodecs) -> Self {
         self.compression_codecs = compression.into_array_vec();
-        self
-    }
-
-    /// Set the compression level of each codec, in the same order as the codecs.
-    ///
-    /// `None` compresses with the codec's default level. Levels outside the range of their
-    /// codec, levels for codecs without levels, and levels with no codec at their position
-    /// make creating the writer return [`InvalidParameter`](Error::InvalidParameter).
-    ///
-    /// | Codec | Levels | Default |
-    /// |-------|--------|---------|
-    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9, like chdman |
-    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6, like chdman |
-    /// | Zstandard (`zstd`, `cdzs`) with `fast_zstd` | zstd's negative levels to 22, where 0 is 3 | 22, like chdman |
-    /// | Zstandard (`zstd`, `cdzs`) without `fast_zstd` | -8 to 4, where 0 is 1 | 1 |
-    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8, like chdman |
-    ///
-    /// CD-ROM codecs compress subcode data at the chdman level regardless.
-    pub fn compression_levels(mut self, levels: [Option<i32>; 4]) -> Self {
-        self.compression_levels = levels;
         self
     }
 
@@ -333,9 +359,8 @@ impl<W: Write + Seek> ChdWriter<W> {
         let _ = entries.try_reserve_exact(reserved);
         let state = CompressionState::new(parent, if compressed { reserved } else { 0 });
 
-        let compressor = HunkCompressor::with_levels(
+        let compressor = HunkCompressor::new(
             &options.compression_codecs,
-            options.compression_levels,
             options.hunk_bytes,
             state.clone(),
         )?;
@@ -382,9 +407,8 @@ impl<W: Write + Seek> ChdWriter<W> {
     /// duplicate hunks are not compressed again. If the CHD is uncompressed, the compressor
     /// stores every hunk as is.
     pub fn compressor(&self) -> Result<HunkCompressor> {
-        HunkCompressor::with_levels(
+        HunkCompressor::new(
             &self.options.compression_codecs,
-            self.options.compression_levels,
             self.options.hunk_bytes,
             self.state.clone(),
         )
@@ -709,7 +733,7 @@ impl<W: Write + Seek> ChdWriter<W> {
 
         let mut compression = [0u32; 4];
         for (slot, codec) in compression.iter_mut().zip(&self.options.compression_codecs) {
-            *slot = *codec as u32;
+            *slot = codec.codec as u32;
         }
 
         HeaderV5 {
@@ -920,7 +944,7 @@ mod tests {
 
 #[cfg(test)]
 mod compressed_tests {
-    use super::{ChdWriteOptions, ChdWriter};
+    use super::{ChdWriteOptions, ChdWriter, CodecConfig};
     use crate::header::{CodecType, Header};
     use crate::map::{CompressionTypeV5, MapEntry};
     use crate::{Chd, Error};
@@ -1110,7 +1134,10 @@ mod compressed_tests {
 
     #[test]
     fn compression_levels() {
-        let invalid = options().compression_levels([Some(10), None, None, None]);
+        let invalid = options().compression(&[CodecConfig {
+            codec: CodecType::ZLibV5,
+            level: Some(10),
+        }]);
         assert!(matches!(
             ChdWriter::new(Cursor::new(Vec::new()), invalid),
             Err(Error::InvalidParameter)
@@ -1118,7 +1145,16 @@ mod compressed_tests {
 
         let data = data();
         let hunks = &data[..data.len() / HUNK_BYTES as usize * HUNK_BYTES as usize];
-        let leveled = options().compression_levels([Some(1), Some(0), None, None]);
+        let leveled = options().compression(&[
+            CodecConfig {
+                codec: CodecType::ZLibV5,
+                level: Some(1),
+            },
+            CodecConfig {
+                codec: CodecType::LzmaV5,
+                level: Some(0),
+            },
+        ]);
         let chd = write_hunks(leveled.clone(), hunks);
         assert_ne!(chd, write_hunks(options(), hunks));
         assert_eq!(chd, write_compressed_hunks(leveled, hunks));
