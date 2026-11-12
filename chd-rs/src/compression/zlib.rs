@@ -45,17 +45,22 @@ impl ZlibCodec {
         }
         Ok(self.compressor.total_out() as usize)
     }
+
+    #[cfg_attr(not(feature = "encode"), allow(unused_variables))]
+    fn new_with_level(level: flate2::Compression) -> Result<Self> {
+        Ok(ZlibCodec {
+            engine: Decompress::new(false),
+            #[cfg(feature = "encode")]
+            compressor: Compress::new(level, false),
+            #[cfg(feature = "encode")]
+            level,
+        })
+    }
 }
 
 impl CodecImplementation for ZlibCodec {
     fn new(_: u32) -> Result<Self> {
-        Ok(ZlibCodec {
-            engine: Decompress::new(false),
-            #[cfg(feature = "encode")]
-            compressor: Compress::new(flate2::Compression::best(), false),
-            #[cfg(feature = "encode")]
-            level: flate2::Compression::best(),
-        })
+        Self::new_with_level(flate2::Compression::best())
     }
 
     #[cfg(feature = "encode")]
@@ -65,11 +70,7 @@ impl CodecImplementation for ZlibCodec {
             .filter(|level| *level <= 9)
             .map(flate2::Compression::new)
             .ok_or(Error::InvalidParameter)?;
-        Ok(ZlibCodec {
-            engine: Decompress::new(false),
-            compressor: Compress::new(level, false),
-            level,
-        })
+        Self::new_with_level(level)
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
