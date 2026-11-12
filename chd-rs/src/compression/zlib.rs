@@ -59,7 +59,7 @@ impl CodecImplementation for ZlibCodec {
     }
 
     #[cfg(feature = "encode")]
-    fn with_level(_: u32, level: i32) -> Result<Self> {
+    fn new_with_level(_: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
             .ok()
             .filter(|level| *level <= 9)

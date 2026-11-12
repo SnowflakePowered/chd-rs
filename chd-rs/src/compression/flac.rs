@@ -119,7 +119,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
     }
 
     #[cfg(feature = "encode")]
-    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
+    fn new_with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
             .ok()
             .filter(|level| *level <= 8)
@@ -243,10 +243,10 @@ impl CodecImplementation for RawFlacCodec {
     }
 
     #[cfg(feature = "encode")]
-    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
+    fn new_with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         Ok(RawFlacCodec {
-            be: FlacCodec::with_level(hunk_bytes, level)?,
-            le: FlacCodec::with_level(hunk_bytes, level)?,
+            be: FlacCodec::new_with_level(hunk_bytes, level)?,
+            le: FlacCodec::new_with_level(hunk_bytes, level)?,
         })
     }
 
@@ -353,10 +353,10 @@ impl CodecImplementation for CdFlacCodec {
     }
 
     #[cfg(feature = "encode")]
-    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+    fn new_with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let mut codec = Self::new(hunk_size)?;
         codec.engine =
-            FlacCodec::with_level(hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA, level)?;
+            FlacCodec::new_with_level(hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA, level)?;
         Ok(codec)
     }
 

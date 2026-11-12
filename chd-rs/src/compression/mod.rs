@@ -54,7 +54,7 @@ pub trait CodecImplementation {
     /// Returns [`InvalidParameter`](crate::Error::InvalidParameter) if the codec
     /// cannot support the given level.
     #[cfg(feature = "encode")]
-    fn with_level(_hunk_size: u32, _level: i32) -> Result<Self>
+    fn new_with_level(_hunk_size: u32, _level: i32) -> Result<Self>
     where
         Self: Sized,
     {

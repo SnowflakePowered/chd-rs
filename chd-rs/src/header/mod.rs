@@ -122,29 +122,29 @@ impl CodecType {
             return self.init(hunk_size);
         };
         match self {
-            CodecType::None => NoneCodec::with_level(hunk_size, level)
+            CodecType::None => NoneCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
             CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
-                ZlibCodec::with_level(hunk_size, level)
+                ZlibCodec::new_with_level(hunk_size, level)
                     .map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
-            CodecType::ZLibCdV5 => CdZlibCodec::with_level(hunk_size, level)
+            CodecType::ZLibCdV5 => CdZlibCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::LzmaCdV5 => CdLzmaCodec::with_level(hunk_size, level)
+            CodecType::LzmaCdV5 => CdLzmaCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::FlacCdV5 => CdFlacCodec::with_level(hunk_size, level)
+            CodecType::FlacCdV5 => CdFlacCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::LzmaV5 => <LzmaCodec>::with_level(hunk_size, level)
+            CodecType::LzmaV5 => <LzmaCodec>::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::FlacV5 => RawFlacCodec::with_level(hunk_size, level)
+            CodecType::FlacV5 => RawFlacCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::HuffV5 => HuffmanCodec::with_level(hunk_size, level)
+            CodecType::HuffV5 => HuffmanCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::AV | CodecType::AVHuffV5 => AVHuffCodec::with_level(hunk_size, level)
+            CodecType::AV | CodecType::AVHuffV5 => AVHuffCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::ZstdV5 => ZstdCodec::with_level(hunk_size, level)
+            CodecType::ZstdV5 => ZstdCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::ZstdCdV5 => CdZstdCodec::with_level(hunk_size, level)
+            CodecType::ZstdCdV5 => CdZstdCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
             #[allow(unreachable_patterns)]
             _ => Err(Error::UnsupportedFormat),
