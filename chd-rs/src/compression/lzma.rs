@@ -57,7 +57,15 @@ use std::io::{Cursor, Read};
 /// when decompressed.
 pub struct LzmaCodec<const LC: u32 = 3, const LP: u32 = 0, const PB: u32 = 2> {
     dict_size: u32,
+    #[cfg(feature = "encode")]
+    level: u32,
+    /// Decoding always uses the level 9 dictionary size, which fits every level.
+    #[cfg(feature = "encode")]
+    encode_dict_size: u32,
 }
+
+/// The LZMA level that MAME compresses with.
+const MAME_LZMA_LEVEL: u32 = 6;
 
 impl<const LC: u32, const LP: u32, const PB: u32> CompressionCodec for LzmaCodec<LC, LP, PB> {}
 
@@ -103,13 +111,33 @@ impl<const LC: u32, const LP: u32, const PB: u32> CompressionCodecType for LzmaC
     }
 }
 
-impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCodec<LC, LP, PB> {
-    fn new(hunk_size: u32) -> Result<Self> {
+impl<const LC: u32, const LP: u32, const PB: u32> LzmaCodec<LC, LP, PB> {
+    #[cfg_attr(not(feature = "encode"), allow(unused_variables))]
+    fn new_with_level(hunk_size: u32, level: u32) -> Result<Self> {
         const_assert!(LC: u32, LP: u32, PB: u32 => LC <= 8 && LP <= 4 && PB <= 4);
 
         Ok(LzmaCodec {
             dict_size: get_lzma_dict_size(9, hunk_size),
+            #[cfg(feature = "encode")]
+            level,
+            #[cfg(feature = "encode")]
+            encode_dict_size: get_lzma_dict_size(level, hunk_size),
         })
+    }
+}
+
+impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCodec<LC, LP, PB> {
+    fn new(hunk_size: u32) -> Result<Self> {
+        Self::new_with_level(hunk_size, MAME_LZMA_LEVEL)
+    }
+
+    #[cfg(feature = "encode")]
+    fn new_with_level(hunk_size: u32, level: i32) -> Result<Self> {
+        let level = u32::try_from(level)
+            .ok()
+            .filter(|level| *level <= 9)
+            .ok_or(Error::InvalidParameter)?;
+        Self::new_with_level(hunk_size, level)
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
@@ -141,17 +169,24 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         //
         // LzmaEncProps_Normalize
         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L74-L78
-        // normalizes level 6 to the normal (optimum) algorithm, fb = 32, a BT4 binary tree
-        // match finder (btMode = 1, numHashBytes = 4), and mc = 32.
+        // picks these settings from the level. Level 6 is the normal algorithm, BT4, fb = 32,
+        // and mc = 32.
+        let (mode, mf) = if self.level < 5 {
+            (EncodeMode::Fast, MfType::Hc4)
+        } else {
+            (EncodeMode::Normal, MfType::Bt4)
+        };
+        let nice_len = if self.level < 7 { 32 } else { 64 };
+        let depth_limit = (16 + nice_len as i32 / 2) >> u32::from(mf == MfType::Hc4);
         let options = LzmaOptions {
-            dict_size: self.dict_size,
+            dict_size: self.encode_dict_size,
             lc: LC,
             lp: LP,
             pb: PB,
-            mode: EncodeMode::Normal,
-            nice_len: 32,
-            mf: MfType::Bt4,
-            depth_limit: 32,
+            mode,
+            nice_len,
+            mf,
+            depth_limit,
             preset_dict: None,
         };
 

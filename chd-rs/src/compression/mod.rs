@@ -49,6 +49,18 @@ pub trait CodecImplementation {
     where
         Self: Sized;
 
+    /// Create a new instance of a codec using the level & hunk size.
+    ///
+    /// Returns [`InvalidParameter`](crate::Error::InvalidParameter) if the codec
+    /// cannot support the given level.
+    #[cfg(feature = "encode")]
+    fn new_with_level(_hunk_size: u32, _level: i32) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Err(crate::error::Error::InvalidParameter)
+    }
+
     /// Decompress compressed bytes from the input buffer into the
     /// output buffer.
     ///

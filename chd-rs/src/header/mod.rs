@@ -110,6 +110,46 @@ impl CodecType {
             _ => Err(Error::UnsupportedFormat),
         }
     }
+
+    /// Like [`init`](CodecType::init), but compresses at the given level.
+    #[cfg(feature = "encode")]
+    pub(crate) fn init_with_level(
+        &self,
+        hunk_size: u32,
+        level: Option<i32>,
+    ) -> Result<Box<dyn CompressionCodec>> {
+        let Some(level) = level else {
+            return self.init(hunk_size);
+        };
+        match self {
+            CodecType::None => NoneCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
+                ZlibCodec::new_with_level(hunk_size, level)
+                    .map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            }
+            CodecType::ZLibCdV5 => CdZlibCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::LzmaCdV5 => CdLzmaCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::FlacCdV5 => CdFlacCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::LzmaV5 => <LzmaCodec>::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::FlacV5 => RawFlacCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::HuffV5 => HuffmanCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::AV | CodecType::AVHuffV5 => AVHuffCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::ZstdV5 => ZstdCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::ZstdCdV5 => CdZstdCodec::new_with_level(hunk_size, level)
+                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            #[allow(unreachable_patterns)]
+            _ => Err(Error::UnsupportedFormat),
+        }
+    }
 }
 
 /// The CHD header version.
