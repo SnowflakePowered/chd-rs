@@ -183,7 +183,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
         })
     }
 
-    #[cfg(feature = "encode")]
     fn new_with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let mut codec = Self::new(hunk_size)?;
         codec.engine =

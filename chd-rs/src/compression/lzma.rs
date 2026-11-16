@@ -113,7 +113,7 @@ impl<const LC: u32, const LP: u32, const PB: u32> CompressionCodecType for LzmaC
 
 impl<const LC: u32, const LP: u32, const PB: u32> LzmaCodec<LC, LP, PB> {
     #[cfg_attr(not(feature = "encode"), allow(unused_variables))]
-    fn new_with_level(hunk_size: u32, level: u32) -> Result<Self> {
+    fn create(hunk_size: u32, level: u32) -> Result<Self> {
         const_assert!(LC: u32, LP: u32, PB: u32 => LC <= 8 && LP <= 4 && PB <= 4);
 
         Ok(LzmaCodec {
@@ -124,6 +124,17 @@ impl<const LC: u32, const LP: u32, const PB: u32> LzmaCodec<LC, LP, PB> {
             encode_dict_size: get_lzma_dict_size(level, hunk_size),
         })
     }
+
+    /// Creates a new instance of this codec that compresses at the given LZMA level (0-9).
+    #[cfg(feature = "encode")]
+    pub fn new_with_level(hunk_size: u32, level: u32) -> Result<Self> {
+        Self::create(hunk_size, level)
+    }
+
+    #[cfg(not(feature = "encode"))]
+    pub(crate) fn new_with_level(hunk_size: u32, level: u32) -> Result<Self> {
+        Self::create(hunk_size, level)
+    }
 }
 
 impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCodec<LC, LP, PB> {
@@ -131,12 +142,12 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         Self::new_with_level(hunk_size, MAME_LZMA_LEVEL)
     }
 
-    #[cfg(feature = "encode")]
     fn new_with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
             .ok()
             .filter(|level| *level <= 9)
             .ok_or(Error::InvalidParameter)?;
+        // Inherent function, not this trait method: inherent items take priority.
         Self::new_with_level(hunk_size, level)
     }
 

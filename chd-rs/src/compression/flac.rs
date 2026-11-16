@@ -118,16 +118,19 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
         })
     }
 
-    #[cfg(feature = "encode")]
+    #[cfg_attr(not(feature = "encode"), allow(unused_variables))]
     fn new_with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         let level = u32::try_from(level)
             .ok()
             .filter(|level| *level <= 8)
             .ok_or(Error::InvalidParameter)?;
-        Ok(FlacCodec {
-            level,
-            ..Self::new(hunk_bytes)?
-        })
+        #[cfg_attr(not(feature = "encode"), allow(unused_mut))]
+        let mut codec = Self::new(hunk_bytes)?;
+        #[cfg(feature = "encode")]
+        {
+            codec.level = level;
+        }
+        Ok(codec)
     }
 
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
@@ -242,7 +245,6 @@ impl CodecImplementation for RawFlacCodec {
         })
     }
 
-    #[cfg(feature = "encode")]
     fn new_with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
         Ok(RawFlacCodec {
             be: FlacCodec::new_with_level(hunk_bytes, level)?,
@@ -352,7 +354,6 @@ impl CodecImplementation for CdFlacCodec {
         })
     }
 
-    #[cfg(feature = "encode")]
     fn new_with_level(hunk_size: u32, level: i32) -> Result<Self> {
         let mut codec = Self::new(hunk_size)?;
         codec.engine =

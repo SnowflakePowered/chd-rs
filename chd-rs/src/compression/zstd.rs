@@ -62,11 +62,12 @@ impl CodecImplementation for ZstdCodec {
         })
     }
 
-    #[cfg(feature = "encode")]
+    #[cfg_attr(not(feature = "encode"), allow(unused_variables))]
     fn new_with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
         Ok(Self {
             decoder: zrip::DecompressContext::new(),
             buffer: Vec::new(),
+            #[cfg(feature = "encode")]
             encoder: zrip::CompressContext::new(level).map_err(|_| Error::InvalidParameter)?,
         })
     }
@@ -121,7 +122,6 @@ impl CodecImplementation for ZstdCodec {
         })
     }
 
-    #[cfg(feature = "encode")]
     fn new_with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
         if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
             return Err(Error::InvalidParameter);

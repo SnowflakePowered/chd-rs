@@ -112,7 +112,7 @@ impl CodecType {
     }
 
     /// Like [`init`](CodecType::init), but compresses at the given level.
-    #[cfg(feature = "encode")]
+    #[cfg_attr(not(feature = "encode"), allow(dead_code))]
     pub(crate) fn init_with_level(
         &self,
         hunk_size: u32,
@@ -134,8 +134,10 @@ impl CodecType {
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
             CodecType::FlacCdV5 => CdFlacCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
-            CodecType::LzmaV5 => <LzmaCodec>::new_with_level(hunk_size, level)
-                .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
+            CodecType::LzmaV5 => {
+                <LzmaCodec as CodecImplementation>::new_with_level(hunk_size, level)
+                    .map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+            }
             CodecType::FlacV5 => RawFlacCodec::new_with_level(hunk_size, level)
                 .map(|x| Box::new(x) as Box<dyn CompressionCodec>),
             CodecType::HuffV5 => HuffmanCodec::new_with_level(hunk_size, level)
