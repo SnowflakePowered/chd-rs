@@ -1,9 +1,9 @@
 //! Helpers shared by the commands.
 use crate::error::{Error, Result};
 use arrayvec::ArrayVec;
-use chd::header::{CodecType, Header};
+use chd::header::Header;
 use chd::metadata::Metadata;
-use chd::write::{ChdWriteCodecs, ChdWriteOptions, ChdWriter, HunkCompressor};
+use chd::write::{ChdWriteCodecs, ChdWriteOptions, ChdWriter, CodecConfig, HunkCompressor};
 use chd::Chd;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
@@ -152,7 +152,7 @@ impl InputSpan {
 /// Options for writing a CHD.
 #[derive(Debug, Clone, Default)]
 pub struct WriteOptions {
-    compression: Option<ArrayVec<CodecType, 4>>,
+    compression: Option<ArrayVec<CodecConfig, 4>>,
     hunk_bytes: Option<u32>,
     threads: usize,
 }
@@ -177,7 +177,7 @@ impl WriteOptions {
     }
 
     /// The codecs used to write the CHD.
-    pub(crate) fn codecs(&self) -> Option<&ArrayVec<CodecType, 4>> {
+    pub(crate) fn codecs(&self) -> Option<&ArrayVec<CodecConfig, 4>> {
         self.compression.as_ref()
     }
 

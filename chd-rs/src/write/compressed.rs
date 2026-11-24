@@ -193,8 +193,9 @@ pub struct HunkCompressor {
 impl HunkCompressor {
     /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
     ///
-    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec,
-    /// or [`CodecError`](Error::CodecError) if a codec does not support the hunk size.
+    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec
+    /// or does not support its level, or [`CodecError`](Error::CodecError) if a codec does
+    /// not support the hunk size.
     pub(crate) fn new(
         codecs: impl ChdWriteCodecs,
         hunk_bytes: u32,
@@ -203,10 +204,10 @@ impl HunkCompressor {
         let codecs = codecs
             .into_array_vec()
             .iter()
-            .map(|codec| match codec {
+            .map(|config| match config.codec {
                 CodecType::None => Err(Error::InvalidParameter),
                 codec if codec.is_legacy() => Err(Error::InvalidParameter),
-                codec => codec.init(hunk_bytes),
+                codec => codec.init_with_level(hunk_bytes, config.level),
             })
             .collect::<Result<ArrayVec<_, 4>>>()?;
 
